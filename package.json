@@ -1,0 +1,25 @@
+{
+  "name": "warrior-log-compare",
+  "version": "1.0.0",
+  "description": "Local dashboard to track warrior casts/damage across weekly Classic WoW raid logs via the Warcraft Logs API",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "tsx watch src/server.ts",
+    "dev:client": "npm --prefix client run dev",
+    "start": "node dist/server.js",
+    "build": "tsc && npm --prefix client run build"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.5",
+    "concurrently": "^10.0.4",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

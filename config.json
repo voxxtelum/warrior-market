@@ -1,0 +1,19 @@
+{
+  "trackedAbilities": [
+    { "id": 23894, "name": "Bloodthirst" },
+    { "id": 25286, "name": "Heroic Strike" },
+    { "id": 1719, "name": "Recklessness" },
+    { "id": 12328, "name": "Death Wish" }
+  ],
+  "overviewAbilities": [
+    { "id": 23894, "name": "Bloodthirst" },
+    { "id": 25286, "name": "Heroic Strike" },
+    { "id": 1719, "name": "Recklessness" },
+    { "id": 12328, "name": "Death Wish" },
+    { "id": 25289, "name": "Battle Shout" },
+    { "id": 11556, "name": "Demoralizing Shout" },
+    { "id": 20569, "name": "Cleave" },
+    { "id": 1680, "name": "Whirlwind" },
+    { "id": 11597, "name": "Sunder Armor" }
+  ]
+}

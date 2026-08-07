@@ -196,14 +196,15 @@ tbody tr:hover { background: rgba(255,255,255,0.03); }
 #casts-table td:not(:first-child),
 #damage-table td:not(:first-child),
 #trends-table td:not(:first-child),
-#stock-table td:not(:first-child),
+#stock-table td:not(:first-child):not(:nth-child(2)),
 #overview-table td:not(:first-child) {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 }
 
-#stock-table th:nth-child(2), #stock-table td:nth-child(2) { text-align: right; }
-#stock-table th:nth-child(3), #stock-table td:nth-child(3) { text-align: center; }
-#stock-table td:nth-child(3) svg { display: block; margin: 0 auto; }
+#stock-table th:nth-child(1), #stock-table td:nth-child(1) { text-align: center; width: 1%; white-space: nowrap; }
+#stock-table th:nth-child(3), #stock-table td:nth-child(3) { text-align: right; }
+#stock-table th:nth-child(4), #stock-table td:nth-child(4) { text-align: center; }
+#stock-table td:nth-child(4) svg { display: block; margin: 0 auto; }
 
 .chart-container {
   position: relative;

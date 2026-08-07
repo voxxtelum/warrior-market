@@ -136,6 +136,9 @@ const DEFAULT_STOCK_CONFIG = {
   newPlayerGraceReports: 2,
   newPlayerPenaltyLeniency: 0.3,
   minAttendancePct: 0.3,
+  damageTrendWeight: 0.5,
+  damagePeerWeight: 0.5,
+  damageTrendZClamp: 4,
 };
 const hasStockConfig = db.prepare(`SELECT 1 FROM stock_config WHERE id = 1`).get();
 if (!hasStockConfig) {

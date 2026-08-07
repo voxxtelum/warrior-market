@@ -27,6 +27,9 @@ const NUMERIC_FIELDS: (keyof StockConfig)[] = [
   "newPlayerGraceReports",
   "newPlayerPenaltyLeniency",
   "minAttendancePct",
+  "damageTrendWeight",
+  "damagePeerWeight",
+  "damageTrendZClamp",
 ];
 
 function validateStockConfig(body: unknown): string | null {

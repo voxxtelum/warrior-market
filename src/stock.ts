@@ -21,6 +21,9 @@ export interface StockConfig {
   newPlayerGraceReports: number;
   newPlayerPenaltyLeniency: number;
   minAttendancePct: number;
+  damageTrendWeight: number;
+  damagePeerWeight: number;
+  damageTrendZClamp: number;
 }
 
 // Reads the DB-stored config on every call (rather than caching once at
@@ -39,6 +42,9 @@ export function loadStockConfig(): StockConfig {
     newPlayerGraceReports: parsed.newPlayerGraceReports ?? 2,
     newPlayerPenaltyLeniency: parsed.newPlayerPenaltyLeniency ?? 0.3,
     minAttendancePct: parsed.minAttendancePct ?? 0.3,
+    damageTrendWeight: parsed.damageTrendWeight ?? 0.5,
+    damagePeerWeight: parsed.damagePeerWeight ?? 0.5,
+    damageTrendZClamp: parsed.damageTrendZClamp ?? 4,
   } as StockConfig;
 }
 
@@ -49,6 +55,8 @@ export interface StockPoint {
   price: number;
   report_score: number;
   damage_score: number;
+  damage_trend_score: number;
+  damage_peer_score: number;
   cast_score: number;
   dps: number;
   excluded_low_attendance: boolean;
@@ -242,17 +250,38 @@ export function computeStock(): PlayerStock[] {
         castScore *= stockConfig.newPlayerPenaltyLeniency;
       }
 
-      // Damage score: z-score against this player's own recency-weighted
-      // DPS baseline in this same zone, shrunk toward 0 until they have
-      // enough history for the baseline to mean something.
-      let damageScore = 0;
+      // Damage trend score: z-score against this player's own recency-
+      // weighted DPS baseline in this same zone, shrunk toward 0 until they
+      // have enough history for the baseline to mean something. Rewards
+      // personal improvement over time (gear upgrades, better rotation).
+      let damageTrendScore = 0;
       if (ewma) {
         const sd = Math.sqrt(ewma.variance);
         const rawZ = sd > 0 ? (participant.dps - ewma.mean) / sd : 0;
-        const clampedZ = Math.max(-4, Math.min(4, rawZ));
+        const clampedZ = Math.max(-stockConfig.damageTrendZClamp, Math.min(stockConfig.damageTrendZClamp, rawZ));
         const shrink = Math.min(1, ewma.count / stockConfig.coldStartReports);
-        damageScore = clampedZ * shrink;
+        damageTrendScore = clampedZ * shrink;
       }
+
+      // Damage peer score: percentile rank of DPS among this report's
+      // bucket-mates (tank vs dps), same mechanism as cast score. Rewards
+      // standing at the top of the pack even when a personal-trend delta has
+      // little room to move, and is immune to raid-wide swings (e.g. a
+      // Naxxramas night with a lighter boss/wipe mix) since everyone in the
+      // bucket is compared against the same night's peers.
+      const damagePeers = participants.filter((p) => p.bucket === participant.bucket && !p.lowAttendance);
+      let damagePeerScore =
+        damagePeers.length >= stockConfig.minBucketSize
+          ? percentileSignal(
+              participant.dps,
+              damagePeers.map((p) => p.dps)
+            )
+          : 0;
+      if (priorAttendance < stockConfig.newPlayerGraceReports && damagePeerScore < 0) {
+        damagePeerScore *= stockConfig.newPlayerPenaltyLeniency;
+      }
+
+      const damageScore = stockConfig.damageTrendWeight * damageTrendScore + stockConfig.damagePeerWeight * damagePeerScore;
 
       // A low-attendance report is kept in the player's series for history,
       // but forced to a neutral score so it doesn't move their price.
@@ -277,6 +306,8 @@ export function computeStock(): PlayerStock[] {
         price,
         report_score: reportScore,
         damage_score: damageScore,
+        damage_trend_score: damageTrendScore,
+        damage_peer_score: damagePeerScore,
         cast_score: castScore,
         dps: participant.dps,
         excluded_low_attendance: participant.lowAttendance,

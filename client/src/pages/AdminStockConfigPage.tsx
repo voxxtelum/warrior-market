@@ -17,6 +17,9 @@ const SCALAR_FIELDS: { key: ScalarKey; label: string; step: string; description:
   { key: "newPlayerGraceReports", label: "New-player grace reports", step: "1", description: "Raids in a zone during which a new player's cast penalties are softened" },
   { key: "newPlayerPenaltyLeniency", label: "New-player penalty leniency", step: "0.05", description: "Fraction of a negative cast score still applied during the grace period (0 = fully forgiven, 1 = no leniency)" },
   { key: "minAttendancePct", label: "Min attendance %", step: "0.05", description: "Active-time ratio (vs. the raid's top attendee) below which a report is excluded from affecting price" },
+  { key: "damageTrendWeight", label: "Damage trend weight", step: "0.05", description: "Weight of personal DPS trend (vs. own history) within the damage score" },
+  { key: "damagePeerWeight", label: "Damage peer weight", step: "0.05", description: "Weight of peer DPS ranking (vs. bucket-mates this raid) within the damage score" },
+  { key: "damageTrendZClamp", label: "Damage trend z-clamp", step: "0.5", description: "Max absolute z-score for the personal DPS trend, before cold-start shrink is applied" },
 ];
 
 const BUCKETS = ["all", "dps", "tank"];

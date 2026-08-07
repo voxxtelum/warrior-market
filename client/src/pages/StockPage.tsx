@@ -47,6 +47,13 @@ function fmtPrice(n: number): string {
   return n.toFixed(2);
 }
 
+function heatRange(values: number[]): { maxPos: number; minNeg: number } {
+  return {
+    maxPos: Math.max(0, ...values.filter((v) => v > 0)),
+    minNeg: Math.min(0, ...values.filter((v) => v < 0)),
+  };
+}
+
 function priceDelta(prev: number, curr: number) {
   const diff = curr - prev;
   const pct = (diff / prev) * 100;
@@ -85,21 +92,78 @@ function changeValue(row: LeaderboardRow): number | null {
   return row.prevPrice !== null ? row.price - row.prevPrice : null;
 }
 
-type SortKey = 'player' | 'price' | 'change' | 'raids';
+// Geometric-mean per-raid price growth, derived purely from the player's own
+// consecutive price points (no dependency on priceSensitivity/startingPrice
+// config) - a tenure-independent view of "quality per raid" alongside the
+// tenure-compounded price. Needs at least 2 raids to have one price ratio.
+function avgGrowthPerRaid(series: PlayerStock['series']): number | null {
+  if (series.length < 2) return null;
+  let sumLogReturn = 0;
+  for (let i = 1; i < series.length; i++) {
+    sumLogReturn += Math.log(series[i].price / series[i - 1].price);
+  }
+  const avgLogReturn = sumLogReturn / (series.length - 1);
+  return (Math.exp(avgLogReturn) - 1) * 100;
+}
+
+function rowKey(row: LeaderboardRow): string {
+  return `${row.player_name}::${row.server}`;
+}
+
+// Positions gained (positive) or lost (negative) vs. each player's own
+// previous-raid price rank - null when there's no previous raid to rank
+// against yet (e.g. a player's first appearance on the board).
+function buildRankDeltas(leaderboard: LeaderboardRow[]): Map<string, number | null> {
+  const currentRank = new Map<string, number>();
+  [...leaderboard]
+    .sort((a, b) => b.price - a.price)
+    .forEach((row, i) => currentRank.set(rowKey(row), i + 1));
+
+  const previousRank = new Map<string, number>();
+  leaderboard
+    .filter((row) => row.prevPrice !== null)
+    .sort((a, b) => (b.prevPrice as number) - (a.prevPrice as number))
+    .forEach((row, i) => previousRank.set(rowKey(row), i + 1));
+
+  const deltas = new Map<string, number | null>();
+  for (const row of leaderboard) {
+    const key = rowKey(row);
+    const prev = previousRank.get(key);
+    const curr = currentRank.get(key);
+    deltas.set(key, prev !== undefined && curr !== undefined ? prev - curr : null);
+  }
+  return deltas;
+}
+
+function RankDeltaCell({ delta }: { delta: number | null }) {
+  if (delta === null) return <span className="no-data">–</span>;
+  if (delta === 0) return null;
+  return (
+    <span className={delta > 0 ? 'delta-pos' : 'delta-neg'}>
+      {delta > 0 ? '▲' : '▼'}
+      {Math.abs(delta)}
+    </span>
+  );
+}
+
+type SortKey = 'player' | 'price' | 'change' | 'avgGrowth' | 'raids';
 
 function sortValue(row: LeaderboardRow, key: SortKey): string | number | null {
   if (key === 'player') return row.player_name;
   if (key === 'price') return row.price;
   if (key === 'change') return changeValue(row);
+  if (key === 'avgGrowth') return avgGrowthPerRaid(row.series);
   if (key === 'raids') return row.raidCount;
   return null;
 }
 
 const COLUMNS: { key: SortKey | null; label: string }[] = [
+  { key: null, label: 'Δ' },
   { key: 'player', label: 'Player' },
   { key: 'price', label: 'Price' },
   { key: null, label: 'Trend' },
   { key: 'change', label: 'Change since last raid' },
+  { key: 'avgGrowth', label: 'Avg growth/raid' },
   { key: 'raids', label: 'Raids' },
 ];
 
@@ -122,6 +186,8 @@ export function StockPage() {
     () => (playersStock ? buildLeaderboard(playersStock) : []),
     [playersStock],
   );
+
+  const rankDeltas = useMemo(() => buildRankDeltas(leaderboard), [leaderboard]);
 
   const sortedLeaderboard = useMemo(() => {
     return [...leaderboard].sort((a, b) => {
@@ -160,10 +226,14 @@ export function StockPage() {
             (row.prevPrice as number)) *
           100,
       );
-    return {
-      maxPos: Math.max(0, ...pctChanges.filter((v) => v > 0)),
-      minNeg: Math.min(0, ...pctChanges.filter((v) => v < 0)),
-    };
+    return heatRange(pctChanges);
+  }, [leaderboard]);
+
+  const { maxPos: maxPosGrowth, minNeg: minNegGrowth } = useMemo(() => {
+    const growthValues = leaderboard
+      .map((row) => avgGrowthPerRaid(row.series))
+      .filter((v): v is number => v !== null);
+    return heatRange(growthValues);
   }, [leaderboard]);
 
   const chartDatasets: ChartDataset<'line', (number | null)[]>[] =
@@ -237,6 +307,10 @@ export function StockPage() {
                     ? ((row.price - row.prevPrice) / row.prevPrice) * 100
                     : 0;
                 const color = delta ? heatColor(pct, maxPos, minNeg) : null;
+                const growth = avgGrowthPerRaid(row.series);
+                const growthColor = growth !== null ? heatColor(growth, maxPosGrowth, minNegGrowth) : null;
+                const growthCls =
+                  growth === null ? null : growth > 0 ? 'delta-pos' : growth < 0 ? 'delta-neg' : 'delta-neutral';
 
                 return (
                   <tr
@@ -253,6 +327,9 @@ export function StockPage() {
                       )
                     }
                   >
+                    <td>
+                      <RankDeltaCell delta={rankDeltas.get(rowKey(row)) ?? null} />
+                    </td>
                     <td>
                       {censored ? (
                         <span className="censor-box"></span>
@@ -271,6 +348,19 @@ export function StockPage() {
                           style={color ? { color } : undefined}
                         >
                           {delta.text}
+                        </span>
+                      ) : (
+                        <span className="no-data">–</span>
+                      )}
+                    </td>
+                    <td>
+                      {growth !== null ? (
+                        <span
+                          className={growthColor ? '' : growthCls ?? undefined}
+                          style={growthColor ? { color: growthColor } : undefined}
+                        >
+                          {growth >= 0 ? '+' : ''}
+                          {growth.toFixed(2)}%
                         </span>
                       ) : (
                         <span className="no-data">–</span>

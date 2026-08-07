@@ -110,6 +110,8 @@ export interface StockPoint {
   price: number;
   report_score: number;
   damage_score: number;
+  damage_trend_score: number;
+  damage_peer_score: number;
   cast_score: number;
   dps: number;
   excluded_low_attendance: boolean;
@@ -177,6 +179,9 @@ export interface StockConfig {
   newPlayerGraceReports: number;
   newPlayerPenaltyLeniency: number;
   minAttendancePct: number;
+  damageTrendWeight: number;
+  damagePeerWeight: number;
+  damageTrendZClamp: number;
 }
 
 export async function getStockConfig(): Promise<StockConfig> {

@@ -6,6 +6,7 @@ import { OverviewPage } from "./pages/OverviewPage";
 import { AdminReportsPage } from "./pages/AdminReportsPage";
 import { AdminPlayersPage } from "./pages/AdminPlayersPage";
 import { AdminStockConfigPage } from "./pages/AdminStockConfigPage";
+import { AdminUsersPage } from "./pages/AdminUsersPage";
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
       <Route path="/admin" element={<AdminReportsPage />} />
       <Route path="/admin/players" element={<AdminPlayersPage />} />
       <Route path="/admin/stock-config" element={<AdminStockConfigPage />} />
+      <Route path="/admin/users" element={<AdminUsersPage />} />
     </Routes>
   );
 }

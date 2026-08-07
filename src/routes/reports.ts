@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { fetchAndIngestReport } from "../ingest";
 import { getReportDetail, listReports } from "../db";
+import { requireAdmin } from "../middleware/auth";
 
 export const reportsRouter = Router();
 
@@ -17,7 +18,7 @@ reportsRouter.get("/:code", (req, res) => {
   res.json(detail);
 });
 
-reportsRouter.post("/", async (req, res) => {
+reportsRouter.post("/", requireAdmin, async (req, res) => {
   const url = req.body?.url;
   if (!url || typeof url !== "string") {
     res.status(400).json({ error: "Request body must include a 'url' string" });

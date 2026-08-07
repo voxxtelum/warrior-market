@@ -1,3 +1,42 @@
+export interface AuthUser {
+  discordId: string;
+  username: string;
+  avatar: string | null;
+  isAdmin: boolean;
+}
+
+export async function getMe(): Promise<AuthUser | null> {
+  const res = await fetch("/api/auth/me");
+  const body = await res.json();
+  return body.user;
+}
+
+export async function logout(): Promise<void> {
+  await fetch("/api/auth/logout", { method: "POST" });
+}
+
+export interface AdminUserRow {
+  discordId: string;
+  username: string;
+  avatar: string | null;
+  isAdmin: boolean;
+  firstLoginAt: number;
+  lastLoginAt: number;
+}
+
+export async function getAdminUsers(): Promise<AdminUserRow[]> {
+  const res = await fetch("/api/admin/users");
+  return res.json();
+}
+
+export async function setUserAdmin(discordId: string, isAdmin: boolean): Promise<void> {
+  await fetch(`/api/admin/users/${encodeURIComponent(discordId)}/admin`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ isAdmin }),
+  });
+}
+
 export interface ReportRow {
   code: string;
   title: string;
@@ -73,6 +112,7 @@ export interface StockPoint {
   damage_score: number;
   cast_score: number;
   dps: number;
+  excluded_low_attendance: boolean;
 }
 
 export interface PlayerStock {
@@ -134,6 +174,9 @@ export interface StockConfig {
   castWeight: number;
   priceSensitivity: number;
   startingPrice: number;
+  newPlayerGraceReports: number;
+  newPlayerPenaltyLeniency: number;
+  minAttendancePct: number;
 }
 
 export async function getStockConfig(): Promise<StockConfig> {

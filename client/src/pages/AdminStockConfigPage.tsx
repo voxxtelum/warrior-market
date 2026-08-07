@@ -14,6 +14,9 @@ const SCALAR_FIELDS: { key: ScalarKey; label: string; step: string; description:
   { key: "minBucketSize", label: "Min bucket size", step: "1", description: "Minimum peers required to rank a cast count" },
   { key: "tankTopN", label: "Tank top N", step: "1", description: "Max warriors classified as tanks per raid" },
   { key: "tankMinUptimePct", label: "Tank min uptime %", step: "0.01", description: "Min damage-taken uptime to be classified as tank" },
+  { key: "newPlayerGraceReports", label: "New-player grace reports", step: "1", description: "Raids in a zone during which a new player's cast penalties are softened" },
+  { key: "newPlayerPenaltyLeniency", label: "New-player penalty leniency", step: "0.05", description: "Fraction of a negative cast score still applied during the grace period (0 = fully forgiven, 1 = no leniency)" },
+  { key: "minAttendancePct", label: "Min attendance %", step: "0.05", description: "Active-time ratio (vs. the raid's top attendee) below which a report is excluded from affecting price" },
 ];
 
 const BUCKETS = ["all", "dps", "tank"];

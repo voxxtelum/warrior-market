@@ -2,6 +2,7 @@ import { Router } from "express";
 import { computeStock, loadStockConfig } from "../stock";
 import type { StockConfig } from "../stock";
 import { setStockConfigRaw } from "../db";
+import { requireAdmin } from "../middleware/auth";
 
 export const stockRouter = Router();
 
@@ -9,7 +10,7 @@ stockRouter.get("/", (_req, res) => {
   res.json(computeStock());
 });
 
-stockRouter.get("/config", (_req, res) => {
+stockRouter.get("/config", requireAdmin, (_req, res) => {
   res.json(loadStockConfig());
 });
 
@@ -23,6 +24,9 @@ const NUMERIC_FIELDS: (keyof StockConfig)[] = [
   "castWeight",
   "priceSensitivity",
   "startingPrice",
+  "newPlayerGraceReports",
+  "newPlayerPenaltyLeniency",
+  "minAttendancePct",
 ];
 
 function validateStockConfig(body: unknown): string | null {
@@ -53,7 +57,7 @@ function validateStockConfig(body: unknown): string | null {
   return null;
 }
 
-stockRouter.put("/config", (req, res) => {
+stockRouter.put("/config", requireAdmin, (req, res) => {
   const error = validateStockConfig(req.body);
   if (error) {
     res.status(400).json({ error });

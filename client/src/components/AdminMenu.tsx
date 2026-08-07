@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
+import { useAuth } from "../authContext";
+import { logout } from "../api";
 
 export function AdminMenu() {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const { user, loading, refetch } = useAuth();
 
   useEffect(() => {
     if (!open) return;
@@ -15,6 +18,12 @@ export function AdminMenu() {
     document.addEventListener("click", handleClick);
     return () => document.removeEventListener("click", handleClick);
   }, [open]);
+
+  async function handleLogout() {
+    await logout();
+    refetch();
+    setOpen(false);
+  }
 
   return (
     <div className="nav-wrapper" ref={menuRef}>
@@ -29,9 +38,21 @@ export function AdminMenu() {
         ☰
       </button>
       <nav id="nav-menu" className={open ? "open" : undefined}>
-        <NavLink to="/admin" className={({ isActive }) => (isActive ? "active" : undefined)}>
-          Admin
-        </NavLink>
+        {loading ? null : !user ? (
+          <a href="/api/auth/discord">Log in with Discord</a>
+        ) : (
+          <>
+            {user.isAdmin && (
+              <NavLink to="/admin" className={({ isActive }) => (isActive ? "active" : undefined)}>
+                Admin
+              </NavLink>
+            )}
+            {!user.isAdmin && <span className="nav-username">{user.username}</span>}
+            <a href="#" onClick={(e) => { e.preventDefault(); handleLogout(); }}>
+              Log out
+            </a>
+          </>
+        )}
       </nav>
     </div>
   );

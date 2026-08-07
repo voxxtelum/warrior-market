@@ -1,20 +1,28 @@
 import "dotenv/config";
 import express from "express";
+import cookieParser from "cookie-parser";
 import path from "node:path";
 import { reportsRouter } from "./routes/reports";
 import { compareRouter } from "./routes/compare";
 import { playersRouter } from "./routes/players";
 import { stockRouter } from "./routes/stock";
 import { overviewRouter } from "./routes/overview";
+import { authRouter } from "./routes/auth";
+import { adminUsersRouter } from "./routes/adminUsers";
+import { attachUser, requireAdmin } from "./middleware/auth";
 
 const app = express();
 app.use(express.json());
+app.use(cookieParser(process.env.SESSION_COOKIE_SECRET));
+app.use(attachUser);
 
+app.use("/api/auth", authRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/compare", compareRouter);
-app.use("/api/players", playersRouter);
+app.use("/api/players", requireAdmin, playersRouter);
 app.use("/api/stock", stockRouter);
 app.use("/api/overview", overviewRouter);
+app.use("/api/admin/users", requireAdmin, adminUsersRouter);
 
 const clientDist = path.join(__dirname, "..", "client", "dist");
 app.use(express.static(clientDist));

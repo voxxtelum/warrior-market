@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import path from "node:path";
 import fs from "node:fs";
+import { randomBytes } from "node:crypto";
 
 const dataDir = path.join(__dirname, "..", "data");
 fs.mkdirSync(dataDir, { recursive: true });
@@ -92,6 +93,22 @@ db.exec(`
     id INTEGER PRIMARY KEY CHECK (id = 1),
     data TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS users (
+    discord_id TEXT PRIMARY KEY,
+    username TEXT NOT NULL,
+    avatar TEXT,
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    first_login_at INTEGER NOT NULL,
+    last_login_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS sessions (
+    session_id TEXT PRIMARY KEY,
+    discord_id TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
+  );
 `);
 
 // Seed the stock scoring config on first run, since it now lives entirely in
@@ -116,6 +133,9 @@ const DEFAULT_STOCK_CONFIG = {
   castWeight: 0.4,
   priceSensitivity: 0.05,
   startingPrice: 100,
+  newPlayerGraceReports: 2,
+  newPlayerPenaltyLeniency: 0.3,
+  minAttendancePct: 0.3,
 };
 const hasStockConfig = db.prepare(`SELECT 1 FROM stock_config WHERE id = 1`).get();
 if (!hasStockConfig) {
@@ -385,4 +405,84 @@ export function setStockConfigRaw(json: string) {
     INSERT INTO stock_config (id, data) VALUES (1, ?)
     ON CONFLICT(id) DO UPDATE SET data = excluded.data
   `).run(json);
+}
+
+export interface UserRow {
+  discord_id: string;
+  username: string;
+  avatar: string | null;
+  is_admin: number;
+  first_login_at: number;
+  last_login_at: number;
+}
+
+// Upserts the logged-in user's profile on every login. is_admin is left
+// alone on conflict (so an admin's manual promote/demote via the users page
+// sticks across logins) UNLESS isBootstrapAdmin is true - that ID (the
+// deploy-time ADMIN_DISCORD_ID) is force-set back to admin on every single
+// login, so the deploying user can never lock themselves out.
+export function upsertUserFromLogin(
+  discordId: string,
+  username: string,
+  avatar: string | null,
+  isBootstrapAdmin: boolean
+): UserRow {
+  const now = Date.now();
+  db.prepare(`
+    INSERT INTO users (discord_id, username, avatar, is_admin, first_login_at, last_login_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(discord_id) DO UPDATE SET
+      username = excluded.username,
+      avatar = excluded.avatar,
+      last_login_at = excluded.last_login_at
+  `).run(discordId, username, avatar, isBootstrapAdmin ? 1 : 0, now, now);
+
+  if (isBootstrapAdmin) {
+    db.prepare(`UPDATE users SET is_admin = 1 WHERE discord_id = ?`).run(discordId);
+  }
+
+  return db.prepare(`SELECT * FROM users WHERE discord_id = ?`).get(discordId) as unknown as UserRow;
+}
+
+export function listUsers(): UserRow[] {
+  return db.prepare(`SELECT * FROM users ORDER BY last_login_at DESC`).all() as unknown as UserRow[];
+}
+
+export function setUserAdmin(discordId: string, isAdmin: boolean) {
+  db.prepare(`UPDATE users SET is_admin = ? WHERE discord_id = ?`).run(isAdmin ? 1 : 0, discordId);
+}
+
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+export function createSession(discordId: string): { sessionId: string; expiresAt: number } {
+  db.prepare(`DELETE FROM sessions WHERE expires_at < ?`).run(Date.now());
+
+  const sessionId = randomBytes(32).toString("hex");
+  const now = Date.now();
+  const expiresAt = now + SESSION_TTL_MS;
+  db.prepare(`INSERT INTO sessions (session_id, discord_id, created_at, expires_at) VALUES (?, ?, ?, ?)`).run(
+    sessionId,
+    discordId,
+    now,
+    expiresAt
+  );
+  return { sessionId, expiresAt };
+}
+
+// Joins through to `users` so is_admin is always read fresh from the DB
+// (never cached in the session itself) - an admin promotion/demotion takes
+// effect on the very next request.
+export function getSessionUser(sessionId: string): UserRow | null {
+  const row = db
+    .prepare(
+      `SELECT u.* FROM sessions s
+       JOIN users u ON u.discord_id = s.discord_id
+       WHERE s.session_id = ? AND s.expires_at > ?`
+    )
+    .get(sessionId, Date.now()) as unknown as UserRow | undefined;
+  return row ?? null;
+}
+
+export function deleteSession(sessionId: string) {
+  db.prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
 }

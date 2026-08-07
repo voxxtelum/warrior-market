@@ -1,5 +1,5 @@
 {
-  "name": "warrior-log-compare",
+  "name": "dawnfire-warriors",
   "version": "1.0.0",
   "description": "Local dashboard to track warrior casts/damage across weekly Classic WoW raid logs via the Warcraft Logs API",
   "private": true,
@@ -12,10 +12,12 @@
     "build": "tsc && npm --prefix client run build"
   },
   "dependencies": {
+    "cookie-parser": "^1.4.7",
     "dotenv": "^16.4.5",
     "express": "^4.21.2"
   },
   "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
     "@types/express": "^4.17.21",
     "@types/node": "^22.10.5",
     "concurrently": "^10.0.4",

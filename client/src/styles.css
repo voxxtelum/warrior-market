@@ -114,6 +114,23 @@ nav#nav-menu a {
 nav#nav-menu a:hover { background: rgba(255, 255, 255, 0.06); }
 nav#nav-menu a.active { background: var(--accent); color: var(--accent-fg); }
 
+.nav-username {
+  color: var(--muted);
+  padding: 0.5rem 0.7rem;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+
+.user-avatar {
+  border-radius: 50%;
+  display: block;
+}
+.user-avatar-placeholder {
+  width: 28px;
+  height: 28px;
+  background: var(--border);
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--border);

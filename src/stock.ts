@@ -18,6 +18,9 @@ export interface StockConfig {
   castWeight: number;
   priceSensitivity: number;
   startingPrice: number;
+  newPlayerGraceReports: number;
+  newPlayerPenaltyLeniency: number;
+  minAttendancePct: number;
 }
 
 // Reads the DB-stored config on every call (rather than caching once at
@@ -27,7 +30,16 @@ export interface StockConfig {
 export function loadStockConfig(): StockConfig {
   const stored = getStockConfigRaw();
   if (!stored) throw new Error("Stock config missing from DB - this should have been seeded on startup");
-  return JSON.parse(stored) as StockConfig;
+  // Backfill fields added after a DB row may have already been seeded -
+  // there's no schema migration for this single-row JSON blob, so older
+  // installs' stored config can be missing newer keys.
+  const parsed = JSON.parse(stored) as Partial<StockConfig>;
+  return {
+    ...parsed,
+    newPlayerGraceReports: parsed.newPlayerGraceReports ?? 2,
+    newPlayerPenaltyLeniency: parsed.newPlayerPenaltyLeniency ?? 0.3,
+    minAttendancePct: parsed.minAttendancePct ?? 0.3,
+  } as StockConfig;
 }
 
 export interface StockPoint {
@@ -39,6 +51,7 @@ export interface StockPoint {
   damage_score: number;
   cast_score: number;
   dps: number;
+  excluded_low_attendance: boolean;
 }
 
 export interface PlayerStock {
@@ -54,6 +67,7 @@ interface Participant {
   bucket: "tank" | "dps";
   dps: number;
   castByAbility: Map<number, number>;
+  lowAttendance: boolean;
 }
 
 function playerKey(name: string, server: string): string {
@@ -170,10 +184,16 @@ export function computeStock(): PlayerStock[] {
         .map((t) => t.key)
     );
 
+    // Attendance proxy: active_time relative to this report's top attendee.
+    // Someone who disconnected or left early has a much smaller active_time
+    // than a full-night participant, without needing per-fight WCL data.
+    const maxActiveTime = damageRows.reduce((max, d) => Math.max(max, d.active_time ?? 0), 0);
+
     const participants: Participant[] = damageRows.map((d) => {
       const key = playerKey(d.player_name, d.server);
       const castByAbility = castsByPlayer.get(key) ?? new Map();
       const dps = d.active_time && d.active_time > 0 ? d.total_damage / (d.active_time / 1000) : 0;
+      const attendancePct = maxActiveTime > 0 ? (d.active_time ?? 0) / maxActiveTime : 1;
       return {
         key,
         player_name: d.player_name,
@@ -181,10 +201,19 @@ export function computeStock(): PlayerStock[] {
         bucket: tankKeys.has(key) ? "tank" : "dps",
         dps,
         castByAbility,
+        lowAttendance: attendancePct < stockConfig.minAttendancePct,
       };
     });
 
     for (const participant of participants) {
+      // Read this player's history in this zone once - ewma.count (before
+      // it's updated below) is how many prior reports they've had here,
+      // used both for the damage cold-start shrink and the cast leniency
+      // grace period.
+      const histKey = `${participant.key}::${report.zone ?? ""}`;
+      const ewma = dpsEwmaByPlayerZone.get(histKey);
+      const priorAttendance = ewma?.count ?? 0;
+
       // Cast score: weighted average of percentile signals across whichever
       // abilities apply to this player's role (spec-agnostic abilities plus
       // their own bucket's abilities), skipping any ability whose peer
@@ -193,8 +222,9 @@ export function computeStock(): PlayerStock[] {
       let weightUsed = 0;
       for (const ability of stockConfig.abilities) {
         if (ability.bucket !== "all" && ability.bucket !== participant.bucket) continue;
-        const peers =
-          ability.bucket === "all" ? participants : participants.filter((p) => p.bucket === ability.bucket);
+        const peers = (
+          ability.bucket === "all" ? participants : participants.filter((p) => p.bucket === ability.bucket)
+        ).filter((p) => !p.lowAttendance);
         if (peers.length < stockConfig.minBucketSize) continue;
         const peerCounts = peers.map((p) => p.castByAbility.get(ability.id) ?? 0);
         const myCount = participant.castByAbility.get(ability.id) ?? 0;
@@ -202,13 +232,19 @@ export function computeStock(): PlayerStock[] {
         weightedSum += ability.weight * signal;
         weightUsed += ability.weight;
       }
-      const castScore = weightUsed > 0 ? weightedSum / weightUsed : 0;
+      let castScore = weightUsed > 0 ? weightedSum / weightUsed : 0;
+
+      // New-to-instance leniency: for a player's first newPlayerGraceReports
+      // appearances in this zone, soften a negative cast score (a rough
+      // learning pull shouldn't tank the price) without touching positive
+      // scores (a fast learner still gets full credit).
+      if (priorAttendance < stockConfig.newPlayerGraceReports && castScore < 0) {
+        castScore *= stockConfig.newPlayerPenaltyLeniency;
+      }
 
       // Damage score: z-score against this player's own recency-weighted
       // DPS baseline in this same zone, shrunk toward 0 until they have
       // enough history for the baseline to mean something.
-      const histKey = `${participant.key}::${report.zone ?? ""}`;
-      const ewma = dpsEwmaByPlayerZone.get(histKey);
       let damageScore = 0;
       if (ewma) {
         const sd = Math.sqrt(ewma.variance);
@@ -218,7 +254,11 @@ export function computeStock(): PlayerStock[] {
         damageScore = clampedZ * shrink;
       }
 
-      const reportScore = stockConfig.damageWeight * damageScore + stockConfig.castWeight * castScore;
+      // A low-attendance report is kept in the player's series for history,
+      // but forced to a neutral score so it doesn't move their price.
+      const reportScore = participant.lowAttendance
+        ? 0
+        : stockConfig.damageWeight * damageScore + stockConfig.castWeight * castScore;
       const prevPrice = runningPrice.get(participant.key) ?? stockConfig.startingPrice;
       const price = prevPrice * (1 + stockConfig.priceSensitivity * reportScore);
       runningPrice.set(participant.key, price);
@@ -239,9 +279,14 @@ export function computeStock(): PlayerStock[] {
         damage_score: damageScore,
         cast_score: castScore,
         dps: participant.dps,
+        excluded_low_attendance: participant.lowAttendance,
       });
 
-      dpsEwmaByPlayerZone.set(histKey, updateEwma(ewma, participant.dps, stockConfig.dpsEmaAlpha));
+      // Don't let a partial-night DPS poison the player's own baseline for
+      // future reports in this zone.
+      if (!participant.lowAttendance) {
+        dpsEwmaByPlayerZone.set(histKey, updateEwma(ewma, participant.dps, stockConfig.dpsEmaAlpha));
+      }
     }
   }
 

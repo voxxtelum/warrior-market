@@ -6,7 +6,7 @@ import { RequireAdmin } from "./RequireAdmin";
 export function AdminLayout({ children }: { children: ReactNode }) {
   return (
     <RequireAdmin>
-      <Layout title="Warrior Log Dashboard" subtitle="Add reports and manage which players show up across the dashboard">
+      <Layout title="Dawnfire Warrior Stocks" subtitle="Add reports and manage which players show up across the dashboard">
         <SubNav />
         {children}
       </Layout>

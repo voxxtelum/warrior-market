@@ -36,6 +36,10 @@ export function AdminMarketStatsPage() {
             <span className="value">{stats ? fmtCoin(stats.totalNetWorth) : "–"}</span>
             <span className="label">Total net worth</span>
           </div>
+          <div className="wallet-summary-item">
+            <span className="value">{stats ? fmtCoin(stats.totalTradeVolume) : "–"}</span>
+            <span className="label">Total trade volume</span>
+          </div>
         </div>
       </div>
 

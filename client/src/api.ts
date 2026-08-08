@@ -392,6 +392,7 @@ export interface MarketStats {
   totalCoinInWallets: number;
   totalCoinInHoldings: number;
   totalNetWorth: number;
+  totalTradeVolume: number;
   userCount: number;
   perWarriorVolume: { player_name: string; server: string; volume: number; tradeCount: number }[];
   topTraders: { user_id: string; username: string; turnover: number; tradeCount: number }[];
@@ -400,6 +401,17 @@ export interface MarketStats {
 export async function getAdminMarketStats(): Promise<MarketStats> {
   const res = await fetch("/api/admin/market-stats");
   if (!res.ok) throw new Error("Failed to load market stats");
+  return res.json();
+}
+
+export interface MarketSummary {
+  totalMarketSize: number;
+  totalTradeVolume: number;
+}
+
+export async function getMarketSummary(): Promise<MarketSummary> {
+  const res = await fetch("/api/trading/market-summary");
+  if (!res.ok) throw new Error("Failed to load market summary");
   return res.json();
 }
 

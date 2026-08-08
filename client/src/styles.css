@@ -8,6 +8,7 @@
   --accent: #c0392b;
   --accent-fg: #ffffff;
   --nav-active: #8ef9f3;
+  --nav-active-rgb: 142, 249, 243;
   --delta-pos: #0ea5e9;
   --delta-neg: #ff6b6b;
 }
@@ -762,6 +763,23 @@ ul.player-toggle-list input[type='checkbox'] {
 .trade-cta:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.stats-row {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.stats-row .card {
+  margin-bottom: 0;
+}
+.personal-stats-card {
+  flex: 0 0 auto;
+  background: rgba(var(--nav-active-rgb), 0.12);
+  border-color: rgba(var(--nav-active-rgb), 0.4);
+}
+.global-stats-card {
+  flex: 1 1 auto;
 }
 
 .wallet-summary {

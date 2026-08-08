@@ -1288,6 +1288,7 @@ export interface MarketStats {
   totalCoinInWallets: number;
   totalCoinInHoldings: number;
   totalNetWorth: number;
+  totalTradeVolume: number;
   userCount: number;
   perWarriorVolume: { player_name: string; server: string; volume: number; tradeCount: number }[];
   topTraders: { user_id: string; username: string; turnover: number; tradeCount: number }[];
@@ -1319,14 +1320,34 @@ export function getMarketStats(): MarketStats {
     )
     .all() as unknown as { user_id: string; username: string; turnover: number; tradeCount: number }[];
 
+  // All-time, every side (buy/sell/liquidation) included - matches
+  // perWarriorVolume/topTraders' existing definition of "volume" exactly, so
+  // this headline number reconciles with the detail tables below it.
+  const totalTradeVolume = perWarriorVolume.reduce((sum, r) => sum + r.volume, 0);
+
   return {
     totalCoinInWallets,
     totalCoinInHoldings,
     totalNetWorth: totalCoinInWallets + totalCoinInHoldings,
+    totalTradeVolume,
     userCount: leaderboard.length,
     perWarriorVolume,
     topTraders,
   };
+}
+
+export interface MarketSummary {
+  totalMarketSize: number;
+  totalTradeVolume: number;
+}
+
+// Public-safe subset of getMarketStats() - just the two headline numbers,
+// no per-warrior/per-trader breakdowns (topTraders reveals identities+
+// turnover, which is admin-only info per the trade feed's anonymization
+// rules elsewhere).
+export function getMarketSummary(): MarketSummary {
+  const stats = getMarketStats();
+  return { totalMarketSize: stats.totalNetWorth, totalTradeVolume: stats.totalTradeVolume };
 }
 
 export function getLastDriftAt(): number | null {

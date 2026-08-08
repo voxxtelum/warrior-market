@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { MarketLayout } from '../components/MarketLayout';
 import { Pagination } from '../components/Pagination';
+import { TradeModal } from '../components/TradeModal';
+import { ArrowsRightLeftIcon } from '../components/icons/ArrowsRightLeftIcon';
 import { useAuth } from '../authContext';
 import {
   getMyTransactions,
@@ -19,14 +21,20 @@ export function WalletPage() {
     null,
   );
   const [page, setPage] = useState(0);
+  const [tradeModalTarget, setTradeModalTarget] = useState<{
+    playerName: string;
+    server: string;
+  } | null>(null);
 
-  useEffect(() => {
+  const load = () => {
     if (!user) return;
     Promise.all([getWallet(), getMyTransactions()]).then(([w, tx]) => {
       setWallet(w);
       setTransactions(tx);
     });
-  }, [user]);
+  };
+
+  useEffect(load, [user]);
 
   const pageCount = transactions
     ? Math.ceil(transactions.length / PAGE_SIZE)
@@ -86,12 +94,13 @@ export function WalletPage() {
                 <th>Price</th>
                 <th>Value</th>
                 <th>P&amp;L</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               {wallet?.holdings.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="no-data">
+                  <td colSpan={7} className="no-data">
                     No holdings yet - trade a warrior from the Stocks page.
                   </td>
                 </tr>
@@ -138,6 +147,21 @@ export function WalletPage() {
                         <span className="no-data">–</span>
                       )}
                     </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() =>
+                          setTradeModalTarget({
+                            playerName: h.playerName,
+                            server: h.server,
+                          })
+                        }
+                      >
+                        <ArrowsRightLeftIcon className="icon-btn-icon" />
+                        Trade
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
@@ -183,6 +207,15 @@ export function WalletPage() {
         </div>
         <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
       </div>
+
+      {tradeModalTarget && (
+        <TradeModal
+          playerName={tradeModalTarget.playerName}
+          server={tradeModalTarget.server}
+          onClose={() => setTradeModalTarget(null)}
+          onTraded={load}
+        />
+      )}
     </MarketLayout>
   );
 }

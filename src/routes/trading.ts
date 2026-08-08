@@ -3,6 +3,7 @@ import {
   executeTrade,
   getLatestPrice,
   getLeaderboard,
+  getMarketSummary,
   getOrCreateWallet,
   getWarriorId,
   listHoldingsWithContext,
@@ -105,6 +106,12 @@ tradingRouter.get("/transactions/mine", requireAuth, (req, res) => {
 tradingRouter.get("/feed", (req, res) => {
   const rows = listTransactions({ limit: 100 });
   res.json(rows.map((tx) => serializeTransaction(tx, req.user)));
+});
+
+// Public - just the two headline numbers (see getMarketSummary), unlike
+// /api/admin/market-stats which also exposes per-trader identity/turnover.
+tradingRouter.get("/market-summary", (_req, res) => {
+  res.json(getMarketSummary());
 });
 
 tradingRouter.get("/leaderboard", (_req, res) => {

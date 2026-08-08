@@ -9,9 +9,11 @@ import { useAuth } from '../authContext';
 import { paletteColor, withAlpha } from '../chartColors';
 import { fmtCoin, fmtDate, fmtDateTime, priceDelta } from '../format';
 import {
+  getMarketSummary,
   getStock,
   getStockHistory,
   getWallet,
+  type MarketSummary,
   type PlayerPriceHistory,
   type PlayerStock,
   type WalletData,
@@ -197,6 +199,7 @@ export function StockPage() {
     null,
   );
   const [wallet, setWallet] = useState<WalletData | null>(null);
+  const [marketSummary, setMarketSummary] = useState<MarketSummary | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [censored, setCensored] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('price');
@@ -213,6 +216,12 @@ export function StockPage() {
     });
   }, []);
 
+  // Public, market-wide - fetched regardless of login state (unlike the
+  // wallet-summary card below it, which needs a logged-in user).
+  useEffect(() => {
+    getMarketSummary().then(setMarketSummary);
+  }, []);
+
   const refreshWallet = () => {
     if (user) getWallet().then(setWallet);
   };
@@ -221,6 +230,7 @@ export function StockPage() {
   function handleTraded() {
     refreshHistory(setPriceHistory);
     refreshWallet();
+    getMarketSummary().then(setMarketSummary);
   }
 
   // The most recent price_snapshots point per player (raid + drift + demand
@@ -339,30 +349,49 @@ export function StockPage() {
 
   return (
     <MarketLayout>
-      {user && (
-        <div className="card">
+      <div className="stats-row">
+        {user && (
+          <div className="card personal-stats-card">
+            <div className="wallet-summary">
+              <div className="wallet-summary-item">
+                <span className="value">
+                  {wallet ? fmtCoin(wallet.balance) : '–'}
+                </span>
+                <span className="label">Balance</span>
+              </div>
+              <div className="wallet-summary-item">
+                <span className="value">
+                  {wallet ? fmtCoin(wallet.netWorth - wallet.balance) : '–'}
+                </span>
+                <span className="label">Holdings</span>
+              </div>
+              <div className="wallet-summary-item">
+                <span className="value">
+                  {wallet ? fmtCoin(wallet.netWorth) : '–'}
+                </span>
+                <span className="label">Portfolio</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="card global-stats-card">
           <div className="wallet-summary">
             <div className="wallet-summary-item">
               <span className="value">
-                {wallet ? fmtCoin(wallet.balance) : '–'}
+                {marketSummary ? fmtCoin(marketSummary.totalMarketSize) : '–'}
               </span>
-              <span className="label">Balance</span>
+              <span className="label">Market size</span>
             </div>
             <div className="wallet-summary-item">
               <span className="value">
-                {wallet ? fmtCoin(wallet.netWorth - wallet.balance) : '–'}
+                {marketSummary ? fmtCoin(marketSummary.totalTradeVolume) : '–'}
               </span>
-              <span className="label">Holdings</span>
-            </div>
-            <div className="wallet-summary-item">
-              <span className="value">
-                {wallet ? fmtCoin(wallet.netWorth) : '–'}
-              </span>
-              <span className="label">Portfolio</span>
+              <span className="label">Total trade volume</span>
             </div>
           </div>
         </div>
-      )}
+      </div>
 
       <div className="card">
         <div className="table-scroll">

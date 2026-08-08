@@ -10,6 +10,7 @@
   --accent: #8ef9f3;
   --accent-rgb: 142, 249, 243;
   --accent-fg: var(--bg);
+  --accent-gold: #bfae48;
 
   /* Warrior / class name color */
   --warrior: #c69b6d;
@@ -75,6 +76,10 @@ h2 {
   margin-bottom: 1.5rem;
 }
 
+.accent-gold {
+  color: var(--accent-gold);
+}
+
 .header-actions {
   display: flex;
   align-items: center;
@@ -116,10 +121,10 @@ h2 {
   margin-bottom: -1px;
 }
 .sub-nav a:hover {
-  color: var(--fg);
+  color: var(--accent);
 }
 .sub-nav a.active {
-  color: var(--fg);
+  color: var(--accent);
   border-bottom-color: var(--accent);
 }
 
@@ -130,11 +135,10 @@ h2 {
 
 .nav-toggle {
   background: var(--card);
-  border: 1px solid var(--border);
   color: var(--fg);
   border-radius: 2px;
   padding: 0.45rem 0.7rem;
-  font-size: 1.2rem;
+  font-size: 1rem;
   line-height: 1;
   cursor: pointer;
 }
@@ -423,6 +427,13 @@ tbody tr:hover {
 
 .table-scroll {
   overflow-x: auto;
+}
+
+#trade-feed-table th:nth-child(3) {
+  text-align: center;
+}
+#trade-feed-table td:nth-child(3) {
+  text-align: left;
 }
 
 #stock-table th:nth-child(1),

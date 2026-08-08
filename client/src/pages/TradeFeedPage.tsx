@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
-import { MarketLayout } from "../components/MarketLayout";
-import { Pagination } from "../components/Pagination";
-import { getTradeFeed, type TransactionView } from "../api";
-import { fmtDateTime } from "../format";
+import { useEffect, useState } from 'react';
+import { MarketLayout } from '../components/MarketLayout';
+import { Pagination } from '../components/Pagination';
+import { getTradeFeed, type TransactionView } from '../api';
+import { fmtDateTime } from '../format';
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 25;
 
 export function TradeFeedPage() {
   const [feed, setFeed] = useState<TransactionView[] | null>(null);
@@ -21,7 +21,7 @@ export function TradeFeedPage() {
     <MarketLayout>
       <div className="card">
         <div className="table-scroll">
-          <table>
+          <table id="trade-feed-table">
             <thead>
               <tr>
                 <th>When</th>
@@ -42,10 +42,15 @@ export function TradeFeedPage() {
                 </tr>
               )}
               {pageFeed?.map((tx) => (
-                <tr key={tx.id} className={tx.isMine ? "selected-row" : undefined}>
+                <tr
+                  key={tx.id}
+                  className={tx.isMine ? 'selected-row' : undefined}
+                >
                   <td>{fmtDateTime(tx.createdAt)}</td>
                   <td>
-                    {tx.username ?? <span className="anon-name">anonymous</span>}
+                    {tx.username ?? (
+                      <span className="anon-name">anonymous</span>
+                    )}
                   </td>
                   <td className="warrior-name">{tx.playerName}</td>
                   <td>{tx.side}</td>

@@ -6,7 +6,7 @@ import { Sparkline } from '../components/Sparkline';
 import { TradeModal } from '../components/TradeModal';
 import { ArrowsRightLeftIcon } from '../components/icons/ArrowsRightLeftIcon';
 import { useAuth } from '../authContext';
-import { paletteColor, withAlpha } from '../chartColors';
+import { NEGATIVE_COLOR, POSITIVE_COLOR, paletteColor, withAlpha } from '../chartColors';
 import { fmtCoin, fmtDate, fmtDateTime, priceDelta } from '../format';
 import {
   getMarketSummary,
@@ -35,9 +35,9 @@ function lerpColor(hexA: string, hexB: string, t: number): string {
 }
 
 const HEAT_POS_LIGHT = '#bfe3fa';
-const HEAT_POS_DARK = '#0ea5e9';
+const HEAT_POS_DARK = POSITIVE_COLOR;
 const HEAT_NEG_LIGHT = '#ffd0d0';
-const HEAT_NEG_DARK = '#ff3b3b';
+const HEAT_NEG_DARK = NEGATIVE_COLOR;
 
 // Colors a change value on a gradient scaled by how big it is relative to
 // the biggest change of the same sign currently on the board - light blue
@@ -93,7 +93,9 @@ function buildLeaderboard(
       return {
         player_name: p.player_name,
         server: p.server,
-        currentPrice: currentPriceByPlayer.get(`${p.player_name}::${p.server}`) ?? last.price,
+        currentPrice:
+          currentPriceByPlayer.get(`${p.player_name}::${p.server}`) ??
+          last.price,
         price: last.price,
         raidCount: p.series.length,
         prevPrice: prev ? prev.price : null,
@@ -209,7 +211,9 @@ export function StockPage() {
     null,
   );
   const [wallet, setWallet] = useState<WalletData | null>(null);
-  const [marketSummary, setMarketSummary] = useState<MarketSummary | null>(null);
+  const [marketSummary, setMarketSummary] = useState<MarketSummary | null>(
+    null,
+  );
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [censored, setCensored] = useState(false);
   const [selectedRange, setSelectedRange] = useState<RangeKey>('All');
@@ -259,7 +263,8 @@ export function StockPage() {
   }, [priceHistory]);
 
   const leaderboard = useMemo(
-    () => (playersStock ? buildLeaderboard(playersStock, currentPriceByPlayer) : []),
+    () =>
+      playersStock ? buildLeaderboard(playersStock, currentPriceByPlayer) : [],
     [playersStock, currentPriceByPlayer],
   );
 
@@ -406,6 +411,10 @@ export function StockPage() {
                 {marketSummary ? fmtCoin(marketSummary.totalTradeVolume) : '–'}
               </span>
               <span className="label">Total trade volume</span>
+            </div>
+            <div className="wallet-summary-item">
+              <span className="value">1</span>
+              <span className="label">Deep Prot Warriors</span>
             </div>
           </div>
         </div>
@@ -557,7 +566,9 @@ export function StockPage() {
 
       <div className="card">
         <div className="section-header-row">
-          <h2 style={{ marginTop: 0, marginBottom: 0 }}>Warrior Stock Prices</h2>
+          <h2 style={{ marginTop: 0, marginBottom: 0 }}>
+            Warrior Stock Prices
+          </h2>
           <div className="range-toggle">
             {RANGES.map((r) => (
               <button

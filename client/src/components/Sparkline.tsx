@@ -1,8 +1,8 @@
 import { useId } from "react";
-import { withAlpha } from "../chartColors";
+import { NEGATIVE_COLOR, POSITIVE_COLOR, withAlpha } from "../chartColors";
 
-const SPARK_POS = "#0ea5e9";
-const SPARK_NEG = "#ff6b6b";
+const SPARK_POS = POSITIVE_COLOR;
+const SPARK_NEG = NEGATIVE_COLOR;
 
 interface SparklineProps {
   prices: number[];

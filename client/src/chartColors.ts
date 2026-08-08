@@ -4,6 +4,12 @@ const PALETTE = [
   "#86bcb6", "#d37295",
 ];
 
+// Mirrors --positive / --negative in styles.css - kept as JS constants since
+// canvas/SVG rendering (charts, sparklines, heatmap) can't read CSS custom
+// properties directly. Update both places together.
+export const POSITIVE_COLOR = "#0ea5e9";
+export const NEGATIVE_COLOR = "#ff6b6b";
+
 export function paletteColor(i: number): string {
   return PALETTE[i % PALETTE.length];
 }

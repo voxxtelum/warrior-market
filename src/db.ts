@@ -1,12 +1,12 @@
-import { DatabaseSync } from "node:sqlite";
-import path from "node:path";
-import fs from "node:fs";
-import { randomBytes } from "node:crypto";
+import { DatabaseSync } from 'node:sqlite';
+import path from 'node:path';
+import fs from 'node:fs';
+import { randomBytes } from 'node:crypto';
 
-const dataDir = path.join(__dirname, "..", "data");
+const dataDir = path.join(__dirname, '..', 'data');
 fs.mkdirSync(dataDir, { recursive: true });
 
-export const db = new DatabaseSync(path.join(dataDir, "warrior.db"));
+export const db = new DatabaseSync(path.join(dataDir, 'warrior.db'));
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS reports (
@@ -31,9 +31,11 @@ db.exec(`
 // to compute a "% of the raid spent taking damage" uptime figure. Older DBs
 // predate this column - add it in place (existing rows just get end_time =
 // NULL until re-ingested, no need to drop reports/fights for this one).
-const reportsHasEndTime = (db.prepare(`PRAGMA table_info(reports)`).all() as unknown as { name: string }[]).some(
-  (c) => c.name === "end_time"
-);
+const reportsHasEndTime = (
+  db.prepare(`PRAGMA table_info(reports)`).all() as unknown as {
+    name: string;
+  }[]
+).some((c) => c.name === 'end_time');
 if (!reportsHasEndTime) {
   db.exec(`ALTER TABLE reports ADD COLUMN end_time INTEGER`);
 }
@@ -44,9 +46,9 @@ if (!reportsHasEndTime) {
 // primary key on both tables. Older DBs predate this column; migrate by
 // dropping and recreating (casts/damage are fully re-derivable by re-adding
 // each report, unlike reports/fights which we keep).
-const castsHasServer = (db.prepare(`PRAGMA table_info(casts)`).all() as unknown as { name: string }[]).some(
-  (c) => c.name === "server"
-);
+const castsHasServer = (
+  db.prepare(`PRAGMA table_info(casts)`).all() as unknown as { name: string }[]
+).some((c) => c.name === 'server');
 if (!castsHasServer) {
   db.exec(`DROP TABLE IF EXISTS casts; DROP TABLE IF EXISTS damage;`);
 }
@@ -190,9 +192,11 @@ db.exec(`
 // by a later drift tick, only by a new raid result or another trade. Older
 // DBs predate this column; add it in place (existing rows backfilled below,
 // once DEFAULT_STOCK_CONFIG is defined).
-const warriorsHasAnchorPrice = (db.prepare(`PRAGMA table_info(warriors)`).all() as unknown as { name: string }[]).some(
-  (c) => c.name === "anchor_price"
-);
+const warriorsHasAnchorPrice = (
+  db.prepare(`PRAGMA table_info(warriors)`).all() as unknown as {
+    name: string;
+  }[]
+).some((c) => c.name === 'anchor_price');
 if (!warriorsHasAnchorPrice) {
   db.exec(`ALTER TABLE warriors ADD COLUMN anchor_price REAL`);
 }
@@ -203,17 +207,21 @@ if (!warriorsHasAnchorPrice) {
 // default to hidden - this runs directly against hidden_players/warriors
 // rather than through that helper so it never hides pre-existing players.
 // Guarded on the warriors table being empty so it only ever runs once.
-const warriorsCount = (db.prepare(`SELECT COUNT(*) AS c FROM warriors`).get() as unknown as { c: number }).c;
+const warriorsCount = (
+  db.prepare(`SELECT COUNT(*) AS c FROM warriors`).get() as unknown as {
+    c: number;
+  }
+).c;
 if (warriorsCount === 0) {
   const existingIdentities = db
     .prepare(
       `SELECT player_name, server FROM casts
        UNION
-       SELECT player_name, server FROM damage`
+       SELECT player_name, server FROM damage`,
     )
     .all() as unknown as { player_name: string; server: string }[];
   const insertWarrior = db.prepare(
-    `INSERT OR IGNORE INTO warriors (player_name, server, first_seen_at) VALUES (?, ?, ?)`
+    `INSERT OR IGNORE INTO warriors (player_name, server, first_seen_at) VALUES (?, ?, ?)`,
   );
   const backfillNow = Date.now();
   for (const identity of existingIdentities) {
@@ -225,14 +233,14 @@ if (warriorsCount === 0) {
 // the DB (tunable from the admin page) rather than config.json.
 const DEFAULT_STOCK_CONFIG = {
   abilities: [
-    { id: 23894, name: "Bloodthirst", weight: 20, bucket: "all" },
-    { id: 25286, name: "Heroic Strike", weight: 4, bucket: "dps" },
-    { id: 1719, name: "Recklessness", weight: 5, bucket: "dps" },
-    { id: 12328, name: "Death Wish", weight: 3, bucket: "dps" },
-    { id: 1680, name: "Whirlwind", weight: 2, bucket: "dps" },
-    { id: 11597, name: "Sunder Armor", weight: 1, bucket: "tank" },
-    { id: 11556, name: "Demoralizing Shout", weight: 0.1, bucket: "tank" },
-    { id: 25288, name: "Revenge", weight: 1, bucket: "tank" },
+    { id: 23894, name: 'Bloodthirst', weight: 20, bucket: 'all' },
+    { id: 25286, name: 'Heroic Strike', weight: 4, bucket: 'dps' },
+    { id: 1719, name: 'Recklessness', weight: 5, bucket: 'dps' },
+    { id: 12328, name: 'Death Wish', weight: 3, bucket: 'dps' },
+    { id: 1680, name: 'Whirlwind', weight: 2, bucket: 'dps' },
+    { id: 11597, name: 'Sunder Armor', weight: 1, bucket: 'tank' },
+    { id: 11556, name: 'Demoralizing Shout', weight: 0.1, bucket: 'tank' },
+    { id: 25288, name: 'Revenge', weight: 1, bucket: 'tank' },
   ],
   tankTopN: 4,
   tankMinUptimePct: 0.2,
@@ -256,9 +264,13 @@ const DEFAULT_STOCK_CONFIG = {
   demandLiquidityDenominator: 50000,
   tradeFeePct: 0.0025,
 };
-const hasStockConfig = db.prepare(`SELECT 1 FROM stock_config WHERE id = 1`).get();
+const hasStockConfig = db
+  .prepare(`SELECT 1 FROM stock_config WHERE id = 1`)
+  .get();
 if (!hasStockConfig) {
-  db.prepare(`INSERT INTO stock_config (id, data) VALUES (1, ?)`).run(JSON.stringify(DEFAULT_STOCK_CONFIG));
+  db.prepare(`INSERT INTO stock_config (id, data) VALUES (1, ?)`).run(
+    JSON.stringify(DEFAULT_STOCK_CONFIG),
+  );
 }
 
 // Backfill anchor_price for warriors that predate the demand-signal feature -
@@ -271,12 +283,19 @@ const warriorsMissingAnchor = db
   .all() as unknown as { id: number }[];
 if (warriorsMissingAnchor.length > 0) {
   const getLatestRaidForBackfill = db.prepare(
-    `SELECT price FROM price_snapshots WHERE warrior_id = ? AND source = 'raid' ORDER BY created_at DESC, id DESC LIMIT 1`
+    `SELECT price FROM price_snapshots WHERE warrior_id = ? AND source = 'raid' ORDER BY created_at DESC, id DESC LIMIT 1`,
   );
-  const updateAnchor = db.prepare(`UPDATE warriors SET anchor_price = ? WHERE id = ?`);
+  const updateAnchor = db.prepare(
+    `UPDATE warriors SET anchor_price = ? WHERE id = ?`,
+  );
   for (const { id } of warriorsMissingAnchor) {
-    const raidRow = getLatestRaidForBackfill.get(id) as unknown as { price: number } | undefined;
-    updateAnchor.run(raidRow ? raidRow.price : DEFAULT_STOCK_CONFIG.startingPrice, id);
+    const raidRow = getLatestRaidForBackfill.get(id) as unknown as
+      | { price: number }
+      | undefined;
+    updateAnchor.run(
+      raidRow ? raidRow.price : DEFAULT_STOCK_CONFIG.startingPrice,
+      id,
+    );
   }
 }
 
@@ -346,7 +365,9 @@ export function upsertReport(data: {
   const deleteFights = db.prepare(`DELETE FROM fights WHERE report_code = ?`);
   const deleteCasts = db.prepare(`DELETE FROM casts WHERE report_code = ?`);
   const deleteDamage = db.prepare(`DELETE FROM damage WHERE report_code = ?`);
-  const deleteDamageTaken = db.prepare(`DELETE FROM damage_taken WHERE report_code = ?`);
+  const deleteDamageTaken = db.prepare(
+    `DELETE FROM damage_taken WHERE report_code = ?`,
+  );
 
   const insertFight = db.prepare(`
     INSERT INTO fights (report_code, fight_id, encounter_id, encounter_name, kill)
@@ -368,7 +389,7 @@ export function upsertReport(data: {
     VALUES (?, ?, ?, ?, ?, ?)
   `);
 
-  db.exec("BEGIN");
+  db.exec('BEGIN');
   try {
     insertReport.run(
       data.report.code,
@@ -376,7 +397,7 @@ export function upsertReport(data: {
       data.report.zone,
       data.report.start_time,
       data.report.end_time,
-      data.report.fetched_at
+      data.report.fetched_at,
     );
 
     deleteFights.run(data.report.code);
@@ -385,26 +406,56 @@ export function upsertReport(data: {
     deleteDamageTaken.run(data.report.code);
 
     for (const f of data.fights) {
-      insertFight.run(f.report_code, f.fight_id, f.encounter_id, f.encounter_name, f.kill);
+      insertFight.run(
+        f.report_code,
+        f.fight_id,
+        f.encounter_id,
+        f.encounter_name,
+        f.kill,
+      );
     }
     for (const c of data.casts) {
-      insertCast.run(c.report_code, c.player_name, c.server, c.class, c.ability_id, c.ability_name, c.cast_count);
+      insertCast.run(
+        c.report_code,
+        c.player_name,
+        c.server,
+        c.class,
+        c.ability_id,
+        c.ability_name,
+        c.cast_count,
+      );
     }
     for (const d of data.damage) {
-      insertDamage.run(d.report_code, d.player_name, d.server, d.class, d.total_damage, d.active_time);
+      insertDamage.run(
+        d.report_code,
+        d.player_name,
+        d.server,
+        d.class,
+        d.total_damage,
+        d.active_time,
+      );
     }
     for (const d of data.damageTaken) {
-      insertDamageTaken.run(d.report_code, d.player_name, d.server, d.class, d.total_taken, d.active_time);
+      insertDamageTaken.run(
+        d.report_code,
+        d.player_name,
+        d.server,
+        d.class,
+        d.total_taken,
+        d.active_time,
+      );
     }
-    db.exec("COMMIT");
+    db.exec('COMMIT');
   } catch (err) {
-    db.exec("ROLLBACK");
+    db.exec('ROLLBACK');
     throw err;
   }
 }
 
 export function listReports(): ReportRow[] {
-  return db.prepare(`SELECT * FROM reports ORDER BY start_time ASC`).all() as unknown as ReportRow[];
+  return db
+    .prepare(`SELECT * FROM reports ORDER BY start_time ASC`)
+    .all() as unknown as ReportRow[];
 }
 
 // Manually cascades the same way upsertReport's re-ingest delete step does -
@@ -413,32 +464,46 @@ export function listReports(): ReportRow[] {
 // stock.ts's rebuildRaidPriceSnapshots() afterward so the raid-anchored
 // price series regenerates without this report ever having existed.
 export function deleteReport(code: string): void {
-  db.exec("BEGIN");
+  db.exec('BEGIN');
   try {
     db.prepare(`DELETE FROM fights WHERE report_code = ?`).run(code);
     db.prepare(`DELETE FROM casts WHERE report_code = ?`).run(code);
     db.prepare(`DELETE FROM damage WHERE report_code = ?`).run(code);
     db.prepare(`DELETE FROM damage_taken WHERE report_code = ?`).run(code);
     db.prepare(`DELETE FROM reports WHERE code = ?`).run(code);
-    db.exec("COMMIT");
+    db.exec('COMMIT');
   } catch (err) {
-    db.exec("ROLLBACK");
+    db.exec('ROLLBACK');
     throw err;
   }
 }
 
 export function listZones(): string[] {
   const rows = db
-    .prepare(`SELECT DISTINCT zone FROM reports WHERE zone IS NOT NULL ORDER BY zone ASC`)
+    .prepare(
+      `SELECT DISTINCT zone FROM reports WHERE zone IS NOT NULL ORDER BY zone ASC`,
+    )
     .all() as unknown as { zone: string }[];
   return rows.map((r) => r.zone);
 }
 
 export function getReportDetail(code: string) {
-  const report = db.prepare(`SELECT * FROM reports WHERE code = ?`).get(code) as unknown as ReportRow | undefined;
-  const fights = db.prepare(`SELECT * FROM fights WHERE report_code = ?`).all(code) as unknown as FightRow[];
-  const casts = db.prepare(`SELECT * FROM casts WHERE report_code = ? ORDER BY player_name, ability_name`).all(code) as unknown as CastRow[];
-  const damage = db.prepare(`SELECT * FROM damage WHERE report_code = ? ORDER BY total_damage DESC`).all(code) as unknown as DamageRow[];
+  const report = db
+    .prepare(`SELECT * FROM reports WHERE code = ?`)
+    .get(code) as unknown as ReportRow | undefined;
+  const fights = db
+    .prepare(`SELECT * FROM fights WHERE report_code = ?`)
+    .all(code) as unknown as FightRow[];
+  const casts = db
+    .prepare(
+      `SELECT * FROM casts WHERE report_code = ? ORDER BY player_name, ability_name`,
+    )
+    .all(code) as unknown as CastRow[];
+  const damage = db
+    .prepare(
+      `SELECT * FROM damage WHERE report_code = ? ORDER BY total_damage DESC`,
+    )
+    .all(code) as unknown as DamageRow[];
   return { report, fights, casts, damage };
 }
 
@@ -451,70 +516,94 @@ const NOT_HIDDEN_CLAUSE = `NOT EXISTS (
   WHERE hp.player_name = t.player_name AND hp.server = t.server
 )`;
 
-export function getCastsForZone(zone: string): (CastRow & { start_time: number })[] {
+export function getCastsForZone(
+  zone: string,
+): (CastRow & { start_time: number })[] {
   return db
     .prepare(
       `SELECT t.*, r.start_time
        FROM casts t
        JOIN reports r ON r.code = t.report_code
        WHERE r.zone = ? AND ${NOT_HIDDEN_CLAUSE}
-       ORDER BY r.start_time ASC`
+       ORDER BY r.start_time ASC`,
     )
     .all(zone) as unknown as (CastRow & { start_time: number })[];
 }
 
-export function getDamageForZone(zone: string): (DamageRow & { start_time: number })[] {
+export function getDamageForZone(
+  zone: string,
+): (DamageRow & { start_time: number })[] {
   return db
     .prepare(
       `SELECT t.*, r.start_time
        FROM damage t
        JOIN reports r ON r.code = t.report_code
        WHERE r.zone = ? AND ${NOT_HIDDEN_CLAUSE}
-       ORDER BY r.start_time ASC`
+       ORDER BY r.start_time ASC`,
     )
     .all(zone) as unknown as (DamageRow & { start_time: number })[];
 }
 
 export function getReportsForZone(zone: string): ReportRow[] {
-  return db.prepare(`SELECT * FROM reports WHERE zone = ? ORDER BY start_time ASC`).all(zone) as unknown as ReportRow[];
+  return db
+    .prepare(`SELECT * FROM reports WHERE zone = ? ORDER BY start_time ASC`)
+    .all(zone) as unknown as ReportRow[];
 }
 
 // Unscoped-by-zone variants for the stock market calculation, which blends
 // signals across every instance a player has raided.
-export function getAllCasts(): (CastRow & { start_time: number; zone: string | null })[] {
+export function getAllCasts(): (CastRow & {
+  start_time: number;
+  zone: string | null;
+})[] {
   return db
     .prepare(
       `SELECT t.*, r.start_time, r.zone
        FROM casts t
        JOIN reports r ON r.code = t.report_code
        WHERE ${NOT_HIDDEN_CLAUSE}
-       ORDER BY r.start_time ASC`
+       ORDER BY r.start_time ASC`,
     )
-    .all() as unknown as (CastRow & { start_time: number; zone: string | null })[];
+    .all() as unknown as (CastRow & {
+    start_time: number;
+    zone: string | null;
+  })[];
 }
 
-export function getAllDamage(): (DamageRow & { start_time: number; zone: string | null })[] {
+export function getAllDamage(): (DamageRow & {
+  start_time: number;
+  zone: string | null;
+})[] {
   return db
     .prepare(
       `SELECT t.*, r.start_time, r.zone
        FROM damage t
        JOIN reports r ON r.code = t.report_code
        WHERE ${NOT_HIDDEN_CLAUSE}
-       ORDER BY r.start_time ASC`
+       ORDER BY r.start_time ASC`,
     )
-    .all() as unknown as (DamageRow & { start_time: number; zone: string | null })[];
+    .all() as unknown as (DamageRow & {
+    start_time: number;
+    zone: string | null;
+  })[];
 }
 
-export function getAllDamageTaken(): (DamageTakenRow & { start_time: number; zone: string | null })[] {
+export function getAllDamageTaken(): (DamageTakenRow & {
+  start_time: number;
+  zone: string | null;
+})[] {
   return db
     .prepare(
       `SELECT t.*, r.start_time, r.zone
        FROM damage_taken t
        JOIN reports r ON r.code = t.report_code
        WHERE ${NOT_HIDDEN_CLAUSE}
-       ORDER BY r.start_time ASC`
+       ORDER BY r.start_time ASC`,
     )
-    .all() as unknown as (DamageTakenRow & { start_time: number; zone: string | null })[];
+    .all() as unknown as (DamageTakenRow & {
+    start_time: number;
+    zone: string | null;
+  })[];
 }
 
 export interface PlayerRow {
@@ -536,7 +625,7 @@ export function listAllPlayers(): PlayerRow[] {
          UNION
          SELECT player_name, server FROM damage
        ) p
-       ORDER BY player_name ASC, server ASC`
+       ORDER BY player_name ASC, server ASC`,
     )
     .all() as unknown as PlayerRow[];
 }
@@ -545,16 +634,24 @@ export function listAllPlayers(): PlayerRow[] {
 // IGNORE's `changes` is 0 if the row already existed), so re-hiding an
 // already-hidden warrior - or Phase 0 auto-hiding a warrior that was just
 // created and has no holders yet - never double-liquidates.
-export function setPlayerHidden(playerName: string, server: string, hidden: boolean) {
+export function setPlayerHidden(
+  playerName: string,
+  server: string,
+  hidden: boolean,
+) {
   if (hidden) {
     const result = db
-      .prepare(`INSERT OR IGNORE INTO hidden_players (player_name, server) VALUES (?, ?)`)
+      .prepare(
+        `INSERT OR IGNORE INTO hidden_players (player_name, server) VALUES (?, ?)`,
+      )
       .run(playerName, server);
     if (result.changes > 0) {
       liquidateWarriorHoldings(playerName, server);
     }
   } else {
-    db.prepare(`DELETE FROM hidden_players WHERE player_name = ? AND server = ?`).run(playerName, server);
+    db.prepare(
+      `DELETE FROM hidden_players WHERE player_name = ? AND server = ?`,
+    ).run(playerName, server);
   }
 }
 
@@ -566,7 +663,7 @@ export function setPlayerHidden(playerName: string, server: string, hidden: bool
 function liquidateWarriorHoldings(
   playerName: string,
   server: string,
-  reason: string = "was hidden by an admin"
+  reason: string = 'was hidden by an admin',
 ) {
   const warriorId = getWarriorId(playerName, server);
   if (warriorId === null) return;
@@ -578,32 +675,33 @@ function liquidateWarriorHoldings(
   if (price === null) return;
 
   const now = Date.now();
-  db.exec("BEGIN");
+  db.exec('BEGIN');
   try {
     for (const holding of holders) {
       const refund = holding.shares * price;
-      db.prepare(`UPDATE holdings SET shares = 0, cost_basis_total = 0 WHERE user_id = ? AND warrior_id = ?`).run(
-        holding.user_id,
-        warriorId
-      );
-      db.prepare(`UPDATE wallets SET balance = balance + ? WHERE user_id = ?`).run(refund, holding.user_id);
+      db.prepare(
+        `UPDATE holdings SET shares = 0, cost_basis_total = 0 WHERE user_id = ? AND warrior_id = ?`,
+      ).run(holding.user_id, warriorId);
+      db.prepare(
+        `UPDATE wallets SET balance = balance + ? WHERE user_id = ?`,
+      ).run(refund, holding.user_id);
       db.prepare(
         `INSERT INTO transactions (user_id, warrior_id, side, shares, price, total, created_at)
-         VALUES (?, ?, 'liquidation', ?, ?, ?, ?)`
+         VALUES (?, ?, 'liquidation', ?, ?, ?, ?)`,
       ).run(holding.user_id, warriorId, holding.shares, price, refund, now);
       db.prepare(
-        `INSERT INTO notifications (user_id, message, warrior_id, amount, created_at) VALUES (?, ?, ?, ?, ?)`
+        `INSERT INTO notifications (user_id, message, warrior_id, amount, created_at) VALUES (?, ?, ?, ?, ?)`,
       ).run(
         holding.user_id,
-        `${playerName} ${reason} - your holding was liquidated and ${refund.toFixed(2)} coin refunded.`,
+        `${playerName} ${reason} - your holding was liquidated and ${refund.toFixed(2)} coins refunded.`,
         warriorId,
         refund,
-        now
+        now,
       );
     }
-    db.exec("COMMIT");
+    db.exec('COMMIT');
   } catch (err) {
-    db.exec("ROLLBACK");
+    db.exec('ROLLBACK');
     throw err;
   }
 }
@@ -623,7 +721,11 @@ export function liquidateOrphanedHoldings(): void {
     if (stillPriced.has(warrior_id)) continue;
     const warrior = getWarriorById(warrior_id);
     if (!warrior) continue;
-    liquidateWarriorHoldings(warrior.player_name, warrior.server, "has no remaining raid history");
+    liquidateWarriorHoldings(
+      warrior.player_name,
+      warrior.server,
+      'has no remaining raid history',
+    );
   }
 }
 
@@ -638,20 +740,28 @@ export interface WarriorRow {
 // to hidden (via the existing setPlayerHidden hook) until an admin unhides
 // them from /admin/players - existing warriors backfilled at startup are
 // exempt from this (see the one-time backfill above).
-export function getOrCreateWarriorId(playerName: string, server: string): number {
+export function getOrCreateWarriorId(
+  playerName: string,
+  server: string,
+): number {
   const existing = db
     .prepare(`SELECT id FROM warriors WHERE player_name = ? AND server = ?`)
     .get(playerName, server) as unknown as { id: number } | undefined;
   if (existing) return existing.id;
 
   const result = db
-    .prepare(`INSERT INTO warriors (player_name, server, first_seen_at) VALUES (?, ?, ?)`)
+    .prepare(
+      `INSERT INTO warriors (player_name, server, first_seen_at) VALUES (?, ?, ?)`,
+    )
     .run(playerName, server, Date.now());
   setPlayerHidden(playerName, server, true);
   return Number(result.lastInsertRowid);
 }
 
-export function getWarriorId(playerName: string, server: string): number | null {
+export function getWarriorId(
+  playerName: string,
+  server: string,
+): number | null {
   const row = db
     .prepare(`SELECT id FROM warriors WHERE player_name = ? AND server = ?`)
     .get(playerName, server) as unknown as { id: number } | undefined;
@@ -659,11 +769,17 @@ export function getWarriorId(playerName: string, server: string): number | null 
 }
 
 export function getWarriorById(id: number): WarriorRow | null {
-  return (db.prepare(`SELECT * FROM warriors WHERE id = ?`).get(id) as unknown as WarriorRow) ?? null;
+  return (
+    (db
+      .prepare(`SELECT * FROM warriors WHERE id = ?`)
+      .get(id) as unknown as WarriorRow) ?? null
+  );
 }
 
 export function listWarriors(): WarriorRow[] {
-  return db.prepare(`SELECT * FROM warriors ORDER BY player_name ASC, server ASC`).all() as unknown as WarriorRow[];
+  return db
+    .prepare(`SELECT * FROM warriors ORDER BY player_name ASC, server ASC`)
+    .all() as unknown as WarriorRow[];
 }
 
 export class LinkError extends Error {}
@@ -673,15 +789,15 @@ export class LinkError extends Error {}
 // violation into a friendlier error for the "warrior already taken" case;
 // re-linking a user that already has a link just moves it.
 export function linkUserToWarrior(userId: string, warriorId: number): void {
-  const taken = db.prepare(`SELECT user_id FROM user_warrior_links WHERE warrior_id = ?`).get(warriorId) as unknown as
-    | { user_id: string }
-    | undefined;
+  const taken = db
+    .prepare(`SELECT user_id FROM user_warrior_links WHERE warrior_id = ?`)
+    .get(warriorId) as unknown as { user_id: string } | undefined;
   if (taken && taken.user_id !== userId) {
-    throw new LinkError("This warrior is already linked to another user");
+    throw new LinkError('This warrior is already linked to another user');
   }
   db.prepare(
     `INSERT INTO user_warrior_links (user_id, warrior_id, linked_at) VALUES (?, ?, ?)
-     ON CONFLICT(user_id) DO UPDATE SET warrior_id = excluded.warrior_id, linked_at = excluded.linked_at`
+     ON CONFLICT(user_id) DO UPDATE SET warrior_id = excluded.warrior_id, linked_at = excluded.linked_at`,
   ).run(userId, warriorId, Date.now());
 }
 
@@ -698,9 +814,13 @@ export function getLinkedAvatarsByIdentity(): Map<string, string | null> {
       `SELECT w.player_name, w.server, u.avatar
        FROM user_warrior_links l
        JOIN warriors w ON w.id = l.warrior_id
-       JOIN users u ON u.discord_id = l.user_id`
+       JOIN users u ON u.discord_id = l.user_id`,
     )
-    .all() as unknown as { player_name: string; server: string; avatar: string | null }[];
+    .all() as unknown as {
+    player_name: string;
+    server: string;
+    avatar: string | null;
+  }[];
   return new Map(rows.map((r) => [`${r.player_name}::${r.server}`, r.avatar]));
 }
 
@@ -709,24 +829,28 @@ export interface PriceSnapshotRow {
   warrior_id: number;
   report_code: string | null;
   price: number;
-  source: "raid" | "drift";
+  source: 'raid' | 'drift';
   created_at: number;
 }
 
 export function insertPriceSnapshot(
   warriorId: number,
   price: number,
-  source: "raid" | "drift",
+  source: 'raid' | 'drift',
   reportCode: string | null,
-  createdAt: number
+  createdAt: number,
 ) {
   db.prepare(
-    `INSERT INTO price_snapshots (warrior_id, report_code, price, source, created_at) VALUES (?, ?, ?, ?, ?)`
+    `INSERT INTO price_snapshots (warrior_id, report_code, price, source, created_at) VALUES (?, ?, ?, ?, ?)`,
   ).run(warriorId, reportCode, price, source, createdAt);
 }
 
 export function getPriceSnapshotCount(): number {
-  return (db.prepare(`SELECT COUNT(*) AS c FROM price_snapshots`).get() as unknown as { c: number }).c;
+  return (
+    db
+      .prepare(`SELECT COUNT(*) AS c FROM price_snapshots`)
+      .get() as unknown as { c: number }
+  ).c;
 }
 
 // Wipes every raid-sourced snapshot and replaces it with a freshly computed
@@ -735,17 +859,28 @@ export function getPriceSnapshotCount(): number {
 // to be regenerated from scratch. Drift-sourced snapshots are never touched
 // here.
 export function replaceRaidPriceSnapshots(
-  entries: { warriorId: number; price: number; reportCode: string; createdAt: number }[]
+  entries: {
+    warriorId: number;
+    price: number;
+    reportCode: string;
+    createdAt: number;
+  }[],
 ): void {
-  db.exec("BEGIN");
+  db.exec('BEGIN');
   try {
     db.prepare(`DELETE FROM price_snapshots WHERE source = 'raid'`).run();
     for (const e of entries) {
-      insertPriceSnapshot(e.warriorId, e.price, "raid", e.reportCode, e.createdAt);
+      insertPriceSnapshot(
+        e.warriorId,
+        e.price,
+        'raid',
+        e.reportCode,
+        e.createdAt,
+      );
     }
-    db.exec("COMMIT");
+    db.exec('COMMIT');
   } catch (err) {
-    db.exec("ROLLBACK");
+    db.exec('ROLLBACK');
     throw err;
   }
 }
@@ -755,7 +890,9 @@ export function replaceRaidPriceSnapshots(
 // drift), never a live computeStock() recompute (see stock.ts).
 export function getLatestPrice(warriorId: number): number | null {
   const row = db
-    .prepare(`SELECT price FROM price_snapshots WHERE warrior_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`)
+    .prepare(
+      `SELECT price FROM price_snapshots WHERE warrior_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
+    )
     .get(warriorId) as unknown as { price: number } | undefined;
   return row ? row.price : null;
 }
@@ -766,26 +903,31 @@ export function getLatestPrice(warriorId: number): number | null {
 // "latest raid snapshot" anchor did). Only a new raid result or another
 // trade moves this; random drift noise never does.
 export function getAnchorPrice(warriorId: number): number | null {
-  const row = db.prepare(`SELECT anchor_price FROM warriors WHERE id = ?`).get(warriorId) as unknown as
-    | { anchor_price: number | null }
-    | undefined;
+  const row = db
+    .prepare(`SELECT anchor_price FROM warriors WHERE id = ?`)
+    .get(warriorId) as unknown as { anchor_price: number | null } | undefined;
   return row ? row.anchor_price : null;
 }
 
 export function setAnchorPrice(warriorId: number, price: number): void {
-  db.prepare(`UPDATE warriors SET anchor_price = ? WHERE id = ?`).run(price, warriorId);
+  db.prepare(`UPDATE warriors SET anchor_price = ? WHERE id = ?`).run(
+    price,
+    warriorId,
+  );
 }
 
 export function getPriceHistory(warriorId: number): PriceSnapshotRow[] {
   return db
-    .prepare(`SELECT * FROM price_snapshots WHERE warrior_id = ? ORDER BY created_at ASC, id ASC`)
+    .prepare(
+      `SELECT * FROM price_snapshots WHERE warrior_id = ? ORDER BY created_at ASC, id ASC`,
+    )
     .all(warriorId) as unknown as PriceSnapshotRow[];
 }
 
 export function listWarriorsWithRaidSnapshot(): WarriorRow[] {
   return db
     .prepare(
-      `SELECT DISTINCT w.* FROM warriors w JOIN price_snapshots ps ON ps.warrior_id = w.id WHERE ps.source = 'raid'`
+      `SELECT DISTINCT w.* FROM warriors w JOIN price_snapshots ps ON ps.warrior_id = w.id WHERE ps.source = 'raid'`,
     )
     .all() as unknown as WarriorRow[];
 }
@@ -797,7 +939,10 @@ export function listWarriorsWithRaidSnapshot(): WarriorRow[] {
 // did. Excludes currently-hidden warriors, same as every other Stock page
 // consumer (computeStock() already filters them out of casts/damage), so a
 // warrior hidden after trading stops leaking its price history publicly.
-export function getAllPriceSnapshots(): (PriceSnapshotRow & { player_name: string; server: string })[] {
+export function getAllPriceSnapshots(): (PriceSnapshotRow & {
+  player_name: string;
+  server: string;
+})[] {
   return db
     .prepare(
       `SELECT ps.*, w.player_name, w.server
@@ -806,9 +951,12 @@ export function getAllPriceSnapshots(): (PriceSnapshotRow & { player_name: strin
        WHERE NOT EXISTS (
          SELECT 1 FROM hidden_players hp WHERE hp.player_name = w.player_name AND hp.server = w.server
        )
-       ORDER BY ps.created_at ASC, ps.id ASC`
+       ORDER BY ps.created_at ASC, ps.id ASC`,
     )
-    .all() as unknown as (PriceSnapshotRow & { player_name: string; server: string })[];
+    .all() as unknown as (PriceSnapshotRow & {
+    player_name: string;
+    server: string;
+  })[];
 }
 
 const STARTING_BALANCE = 1000;
@@ -820,16 +968,14 @@ export interface WalletRow {
 }
 
 export function getOrCreateWallet(userId: string): WalletRow {
-  const existing = db.prepare(`SELECT * FROM wallets WHERE user_id = ?`).get(userId) as unknown as
-    | WalletRow
-    | undefined;
+  const existing = db
+    .prepare(`SELECT * FROM wallets WHERE user_id = ?`)
+    .get(userId) as unknown as WalletRow | undefined;
   if (existing) return existing;
   const now = Date.now();
-  db.prepare(`INSERT INTO wallets (user_id, balance, created_at) VALUES (?, ?, ?)`).run(
-    userId,
-    STARTING_BALANCE,
-    now
-  );
+  db.prepare(
+    `INSERT INTO wallets (user_id, balance, created_at) VALUES (?, ?, ?)`,
+  ).run(userId, STARTING_BALANCE, now);
   return { user_id: userId, balance: STARTING_BALANCE, created_at: now };
 }
 
@@ -840,33 +986,44 @@ export interface HoldingRow {
   cost_basis_total: number;
 }
 
-export function getHolding(userId: string, warriorId: number): HoldingRow | null {
+export function getHolding(
+  userId: string,
+  warriorId: number,
+): HoldingRow | null {
   return (
-    (db.prepare(`SELECT * FROM holdings WHERE user_id = ? AND warrior_id = ?`).get(userId, warriorId) as unknown as
-      | HoldingRow
-      | undefined) ?? null
+    (db
+      .prepare(`SELECT * FROM holdings WHERE user_id = ? AND warrior_id = ?`)
+      .get(userId, warriorId) as unknown as HoldingRow | undefined) ?? null
   );
 }
 
-export function listHoldingsWithContext(
-  userId: string
-): (HoldingRow & { player_name: string; server: string; latest_price: number | null })[] {
+export function listHoldingsWithContext(userId: string): (HoldingRow & {
+  player_name: string;
+  server: string;
+  latest_price: number | null;
+})[] {
   const rows = db
     .prepare(
       `SELECT h.*, w.player_name, w.server
        FROM holdings h
        JOIN warriors w ON w.id = h.warrior_id
-       WHERE h.user_id = ? AND h.shares > 0`
+       WHERE h.user_id = ? AND h.shares > 0`,
     )
-    .all(userId) as unknown as (HoldingRow & { player_name: string; server: string })[];
-  return rows.map((r) => ({ ...r, latest_price: getLatestPrice(r.warrior_id) }));
+    .all(userId) as unknown as (HoldingRow & {
+    player_name: string;
+    server: string;
+  })[];
+  return rows.map((r) => ({
+    ...r,
+    latest_price: getLatestPrice(r.warrior_id),
+  }));
 }
 
 export interface TransactionRow {
   id: number;
   user_id: string;
   warrior_id: number;
-  side: "buy" | "sell" | "liquidation";
+  side: 'buy' | 'sell' | 'liquidation';
   shares: number;
   price: number;
   total: number;
@@ -902,27 +1059,28 @@ export interface TradeConfig {
 export function executeTrade(
   userId: string,
   warriorId: number,
-  side: "buy" | "sell",
+  side: 'buy' | 'sell',
   coinAmount: number,
-  config: TradeConfig
+  config: TradeConfig,
 ): TransactionRow {
   if (!Number.isFinite(coinAmount) || coinAmount <= 0) {
-    throw new TradeError("Amount must be a positive number");
+    throw new TradeError('Amount must be a positive number');
   }
 
-  if (side === "buy") {
+  if (side === 'buy') {
     const hidden = db
       .prepare(
         `SELECT 1 FROM warriors w
          JOIN hidden_players hp ON hp.player_name = w.player_name AND hp.server = w.server
-         WHERE w.id = ?`
+         WHERE w.id = ?`,
       )
       .get(warriorId);
     if (hidden) throw new TradeError("This warrior isn't currently tradeable");
   }
 
   const price = getLatestPrice(warriorId);
-  if (price === null) throw new TradeError("No price available for this warrior yet");
+  if (price === null)
+    throw new TradeError('No price available for this warrior yet');
 
   const wallet = getOrCreateWallet(userId);
   const holding = getHolding(userId, warriorId);
@@ -931,16 +1089,19 @@ export function executeTrade(
   let total = coinAmount;
   let fee = total * config.tradeFeePct;
 
-  if (side === "buy") {
+  if (side === 'buy') {
     // Cent-rounded comparison - a client "use 100% of balance" amount can
     // differ from wallet.balance by a sub-cent float rounding error while
     // still displaying as the same cent value, and shouldn't be rejected.
     // Required balance includes the fee, which is new on top of the order.
-    if (Math.round((coinAmount + fee) * 100) > Math.round(wallet.balance * 100)) {
-      throw new TradeError("Insufficient balance");
+    if (
+      Math.round((coinAmount + fee) * 100) > Math.round(wallet.balance * 100)
+    ) {
+      throw new TradeError('Insufficient balance');
     }
   } else {
-    if (!holding || holding.shares <= 0) throw new TradeError("You don't hold any shares of this warrior");
+    if (!holding || holding.shares <= 0)
+      throw new TradeError("You don't hold any shares of this warrior");
     if (shares > holding.shares) {
       shares = holding.shares;
       total = shares * price;
@@ -954,47 +1115,59 @@ export function executeTrade(
   // move price more than demandMaxPctPerTrade.
   const rawImpactPct = total / config.demandLiquidityDenominator;
   const clampedImpactPct = Math.min(config.demandMaxPctPerTrade, rawImpactPct);
-  const impactPct = clampedImpactPct * (side === "buy" ? 1 : -1);
+  const impactPct = clampedImpactPct * (side === 'buy' ? 1 : -1);
   const priceAfter = price * (1 + impactPct);
 
   const now = Date.now();
-  db.exec("BEGIN");
+  db.exec('BEGIN');
   try {
-    if (side === "buy") {
+    if (side === 'buy') {
       const newShares = (holding?.shares ?? 0) + shares;
       const newCostBasis = (holding?.cost_basis_total ?? 0) + total;
       db.prepare(
         `INSERT INTO holdings (user_id, warrior_id, shares, cost_basis_total) VALUES (?, ?, ?, ?)
-         ON CONFLICT(user_id, warrior_id) DO UPDATE SET shares = excluded.shares, cost_basis_total = excluded.cost_basis_total`
+         ON CONFLICT(user_id, warrior_id) DO UPDATE SET shares = excluded.shares, cost_basis_total = excluded.cost_basis_total`,
       ).run(userId, warriorId, newShares, newCostBasis);
-      db.prepare(`UPDATE wallets SET balance = balance - ? WHERE user_id = ?`).run(total + fee, userId);
+      db.prepare(
+        `UPDATE wallets SET balance = balance - ? WHERE user_id = ?`,
+      ).run(total + fee, userId);
     } else {
       const remainingShares = holding!.shares - shares;
       const remainingCostBasis =
-        remainingShares <= 0 ? 0 : holding!.cost_basis_total * (remainingShares / holding!.shares);
-      db.prepare(`UPDATE holdings SET shares = ?, cost_basis_total = ? WHERE user_id = ? AND warrior_id = ?`).run(
-        remainingShares,
-        remainingCostBasis,
-        userId,
-        warriorId
-      );
-      db.prepare(`UPDATE wallets SET balance = balance + ? WHERE user_id = ?`).run(total - fee, userId);
+        remainingShares <= 0
+          ? 0
+          : holding!.cost_basis_total * (remainingShares / holding!.shares);
+      db.prepare(
+        `UPDATE holdings SET shares = ?, cost_basis_total = ? WHERE user_id = ? AND warrior_id = ?`,
+      ).run(remainingShares, remainingCostBasis, userId, warriorId);
+      db.prepare(
+        `UPDATE wallets SET balance = balance + ? WHERE user_id = ?`,
+      ).run(total - fee, userId);
     }
 
     const result = db
       .prepare(
         `INSERT INTO transactions (user_id, warrior_id, side, shares, price, total, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(userId, warriorId, side, shares, price, total, now);
 
-    insertPriceSnapshot(warriorId, priceAfter, "drift", null, now);
+    insertPriceSnapshot(warriorId, priceAfter, 'drift', null, now);
     setAnchorPrice(warriorId, priceAfter);
 
-    db.exec("COMMIT");
-    return { id: Number(result.lastInsertRowid), user_id: userId, warrior_id: warriorId, side, shares, price, total, created_at: now };
+    db.exec('COMMIT');
+    return {
+      id: Number(result.lastInsertRowid),
+      user_id: userId,
+      warrior_id: warriorId,
+      side,
+      shares,
+      price,
+      total,
+      created_at: now,
+    };
   } catch (err) {
-    db.exec("ROLLBACK");
+    db.exec('ROLLBACK');
     throw err;
   }
 }
@@ -1011,12 +1184,16 @@ export interface NotificationRow {
 
 export function listUnreadNotifications(userId: string): NotificationRow[] {
   return db
-    .prepare(`SELECT * FROM notifications WHERE user_id = ? AND read_at IS NULL ORDER BY created_at DESC`)
+    .prepare(
+      `SELECT * FROM notifications WHERE user_id = ? AND read_at IS NULL ORDER BY created_at DESC`,
+    )
     .all(userId) as unknown as NotificationRow[];
 }
 
 export function markNotificationRead(userId: string, id: number) {
-  db.prepare(`UPDATE notifications SET read_at = ? WHERE id = ? AND user_id = ?`).run(Date.now(), id, userId);
+  db.prepare(
+    `UPDATE notifications SET read_at = ? WHERE id = ? AND user_id = ?`,
+  ).run(Date.now(), id, userId);
 }
 
 export interface TransactionWithContext extends TransactionRow {
@@ -1027,19 +1204,19 @@ export interface TransactionWithContext extends TransactionRow {
 }
 
 export function listTransactions(
-  opts: { warriorId?: number; userId?: string; limit?: number } = {}
+  opts: { warriorId?: number; userId?: string; limit?: number } = {},
 ): TransactionWithContext[] {
   const clauses: string[] = [];
   const params: (string | number)[] = [];
   if (opts.warriorId !== undefined) {
-    clauses.push("t.warrior_id = ?");
+    clauses.push('t.warrior_id = ?');
     params.push(opts.warriorId);
   }
   if (opts.userId !== undefined) {
-    clauses.push("t.user_id = ?");
+    clauses.push('t.user_id = ?');
     params.push(opts.userId);
   }
-  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   params.push(opts.limit ?? 100);
 
   return db
@@ -1050,7 +1227,7 @@ export function listTransactions(
        JOIN users u ON u.discord_id = t.user_id
        ${where}
        ORDER BY t.created_at DESC, t.id DESC
-       LIMIT ?`
+       LIMIT ?`,
     )
     .all(...params) as unknown as TransactionWithContext[];
 }
@@ -1075,20 +1252,22 @@ export function getLeaderboard(): LeaderboardEntry[] {
        FROM wallets w
        JOIN users u ON u.discord_id = w.user_id
        LEFT JOIN user_warrior_links l ON l.user_id = w.user_id
-       LEFT JOIN warriors wr ON wr.id = l.warrior_id`
+       LEFT JOIN warriors wr ON wr.id = l.warrior_id`,
     )
     .all() as unknown as (WalletRow & {
-      username: string;
-      avatar: string | null;
-      linked_player_name: string | null;
-      linked_server: string | null;
-    })[];
-  const holdings = db.prepare(`SELECT * FROM holdings WHERE shares > 0`).all() as unknown as HoldingRow[];
+    username: string;
+    avatar: string | null;
+    linked_player_name: string | null;
+    linked_server: string | null;
+  })[];
+  const holdings = db
+    .prepare(`SELECT * FROM holdings WHERE shares > 0`)
+    .all() as unknown as HoldingRow[];
 
   const latestPrices = new Map<number, number>();
   const priceRows = db
     .prepare(
-      `SELECT warrior_id, price FROM price_snapshots WHERE id IN (SELECT MAX(id) FROM price_snapshots GROUP BY warrior_id)`
+      `SELECT warrior_id, price FROM price_snapshots WHERE id IN (SELECT MAX(id) FROM price_snapshots GROUP BY warrior_id)`,
     )
     .all() as unknown as { warrior_id: number; price: number }[];
   for (const r of priceRows) latestPrices.set(r.warrior_id, r.price);
@@ -1096,7 +1275,10 @@ export function getLeaderboard(): LeaderboardEntry[] {
   const holdingsValueByUser = new Map<string, number>();
   for (const h of holdings) {
     const price = latestPrices.get(h.warrior_id) ?? 0;
-    holdingsValueByUser.set(h.user_id, (holdingsValueByUser.get(h.user_id) ?? 0) + h.shares * price);
+    holdingsValueByUser.set(
+      h.user_id,
+      (holdingsValueByUser.get(h.user_id) ?? 0) + h.shares * price,
+    );
   }
 
   return wallets
@@ -1110,7 +1292,9 @@ export function getLeaderboard(): LeaderboardEntry[] {
         holdingsValue,
         netWorth: w.balance + holdingsValue,
         linkedWarrior:
-          w.linked_player_name !== null ? { playerName: w.linked_player_name, server: w.linked_server! } : null,
+          w.linked_player_name !== null
+            ? { playerName: w.linked_player_name, server: w.linked_server! }
+            : null,
       };
     })
     .sort((a, b) => b.netWorth - a.netWorth);
@@ -1131,20 +1315,26 @@ export interface AdminWalletOverviewEntry {
 // have STARTING_BALANCE and no holdings until getOrCreateWallet() lazily
 // creates their real row.
 export function getAdminWalletOverview(): AdminWalletOverviewEntry[] {
-  const users = db.prepare(`SELECT discord_id, username, avatar FROM users`).all() as unknown as {
+  const users = db
+    .prepare(`SELECT discord_id, username, avatar FROM users`)
+    .all() as unknown as {
     discord_id: string;
     username: string;
     avatar: string | null;
   }[];
   const walletByUser = new Map(
-    (db.prepare(`SELECT * FROM wallets`).all() as unknown as WalletRow[]).map((w) => [w.user_id, w.balance])
+    (db.prepare(`SELECT * FROM wallets`).all() as unknown as WalletRow[]).map(
+      (w) => [w.user_id, w.balance],
+    ),
   );
-  const holdings = db.prepare(`SELECT * FROM holdings WHERE shares > 0`).all() as unknown as HoldingRow[];
+  const holdings = db
+    .prepare(`SELECT * FROM holdings WHERE shares > 0`)
+    .all() as unknown as HoldingRow[];
 
   const latestPrices = new Map<number, number>();
   const priceRows = db
     .prepare(
-      `SELECT warrior_id, price FROM price_snapshots WHERE id IN (SELECT MAX(id) FROM price_snapshots GROUP BY warrior_id)`
+      `SELECT warrior_id, price FROM price_snapshots WHERE id IN (SELECT MAX(id) FROM price_snapshots GROUP BY warrior_id)`,
     )
     .all() as unknown as { warrior_id: number; price: number }[];
   for (const r of priceRows) latestPrices.set(r.warrior_id, r.price);
@@ -1152,7 +1342,10 @@ export function getAdminWalletOverview(): AdminWalletOverviewEntry[] {
   const holdingsValueByUser = new Map<string, number>();
   for (const h of holdings) {
     const price = latestPrices.get(h.warrior_id) ?? 0;
-    holdingsValueByUser.set(h.user_id, (holdingsValueByUser.get(h.user_id) ?? 0) + h.shares * price);
+    holdingsValueByUser.set(
+      h.user_id,
+      (holdingsValueByUser.get(h.user_id) ?? 0) + h.shares * price,
+    );
   }
 
   return users
@@ -1180,10 +1373,10 @@ export function adjustWalletBalance(
   targetUserId: string,
   delta: number,
   adminDiscordId: string,
-  reason: string | null
+  reason: string | null,
 ): WalletRow {
   if (!Number.isFinite(delta) || delta === 0) {
-    throw new AdminActionError("Amount must be a non-zero number");
+    throw new AdminActionError('Amount must be a non-zero number');
   }
   const wallet = getOrCreateWallet(targetUserId);
   const newBalance = wallet.balance + delta;
@@ -1192,27 +1385,34 @@ export function adjustWalletBalance(
   }
 
   const now = Date.now();
-  db.exec("BEGIN");
+  db.exec('BEGIN');
   try {
-    db.prepare(`UPDATE wallets SET balance = ? WHERE user_id = ?`).run(newBalance, targetUserId);
+    db.prepare(`UPDATE wallets SET balance = ? WHERE user_id = ?`).run(
+      newBalance,
+      targetUserId,
+    );
     db.prepare(
       `INSERT INTO admin_wallet_adjustments (admin_discord_id, target_user_id, delta, balance_after, reason, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?)`,
     ).run(adminDiscordId, targetUserId, delta, newBalance, reason, now);
     db.prepare(
-      `INSERT INTO notifications (user_id, message, warrior_id, amount, created_at) VALUES (?, ?, NULL, ?, ?)`
+      `INSERT INTO notifications (user_id, message, warrior_id, amount, created_at) VALUES (?, ?, NULL, ?, ?)`,
     ).run(
       targetUserId,
-      `An admin adjusted your balance by ${delta >= 0 ? "+" : ""}${delta.toFixed(2)} coin.`,
+      `An admin adjusted your balance by ${delta >= 0 ? '+' : ''}${delta.toFixed(2)} coins.`,
       delta,
-      now
+      now,
     );
-    db.exec("COMMIT");
+    db.exec('COMMIT');
   } catch (err) {
-    db.exec("ROLLBACK");
+    db.exec('ROLLBACK');
     throw err;
   }
-  return { user_id: targetUserId, balance: newBalance, created_at: wallet.created_at };
+  return {
+    user_id: targetUserId,
+    balance: newBalance,
+    created_at: wallet.created_at,
+  };
 }
 
 export interface AdminWalletAdjustmentView {
@@ -1236,7 +1436,7 @@ export function getAdminWalletAdjustments(): AdminWalletAdjustmentView[] {
        FROM admin_wallet_adjustments a
        JOIN users admin ON admin.discord_id = a.admin_discord_id
        JOIN users target ON target.discord_id = a.target_user_id
-       ORDER BY a.id DESC`
+       ORDER BY a.id DESC`,
     )
     .all() as unknown as {
     id: number;
@@ -1269,16 +1469,16 @@ export function getAdminWalletAdjustments(): AdminWalletAdjustmentView[] {
 // out of scope for a *market* reset. admin_wallet_adjustments is also left
 // alone - it's a historical admin-action audit log, not market state.
 export function resetMarketState(): void {
-  db.exec("BEGIN");
+  db.exec('BEGIN');
   try {
     db.prepare(`DELETE FROM transactions`).run();
     db.prepare(`DELETE FROM holdings`).run();
     db.prepare(`DELETE FROM notifications`).run();
     db.prepare(`UPDATE wallets SET balance = ?`).run(STARTING_BALANCE);
     db.prepare(`DELETE FROM price_snapshots`).run();
-    db.exec("COMMIT");
+    db.exec('COMMIT');
   } catch (err) {
-    db.exec("ROLLBACK");
+    db.exec('ROLLBACK');
     throw err;
   }
   setLastDriftAt(Date.now());
@@ -1290,14 +1490,27 @@ export interface MarketStats {
   totalNetWorth: number;
   totalTradeVolume: number;
   userCount: number;
-  perWarriorVolume: { player_name: string; server: string; volume: number; tradeCount: number }[];
-  topTraders: { user_id: string; username: string; turnover: number; tradeCount: number }[];
+  perWarriorVolume: {
+    player_name: string;
+    server: string;
+    volume: number;
+    tradeCount: number;
+  }[];
+  topTraders: {
+    user_id: string;
+    username: string;
+    turnover: number;
+    tradeCount: number;
+  }[];
 }
 
 export function getMarketStats(): MarketStats {
   const leaderboard = getLeaderboard();
   const totalCoinInWallets = leaderboard.reduce((sum, u) => sum + u.balance, 0);
-  const totalCoinInHoldings = leaderboard.reduce((sum, u) => sum + u.holdingsValue, 0);
+  const totalCoinInHoldings = leaderboard.reduce(
+    (sum, u) => sum + u.holdingsValue,
+    0,
+  );
 
   const perWarriorVolume = db
     .prepare(
@@ -1305,9 +1518,14 @@ export function getMarketStats(): MarketStats {
        FROM transactions t
        JOIN warriors w ON w.id = t.warrior_id
        GROUP BY t.warrior_id
-       ORDER BY volume DESC`
+       ORDER BY volume DESC`,
     )
-    .all() as unknown as { player_name: string; server: string; volume: number; tradeCount: number }[];
+    .all() as unknown as {
+    player_name: string;
+    server: string;
+    volume: number;
+    tradeCount: number;
+  }[];
 
   const topTraders = db
     .prepare(
@@ -1316,14 +1534,22 @@ export function getMarketStats(): MarketStats {
        JOIN users u ON u.discord_id = t.user_id
        GROUP BY t.user_id
        ORDER BY turnover DESC
-       LIMIT 20`
+       LIMIT 20`,
     )
-    .all() as unknown as { user_id: string; username: string; turnover: number; tradeCount: number }[];
+    .all() as unknown as {
+    user_id: string;
+    username: string;
+    turnover: number;
+    tradeCount: number;
+  }[];
 
   // All-time, every side (buy/sell/liquidation) included - matches
   // perWarriorVolume/topTraders' existing definition of "volume" exactly, so
   // this headline number reconciles with the detail tables below it.
-  const totalTradeVolume = perWarriorVolume.reduce((sum, r) => sum + r.volume, 0);
+  const totalTradeVolume = perWarriorVolume.reduce(
+    (sum, r) => sum + r.volume,
+    0,
+  );
 
   return {
     totalCoinInWallets,
@@ -1347,20 +1573,23 @@ export interface MarketSummary {
 // rules elsewhere).
 export function getMarketSummary(): MarketSummary {
   const stats = getMarketStats();
-  return { totalMarketSize: stats.totalNetWorth, totalTradeVolume: stats.totalTradeVolume };
+  return {
+    totalMarketSize: stats.totalNetWorth,
+    totalTradeVolume: stats.totalTradeVolume,
+  };
 }
 
 export function getLastDriftAt(): number | null {
-  const row = db.prepare(`SELECT last_drift_at FROM scheduler_state WHERE id = 1`).get() as unknown as
-    | { last_drift_at: number }
-    | undefined;
+  const row = db
+    .prepare(`SELECT last_drift_at FROM scheduler_state WHERE id = 1`)
+    .get() as unknown as { last_drift_at: number } | undefined;
   return row ? row.last_drift_at : null;
 }
 
 export function setLastDriftAt(ts: number) {
   db.prepare(
     `INSERT INTO scheduler_state (id, last_drift_at) VALUES (1, ?)
-     ON CONFLICT(id) DO UPDATE SET last_drift_at = excluded.last_drift_at`
+     ON CONFLICT(id) DO UPDATE SET last_drift_at = excluded.last_drift_at`,
   ).run(ts);
 }
 
@@ -1369,15 +1598,19 @@ export function setLastDriftAt(ts: number) {
 // without a server restart - stock.ts re-reads it on every computeStock()
 // call rather than caching it at import time.
 export function getStockConfigRaw(): string | null {
-  const row = db.prepare(`SELECT data FROM stock_config WHERE id = 1`).get() as unknown as { data: string } | undefined;
+  const row = db
+    .prepare(`SELECT data FROM stock_config WHERE id = 1`)
+    .get() as unknown as { data: string } | undefined;
   return row ? row.data : null;
 }
 
 export function setStockConfigRaw(json: string) {
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO stock_config (id, data) VALUES (1, ?)
     ON CONFLICT(id) DO UPDATE SET data = excluded.data
-  `).run(json);
+  `,
+  ).run(json);
 }
 
 export interface UserRow {
@@ -1398,23 +1631,29 @@ export function upsertUserFromLogin(
   discordId: string,
   username: string,
   avatar: string | null,
-  isBootstrapAdmin: boolean
+  isBootstrapAdmin: boolean,
 ): UserRow {
   const now = Date.now();
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO users (discord_id, username, avatar, is_admin, first_login_at, last_login_at)
     VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(discord_id) DO UPDATE SET
       username = excluded.username,
       avatar = excluded.avatar,
       last_login_at = excluded.last_login_at
-  `).run(discordId, username, avatar, isBootstrapAdmin ? 1 : 0, now, now);
+  `,
+  ).run(discordId, username, avatar, isBootstrapAdmin ? 1 : 0, now, now);
 
   if (isBootstrapAdmin) {
-    db.prepare(`UPDATE users SET is_admin = 1 WHERE discord_id = ?`).run(discordId);
+    db.prepare(`UPDATE users SET is_admin = 1 WHERE discord_id = ?`).run(
+      discordId,
+    );
   }
 
-  return db.prepare(`SELECT * FROM users WHERE discord_id = ?`).get(discordId) as unknown as UserRow;
+  return db
+    .prepare(`SELECT * FROM users WHERE discord_id = ?`)
+    .get(discordId) as unknown as UserRow;
 }
 
 export function listUsers(): (UserRow & {
@@ -1428,7 +1667,7 @@ export function listUsers(): (UserRow & {
        FROM users u
        LEFT JOIN user_warrior_links l ON l.user_id = u.discord_id
        LEFT JOIN warriors w ON w.id = l.warrior_id
-       ORDER BY u.last_login_at DESC`
+       ORDER BY u.last_login_at DESC`,
     )
     .all() as unknown as (UserRow & {
     linked_warrior_id: number | null;
@@ -1438,23 +1677,26 @@ export function listUsers(): (UserRow & {
 }
 
 export function setUserAdmin(discordId: string, isAdmin: boolean) {
-  db.prepare(`UPDATE users SET is_admin = ? WHERE discord_id = ?`).run(isAdmin ? 1 : 0, discordId);
+  db.prepare(`UPDATE users SET is_admin = ? WHERE discord_id = ?`).run(
+    isAdmin ? 1 : 0,
+    discordId,
+  );
 }
 
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-export function createSession(discordId: string): { sessionId: string; expiresAt: number } {
+export function createSession(discordId: string): {
+  sessionId: string;
+  expiresAt: number;
+} {
   db.prepare(`DELETE FROM sessions WHERE expires_at < ?`).run(Date.now());
 
-  const sessionId = randomBytes(32).toString("hex");
+  const sessionId = randomBytes(32).toString('hex');
   const now = Date.now();
   const expiresAt = now + SESSION_TTL_MS;
-  db.prepare(`INSERT INTO sessions (session_id, discord_id, created_at, expires_at) VALUES (?, ?, ?, ?)`).run(
-    sessionId,
-    discordId,
-    now,
-    expiresAt
-  );
+  db.prepare(
+    `INSERT INTO sessions (session_id, discord_id, created_at, expires_at) VALUES (?, ?, ?, ?)`,
+  ).run(sessionId, discordId, now, expiresAt);
   return { sessionId, expiresAt };
 }
 
@@ -1466,7 +1708,7 @@ export function getSessionUser(sessionId: string): UserRow | null {
     .prepare(
       `SELECT u.* FROM sessions s
        JOIN users u ON u.discord_id = s.discord_id
-       WHERE s.session_id = ? AND s.expires_at > ?`
+       WHERE s.session_id = ? AND s.expires_at > ?`,
     )
     .get(sessionId, Date.now()) as unknown as UserRow | undefined;
   return row ?? null;

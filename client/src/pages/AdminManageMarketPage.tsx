@@ -84,9 +84,11 @@ export function AdminManageMarketPage() {
           Resets every wallet, holding, trade, notification, and price history back to a clean slate. Raid/report
           data is not affected.
         </p>
-        <button type="button" className="btn-danger" onClick={() => setResetting(true)}>
-          Reset Market
-        </button>
+        <div className="danger-card-action">
+          <button type="button" className="btn-danger" onClick={() => setResetting(true)}>
+            Reset Market
+          </button>
+        </div>
         {resetDone && <p className="status success">Market reset.</p>}
       </div>
 

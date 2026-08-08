@@ -13,6 +13,8 @@ import { AdminAuditLogPage } from "./pages/AdminAuditLogPage";
 import { WalletPage } from "./pages/WalletPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
 import { TradeFeedPage } from "./pages/TradeFeedPage";
+import { FaqPage } from "./pages/FaqPage";
+import { WarriorsPage } from "./pages/WarriorsPage";
 
 function App() {
   return (
@@ -26,6 +28,8 @@ function App() {
       <Route path="/compare" element={<ComparePage />} />
       <Route path="/trends" element={<TrendsPage />} />
       <Route path="/overview" element={<OverviewPage />} />
+      <Route path="/faq" element={<FaqPage />} />
+      <Route path="/warriors" element={<WarriorsPage />} />
       <Route path="/admin" element={<AdminReportsPage />} />
       <Route path="/admin/players" element={<AdminPlayersPage />} />
       <Route path="/admin/stock-config" element={<AdminStockConfigPage />} />

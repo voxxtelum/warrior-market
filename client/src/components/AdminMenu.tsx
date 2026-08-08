@@ -5,6 +5,7 @@ import { logout } from "../api";
 import { Cog6ToothIcon } from "./icons/Cog6ToothIcon";
 import { ArrowLeftOnRectangleIcon } from "./icons/ArrowLeftOnRectangleIcon";
 import { ArrowRightOnRectangleIcon } from "./icons/ArrowRightOnRectangleIcon";
+import { QuestionMarkCircleIcon } from "./icons/QuestionMarkCircleIcon";
 
 export function AdminMenu() {
   const [open, setOpen] = useState(false);
@@ -42,10 +43,16 @@ export function AdminMenu() {
       </button>
       <nav id="nav-menu" className={open ? "open" : undefined}>
         {loading ? null : !user ? (
-          <a href="/api/auth/discord" className="icon-btn">
-            <ArrowLeftOnRectangleIcon className="icon-btn-icon" />
-            Log in with Discord
-          </a>
+          <>
+            <NavLink to="/faq" className={({ isActive }) => `icon-btn${isActive ? " active" : ""}`}>
+              <QuestionMarkCircleIcon className="icon-btn-icon" />
+              FAQ
+            </NavLink>
+            <a href="/api/auth/discord" className="icon-btn">
+              <ArrowLeftOnRectangleIcon className="icon-btn-icon" />
+              Log in with Discord
+            </a>
+          </>
         ) : (
           <>
             {user.isAdmin && (
@@ -55,6 +62,10 @@ export function AdminMenu() {
               </NavLink>
             )}
             {!user.isAdmin && <span className="nav-username">{user.username}</span>}
+            <NavLink to="/faq" className={({ isActive }) => `icon-btn${isActive ? " active" : ""}`}>
+              <QuestionMarkCircleIcon className="icon-btn-icon" />
+              FAQ
+            </NavLink>
             <a href="#" className="icon-btn" onClick={(e) => { e.preventDefault(); handleLogout(); }}>
               <ArrowRightOnRectangleIcon className="icon-btn-icon" />
               Log out

@@ -416,6 +416,29 @@ export async function getMarketSummary(): Promise<MarketSummary> {
   return res.json();
 }
 
+export async function getFaq(): Promise<string> {
+  const res = await fetch("/api/faq");
+  if (!res.ok) throw new Error("Failed to load FAQ");
+  return res.text();
+}
+
+export interface WarriorStats {
+  player_name: string;
+  server: string;
+  totalDamage: number;
+  damageByInstance: Record<string, number>;
+  totalDamageTaken: number;
+  damageTakenByInstance: Record<string, number>;
+  totalCasts: number;
+  castsByInstance: Record<string, number>;
+}
+
+export async function getWarriorStats(): Promise<WarriorStats[]> {
+  const res = await fetch("/api/warriors");
+  if (!res.ok) throw new Error("Failed to load warrior stats");
+  return res.json();
+}
+
 export interface AdminWalletRow {
   userId: string;
   username: string;

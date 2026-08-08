@@ -13,6 +13,8 @@ import { tradingRouter } from "./routes/trading";
 import { notificationsRouter } from "./routes/notifications";
 import { adminMarketStatsRouter } from "./routes/adminMarketStats";
 import { adminMarketRouter } from "./routes/adminMarket";
+import { faqRouter } from "./routes/faq";
+import { warriorsRouter } from "./routes/warriors";
 import { attachUser, requireAdmin } from "./middleware/auth";
 import { backfillPriceSnapshotsIfNeeded } from "./stock";
 import { startDriftScheduler } from "./drift";
@@ -38,6 +40,8 @@ app.use("/api/trading", tradingRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/admin/market-stats", requireAdmin, adminMarketStatsRouter);
 app.use("/api/admin/market", requireAdmin, adminMarketRouter);
+app.use("/api/faq", faqRouter);
+app.use("/api/warriors", warriorsRouter);
 
 const clientDist = path.join(__dirname, "..", "client", "dist");
 app.use(express.static(clientDist));

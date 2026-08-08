@@ -7,6 +7,7 @@ import {
   getStockConfigRaw,
   insertPriceSnapshot,
   listReports,
+  replaceRaidPriceSnapshots,
 } from "./db";
 
 export interface StockAbilityConfig {
@@ -355,21 +356,32 @@ export function snapshotPricesForReport(reportCode: string, createdAt: number = 
   }
 }
 
+// Recomputes computeStock() from scratch and replaces every raid-sourced
+// price_snapshots row with the result, using each report's own start_time
+// (rather than "now", which every rebuilt row would otherwise share) so the
+// chart's chronological order is preserved. Used both for the one-time
+// historical backfill below and whenever raid history changes after the
+// fact (a report gets deleted, or the market is reset).
+export function rebuildRaidPriceSnapshots(): void {
+  const allStock = computeStock();
+  const entries = allStock.flatMap((playerStock) => {
+    const warriorId = getOrCreateWarriorId(playerStock.player_name, playerStock.server);
+    return playerStock.series.map((point) => ({
+      warriorId,
+      price: point.price,
+      reportCode: point.report_code,
+      createdAt: point.start_time,
+    }));
+  });
+  replaceRaidPriceSnapshots(entries);
+}
+
 // One-time migration for installs that already had raid history before this
 // feature shipped: snapshots every historical report's price so trading has
-// a starting series to read from. Uses each report's own start_time (rather
-// than "now", which every backfilled row would otherwise share) so the
-// existing chart's chronological order is preserved. Safe to call on every
-// boot - it's a no-op once any snapshot exists.
+// a starting series to read from. Safe to call on every boot - it's a no-op
+// once any snapshot exists.
 export function backfillPriceSnapshotsIfNeeded() {
   if (getPriceSnapshotCount() > 0) return;
   if (listReports().length === 0) return;
-
-  const allStock = computeStock();
-  for (const playerStock of allStock) {
-    const warriorId = getOrCreateWarriorId(playerStock.player_name, playerStock.server);
-    for (const point of playerStock.series) {
-      insertPriceSnapshot(warriorId, point.price, "raid", point.report_code, point.start_time);
-    }
-  }
+  rebuildRaidPriceSnapshots();
 }

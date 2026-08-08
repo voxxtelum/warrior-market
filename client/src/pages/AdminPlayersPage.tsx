@@ -6,7 +6,12 @@ export function AdminPlayersPage() {
   const [players, setPlayers] = useState<PlayerRow[] | null>(null);
 
   useEffect(() => {
-    getPlayers().then(setPlayers);
+    // A non-admin briefly hits this before RequireAdmin's redirect commits
+    // (same client-side-only-guard tradeoff as the other admin pages) - swallow
+    // the 401/403 rather than crashing on it, since the redirect is already coming.
+    getPlayers()
+      .then(setPlayers)
+      .catch(() => {});
   }, []);
 
   function toggleHidden(player: PlayerRow) {

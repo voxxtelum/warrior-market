@@ -34,11 +34,16 @@ export function AdminStockConfigPage() {
   const [status, setStatus] = useState<{ text: string; kind: "success" | "error" } | null>(null);
 
   useEffect(() => {
-    getStockConfig().then((config) => {
-      const { abilities: loadedAbilities, ...loadedScalars } = config;
-      setScalars(loadedScalars);
-      setAbilities(loadedAbilities.map((a) => ({ ...a })));
-    });
+    // A non-admin briefly hits this before RequireAdmin's redirect commits
+    // (same client-side-only-guard tradeoff as the other admin pages) - swallow
+    // the 401/403 rather than crashing on it, since the redirect is already coming.
+    getStockConfig()
+      .then((config) => {
+        const { abilities: loadedAbilities, ...loadedScalars } = config;
+        setScalars(loadedScalars);
+        setAbilities(loadedAbilities.map((a) => ({ ...a })));
+      })
+      .catch(() => {});
   }, []);
 
   function updateAbility<K extends keyof StockAbilityConfig>(index: number, key: K, value: StockAbilityConfig[K]) {

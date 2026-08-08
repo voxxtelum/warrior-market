@@ -118,6 +118,12 @@ db.exec(`
     UNIQUE (player_name, server)
   );
 
+  CREATE TABLE IF NOT EXISTS user_warrior_links (
+    user_id TEXT PRIMARY KEY REFERENCES users(discord_id),
+    warrior_id INTEGER NOT NULL UNIQUE REFERENCES warriors(id),
+    linked_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS price_snapshots (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     warrior_id INTEGER NOT NULL,
@@ -166,6 +172,16 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS scheduler_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     last_drift_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS admin_wallet_adjustments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_discord_id TEXT NOT NULL,
+    target_user_id TEXT NOT NULL,
+    delta REAL NOT NULL,
+    balance_after REAL NOT NULL,
+    reason TEXT,
+    created_at INTEGER NOT NULL
   );
 `);
 
@@ -357,6 +373,26 @@ export function listReports(): ReportRow[] {
   return db.prepare(`SELECT * FROM reports ORDER BY start_time ASC`).all() as unknown as ReportRow[];
 }
 
+// Manually cascades the same way upsertReport's re-ingest delete step does -
+// removes a report's raw raid data entirely. Deliberately does not touch
+// price_snapshots; the caller is responsible for calling
+// stock.ts's rebuildRaidPriceSnapshots() afterward so the raid-anchored
+// price series regenerates without this report ever having existed.
+export function deleteReport(code: string): void {
+  db.exec("BEGIN");
+  try {
+    db.prepare(`DELETE FROM fights WHERE report_code = ?`).run(code);
+    db.prepare(`DELETE FROM casts WHERE report_code = ?`).run(code);
+    db.prepare(`DELETE FROM damage WHERE report_code = ?`).run(code);
+    db.prepare(`DELETE FROM damage_taken WHERE report_code = ?`).run(code);
+    db.prepare(`DELETE FROM reports WHERE code = ?`).run(code);
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
 export function listZones(): string[] {
   const rows = db
     .prepare(`SELECT DISTINCT zone FROM reports WHERE zone IS NOT NULL ORDER BY zone ASC`)
@@ -488,11 +524,16 @@ export function setPlayerHidden(playerName: string, server: string, hidden: bool
   }
 }
 
-// Force-sells every holder's position in a warrior that just got hidden, at
-// its last known price, refunds their wallet, and leaves each of them a
-// notification. A no-op if the warrior has no `warriors` row yet (hidden
-// before ever appearing in a report) or nobody holds shares in it.
-function liquidateWarriorHoldings(playerName: string, server: string) {
+// Force-sells every holder's position in a warrior, at its last known
+// price, refunds their wallet, and leaves each of them a notification. A
+// no-op if the warrior has no `warriors` row yet or nobody holds shares in
+// it, or (unlike the hidden-player case) if there's no price to liquidate
+// at - see liquidateOrphanedHoldings below, which relies on that no-op.
+function liquidateWarriorHoldings(
+  playerName: string,
+  server: string,
+  reason: string = "was hidden by an admin"
+) {
   const warriorId = getWarriorId(playerName, server);
   if (warriorId === null) return;
   const holders = db
@@ -520,7 +561,7 @@ function liquidateWarriorHoldings(playerName: string, server: string) {
         `INSERT INTO notifications (user_id, message, warrior_id, amount, created_at) VALUES (?, ?, ?, ?, ?)`
       ).run(
         holding.user_id,
-        `${playerName} was hidden by an admin - your holding was liquidated and ${refund.toFixed(2)} coin refunded.`,
+        `${playerName} ${reason} - your holding was liquidated and ${refund.toFixed(2)} coin refunded.`,
         warriorId,
         refund,
         now
@@ -530,6 +571,25 @@ function liquidateWarriorHoldings(playerName: string, server: string) {
   } catch (err) {
     db.exec("ROLLBACK");
     throw err;
+  }
+}
+
+// After a report deletion rebuilds raid price history, some warrior may be
+// left with zero raid snapshots (e.g. a player who only ever appeared in
+// the deleted report) while users still hold shares in them - liquidates
+// any such holder so nobody is stuck holding untradeable shares. A no-op
+// per-warrior if there's no price left to liquidate at (e.g. it also has no
+// drift snapshots), same as the hidden-player liquidation path.
+export function liquidateOrphanedHoldings(): void {
+  const stillPriced = new Set(listWarriorsWithRaidSnapshot().map((w) => w.id));
+  const holderWarriorIds = db
+    .prepare(`SELECT DISTINCT warrior_id FROM holdings WHERE shares > 0`)
+    .all() as unknown as { warrior_id: number }[];
+  for (const { warrior_id } of holderWarriorIds) {
+    if (stillPriced.has(warrior_id)) continue;
+    const warrior = getWarriorById(warrior_id);
+    if (!warrior) continue;
+    liquidateWarriorHoldings(warrior.player_name, warrior.server, "has no remaining raid history");
   }
 }
 
@@ -568,6 +628,48 @@ export function getWarriorById(id: number): WarriorRow | null {
   return (db.prepare(`SELECT * FROM warriors WHERE id = ?`).get(id) as unknown as WarriorRow) ?? null;
 }
 
+export function listWarriors(): WarriorRow[] {
+  return db.prepare(`SELECT * FROM warriors ORDER BY player_name ASC, server ASC`).all() as unknown as WarriorRow[];
+}
+
+export class LinkError extends Error {}
+
+// Strict 1:1 - user_warrior_links enforces this at the schema level
+// (user_id PRIMARY KEY, warrior_id UNIQUE), this just turns the constraint
+// violation into a friendlier error for the "warrior already taken" case;
+// re-linking a user that already has a link just moves it.
+export function linkUserToWarrior(userId: string, warriorId: number): void {
+  const taken = db.prepare(`SELECT user_id FROM user_warrior_links WHERE warrior_id = ?`).get(warriorId) as unknown as
+    | { user_id: string }
+    | undefined;
+  if (taken && taken.user_id !== userId) {
+    throw new LinkError("This warrior is already linked to another user");
+  }
+  db.prepare(
+    `INSERT INTO user_warrior_links (user_id, warrior_id, linked_at) VALUES (?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET warrior_id = excluded.warrior_id, linked_at = excluded.linked_at`
+  ).run(userId, warriorId, Date.now());
+}
+
+export function unlinkUser(userId: string): void {
+  db.prepare(`DELETE FROM user_warrior_links WHERE user_id = ?`).run(userId);
+}
+
+// Keyed "player_name::server" -> avatar (or null), for merging into the
+// Stock page leaderboard - computeStock() itself stays user-unaware, this
+// join happens only in the route handler.
+export function getLinkedAvatarsByIdentity(): Map<string, string | null> {
+  const rows = db
+    .prepare(
+      `SELECT w.player_name, w.server, u.avatar
+       FROM user_warrior_links l
+       JOIN warriors w ON w.id = l.warrior_id
+       JOIN users u ON u.discord_id = l.user_id`
+    )
+    .all() as unknown as { player_name: string; server: string; avatar: string | null }[];
+  return new Map(rows.map((r) => [`${r.player_name}::${r.server}`, r.avatar]));
+}
+
 export interface PriceSnapshotRow {
   id: number;
   warrior_id: number;
@@ -591,6 +693,27 @@ export function insertPriceSnapshot(
 
 export function getPriceSnapshotCount(): number {
   return (db.prepare(`SELECT COUNT(*) AS c FROM price_snapshots`).get() as unknown as { c: number }).c;
+}
+
+// Wipes every raid-sourced snapshot and replaces it with a freshly computed
+// set (see stock.ts's rebuildRaidPriceSnapshots) - used after a report is
+// deleted or the market is reset, when the raid-anchored price series needs
+// to be regenerated from scratch. Drift-sourced snapshots are never touched
+// here.
+export function replaceRaidPriceSnapshots(
+  entries: { warriorId: number; price: number; reportCode: string; createdAt: number }[]
+): void {
+  db.exec("BEGIN");
+  try {
+    db.prepare(`DELETE FROM price_snapshots WHERE source = 'raid'`).run();
+    for (const e of entries) {
+      insertPriceSnapshot(e.warriorId, e.price, "raid", e.reportCode, e.createdAt);
+    }
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
 }
 
 // The single source of truth for "the current price" everywhere trading
@@ -901,6 +1024,130 @@ export function getLeaderboard(): LeaderboardEntry[] {
     .sort((a, b) => b.netWorth - a.netWorth);
 }
 
+export interface AdminWalletOverviewEntry {
+  userId: string;
+  username: string;
+  avatar: string | null;
+  balance: number;
+  holdingsValue: number;
+  netWorth: number;
+}
+
+// Like getLeaderboard(), but starts from every registered user (not just
+// ones who already have a wallets row) so the Manage Market page can show
+// (and adjust the balance of) a user who's never traded - they implicitly
+// have STARTING_BALANCE and no holdings until getOrCreateWallet() lazily
+// creates their real row.
+export function getAdminWalletOverview(): AdminWalletOverviewEntry[] {
+  const users = db.prepare(`SELECT discord_id, username, avatar FROM users`).all() as unknown as {
+    discord_id: string;
+    username: string;
+    avatar: string | null;
+  }[];
+  const walletByUser = new Map(
+    (db.prepare(`SELECT * FROM wallets`).all() as unknown as WalletRow[]).map((w) => [w.user_id, w.balance])
+  );
+  const holdings = db.prepare(`SELECT * FROM holdings WHERE shares > 0`).all() as unknown as HoldingRow[];
+
+  const latestPrices = new Map<number, number>();
+  const priceRows = db
+    .prepare(
+      `SELECT warrior_id, price FROM price_snapshots WHERE id IN (SELECT MAX(id) FROM price_snapshots GROUP BY warrior_id)`
+    )
+    .all() as unknown as { warrior_id: number; price: number }[];
+  for (const r of priceRows) latestPrices.set(r.warrior_id, r.price);
+
+  const holdingsValueByUser = new Map<string, number>();
+  for (const h of holdings) {
+    const price = latestPrices.get(h.warrior_id) ?? 0;
+    holdingsValueByUser.set(h.user_id, (holdingsValueByUser.get(h.user_id) ?? 0) + h.shares * price);
+  }
+
+  return users
+    .map((u) => {
+      const balance = walletByUser.get(u.discord_id) ?? STARTING_BALANCE;
+      const holdingsValue = holdingsValueByUser.get(u.discord_id) ?? 0;
+      return {
+        userId: u.discord_id,
+        username: u.username,
+        avatar: u.avatar,
+        balance,
+        holdingsValue,
+        netWorth: balance + holdingsValue,
+      };
+    })
+    .sort((a, b) => b.netWorth - a.netWorth);
+}
+
+export class AdminActionError extends Error {}
+
+// Manually adjusts a user's coin balance (e.g. a prize, correcting a
+// mistake) - validated, audited (admin_wallet_adjustments), and notifies
+// the affected user, mirroring the existing liquidation notification shape.
+export function adjustWalletBalance(
+  targetUserId: string,
+  delta: number,
+  adminDiscordId: string,
+  reason: string | null
+): WalletRow {
+  if (!Number.isFinite(delta) || delta === 0) {
+    throw new AdminActionError("Amount must be a non-zero number");
+  }
+  const wallet = getOrCreateWallet(targetUserId);
+  const newBalance = wallet.balance + delta;
+  if (newBalance < 0) {
+    throw new AdminActionError("Resulting balance can't go below 0");
+  }
+
+  const now = Date.now();
+  db.exec("BEGIN");
+  try {
+    db.prepare(`UPDATE wallets SET balance = ? WHERE user_id = ?`).run(newBalance, targetUserId);
+    db.prepare(
+      `INSERT INTO admin_wallet_adjustments (admin_discord_id, target_user_id, delta, balance_after, reason, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(adminDiscordId, targetUserId, delta, newBalance, reason, now);
+    db.prepare(
+      `INSERT INTO notifications (user_id, message, warrior_id, amount, created_at) VALUES (?, ?, NULL, ?, ?)`
+    ).run(
+      targetUserId,
+      `An admin adjusted your balance by ${delta >= 0 ? "+" : ""}${delta.toFixed(2)} coin.`,
+      delta,
+      now
+    );
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+  return { user_id: targetUserId, balance: newBalance, created_at: wallet.created_at };
+}
+
+// Wipes market state back to a clean slate: every wallet reset to
+// STARTING_BALANCE, all holdings/transactions/notifications cleared, and
+// price_snapshots (both raid and drift) cleared - the caller is responsible
+// for calling stock.ts's rebuildRaidPriceSnapshots() right after, and this
+// resets last_drift_at so a stale timestamp doesn't fire an immediate
+// catch-up drift tick against the freshly rebuilt prices. Raid/report data
+// itself (reports, casts, damage, warriors, links) is untouched -
+// out of scope for a *market* reset. admin_wallet_adjustments is also left
+// alone - it's a historical admin-action audit log, not market state.
+export function resetMarketState(): void {
+  db.exec("BEGIN");
+  try {
+    db.prepare(`DELETE FROM transactions`).run();
+    db.prepare(`DELETE FROM holdings`).run();
+    db.prepare(`DELETE FROM notifications`).run();
+    db.prepare(`UPDATE wallets SET balance = ?`).run(STARTING_BALANCE);
+    db.prepare(`DELETE FROM price_snapshots`).run();
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+  setLastDriftAt(Date.now());
+}
+
 export interface MarketStats {
   totalCoinInWallets: number;
   totalCoinInHoldings: number;
@@ -1013,8 +1260,24 @@ export function upsertUserFromLogin(
   return db.prepare(`SELECT * FROM users WHERE discord_id = ?`).get(discordId) as unknown as UserRow;
 }
 
-export function listUsers(): UserRow[] {
-  return db.prepare(`SELECT * FROM users ORDER BY last_login_at DESC`).all() as unknown as UserRow[];
+export function listUsers(): (UserRow & {
+  linked_warrior_id: number | null;
+  linked_player_name: string | null;
+  linked_server: string | null;
+})[] {
+  return db
+    .prepare(
+      `SELECT u.*, l.warrior_id AS linked_warrior_id, w.player_name AS linked_player_name, w.server AS linked_server
+       FROM users u
+       LEFT JOIN user_warrior_links l ON l.user_id = u.discord_id
+       LEFT JOIN warriors w ON w.id = l.warrior_id
+       ORDER BY u.last_login_at DESC`
+    )
+    .all() as unknown as (UserRow & {
+    linked_warrior_id: number | null;
+    linked_player_name: string | null;
+    linked_server: string | null;
+  })[];
 }
 
 export function setUserAdmin(discordId: string, isAdmin: boolean) {

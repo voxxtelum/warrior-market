@@ -173,12 +173,21 @@ nav#nav-menu a.active {
   background: var(--border);
 }
 
+.player-name-avatar {
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 0.4rem;
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 5px;
   padding: 1.25rem;
   margin-bottom: 1.5rem;
+}
+.danger-card {
+  border-color: #d64933;
 }
 
 form {
@@ -245,6 +254,36 @@ button:disabled {
 }
 .status.success {
   color: #6bcf6b;
+}
+
+.btn-danger {
+  color: #ffffff;
+  background: #d64933;
+}
+.btn-danger:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+.confirm-modal-body {
+  text-align: left;
+}
+.confirm-modal-phrase {
+  display: block;
+  text-align: left;
+  margin-top: 1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.confirm-modal-phrase input {
+  display: block;
+  margin-top: 0.4rem;
+  width: 100%;
+}
+.confirm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
 }
 
 table {

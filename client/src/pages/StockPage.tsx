@@ -83,6 +83,7 @@ interface LeaderboardRow {
   raidCount: number;
   prevPrice: number | null;
   series: PlayerStock['series'];
+  avatar: string | null;
 }
 
 function buildLeaderboard(playersStock: PlayerStock[]): LeaderboardRow[] {
@@ -98,6 +99,7 @@ function buildLeaderboard(playersStock: PlayerStock[]): LeaderboardRow[] {
         raidCount: p.series.length,
         prevPrice: prev ? prev.price : null,
         series: p.series,
+        avatar: p.avatar,
       };
     });
 }
@@ -431,7 +433,12 @@ export function StockPage() {
                       {censored ? (
                         <span className="censor-box"></span>
                       ) : (
-                        row.player_name
+                        <>
+                          {row.avatar && (
+                            <img className="user-avatar player-name-avatar" src={row.avatar} alt="" width={20} height={20} />
+                          )}
+                          {row.player_name}
+                        </>
                       )}
                     </td>
                     <td>{fmtPrice(row.price)}</td>

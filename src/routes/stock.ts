@@ -1,13 +1,17 @@
 import { Router } from "express";
 import { computeStock, loadStockConfig } from "../stock";
 import type { StockConfig } from "../stock";
-import { getAllPriceSnapshots, setStockConfigRaw } from "../db";
+import { getAllPriceSnapshots, getLinkedAvatarsByIdentity, setStockConfigRaw } from "../db";
 import { requireAdmin } from "../middleware/auth";
 
 export const stockRouter = Router();
 
+// computeStock() itself stays user-unaware (pure function of raid data) -
+// the linked Discord avatar is merged in here, at the response boundary.
 stockRouter.get("/", (_req, res) => {
-  res.json(computeStock());
+  const stock = computeStock();
+  const avatars = getLinkedAvatarsByIdentity();
+  res.json(stock.map((s) => ({ ...s, avatar: avatars.get(`${s.player_name}::${s.server}`) ?? null })));
 });
 
 // The immutable snapshot ledger (raid + drift points together), shaped for

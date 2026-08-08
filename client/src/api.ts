@@ -22,10 +22,12 @@ export interface AdminUserRow {
   isAdmin: boolean;
   firstLoginAt: number;
   lastLoginAt: number;
+  linkedWarrior: { id: number; playerName: string; server: string } | null;
 }
 
 export async function getAdminUsers(): Promise<AdminUserRow[]> {
   const res = await fetch("/api/admin/users");
+  if (!res.ok) throw new Error("Failed to load users");
   return res.json();
 }
 
@@ -35,6 +37,34 @@ export async function setUserAdmin(discordId: string, isAdmin: boolean): Promise
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ isAdmin }),
   });
+}
+
+export interface AdminWarriorRow {
+  id: number;
+  playerName: string;
+  server: string;
+}
+
+export async function getAdminWarriors(): Promise<AdminWarriorRow[]> {
+  const res = await fetch("/api/admin/users/warriors");
+  if (!res.ok) throw new Error("Failed to load warriors");
+  return res.json();
+}
+
+export async function linkUserWarrior(discordId: string, warriorId: number): Promise<void> {
+  const res = await fetch(`/api/admin/users/${encodeURIComponent(discordId)}/link`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ warriorId }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to link warrior");
+  }
+}
+
+export async function unlinkUserWarrior(discordId: string): Promise<void> {
+  await fetch(`/api/admin/users/${encodeURIComponent(discordId)}/unlink`, { method: "POST" });
 }
 
 export interface ReportRow {
@@ -60,6 +90,14 @@ export async function addReport(url: string): Promise<{ title: string; zone: str
   const body = await res.json();
   if (!res.ok) throw new Error(body.error || "Failed to add report");
   return body;
+}
+
+export async function deleteReport(code: string): Promise<void> {
+  const res = await fetch(`/api/reports/${encodeURIComponent(code)}`, { method: "DELETE" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to delete report");
+  }
 }
 
 export interface TrackedAbility {
@@ -121,6 +159,7 @@ export interface PlayerStock {
   player_name: string;
   server: string;
   series: StockPoint[];
+  avatar: string | null;
 }
 
 export async function getStock(): Promise<PlayerStock[]> {
@@ -189,6 +228,7 @@ export interface StockConfig {
 
 export async function getStockConfig(): Promise<StockConfig> {
   const res = await fetch("/api/stock/config");
+  if (!res.ok) throw new Error("Failed to load stock config");
   return res.json();
 }
 
@@ -212,6 +252,7 @@ export interface PlayerRow {
 
 export async function getPlayers(): Promise<PlayerRow[]> {
   const res = await fetch("/api/players");
+  if (!res.ok) throw new Error("Failed to load players");
   return res.json();
 }
 
@@ -352,4 +393,43 @@ export async function getAdminMarketStats(): Promise<MarketStats> {
   const res = await fetch("/api/admin/market-stats");
   if (!res.ok) throw new Error("Failed to load market stats");
   return res.json();
+}
+
+export interface AdminWalletRow {
+  userId: string;
+  username: string;
+  avatar: string | null;
+  balance: number;
+  holdingsValue: number;
+  netWorth: number;
+}
+
+export async function getAdminWallets(): Promise<AdminWalletRow[]> {
+  const res = await fetch("/api/admin/market/wallets");
+  if (!res.ok) throw new Error("Failed to load wallets");
+  return res.json();
+}
+
+export async function adjustWalletBalance(userId: string, delta: number, reason?: string): Promise<void> {
+  const res = await fetch("/api/admin/market/wallet-adjust", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ userId, delta, reason }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to adjust balance");
+  }
+}
+
+export async function resetMarket(confirmationPhrase: string): Promise<void> {
+  const res = await fetch("/api/admin/market/reset", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirmationPhrase }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to reset market");
+  }
 }

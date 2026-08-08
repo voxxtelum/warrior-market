@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { fetchAndIngestReport } from "../ingest";
-import { getReportDetail, listReports } from "../db";
+import { deleteReport, getReportDetail, liquidateOrphanedHoldings, listReports } from "../db";
 import { requireAdmin } from "../middleware/auth";
+import { rebuildRaidPriceSnapshots } from "../stock";
 
 export const reportsRouter = Router();
 
@@ -31,4 +32,16 @@ reportsRouter.post("/", requireAdmin, async (req, res) => {
   } catch (err) {
     res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
   }
+});
+
+reportsRouter.delete("/:code", requireAdmin, (req, res) => {
+  const detail = getReportDetail(req.params.code);
+  if (!detail.report) {
+    res.status(404).json({ error: "Report not found" });
+    return;
+  }
+  deleteReport(req.params.code);
+  rebuildRaidPriceSnapshots();
+  liquidateOrphanedHoldings();
+  res.status(204).end();
 });

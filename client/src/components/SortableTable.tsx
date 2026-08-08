@@ -90,7 +90,7 @@ export function SortableTable<T>({
             onClick={() => onRowClick?.(row)}
             className={isSelected?.(row) ? "selected-row" : undefined}
           >
-            <td>{getLabel(row)}</td>
+            <td className="warrior-name">{getLabel(row)}</td>
             {reports.map((r) => {
               const v = getValue(row, r.code);
               return <td key={r.code}>{typeof v === "number" ? v.toLocaleString() : <span className="no-data">–</span>}</td>;

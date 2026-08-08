@@ -873,7 +873,12 @@ export function executeTrade(
   let total = coinAmount;
 
   if (side === "buy") {
-    if (coinAmount > wallet.balance) throw new TradeError("Insufficient balance");
+    // Cent-rounded comparison - a client "use 100% of balance" amount can
+    // differ from wallet.balance by a sub-cent float rounding error while
+    // still displaying as the same cent value, and shouldn't be rejected.
+    if (Math.round(coinAmount * 100) > Math.round(wallet.balance * 100)) {
+      throw new TradeError("Insufficient balance");
+    }
   } else {
     if (!holding || holding.shares <= 0) throw new TradeError("You don't hold any shares of this warrior");
     if (shares > holding.shares) {
@@ -1121,6 +1126,50 @@ export function adjustWalletBalance(
     throw err;
   }
   return { user_id: targetUserId, balance: newBalance, created_at: wallet.created_at };
+}
+
+export interface AdminWalletAdjustmentView {
+  id: number;
+  adminUsername: string;
+  targetUsername: string;
+  delta: number;
+  balanceAfter: number;
+  reason: string | null;
+  createdAt: number;
+}
+
+// Full history of adjustWalletBalance() calls, newest first - the audit
+// trail is admin_wallet_adjustments itself; this just joins in usernames
+// for display since the table only stores discord IDs.
+export function getAdminWalletAdjustments(): AdminWalletAdjustmentView[] {
+  const rows = db
+    .prepare(
+      `SELECT a.id, a.delta, a.balance_after, a.reason, a.created_at,
+              admin.username AS admin_username, target.username AS target_username
+       FROM admin_wallet_adjustments a
+       JOIN users admin ON admin.discord_id = a.admin_discord_id
+       JOIN users target ON target.discord_id = a.target_user_id
+       ORDER BY a.id DESC`
+    )
+    .all() as unknown as {
+    id: number;
+    delta: number;
+    balance_after: number;
+    reason: string | null;
+    created_at: number;
+    admin_username: string;
+    target_username: string;
+  }[];
+
+  return rows.map((r) => ({
+    id: r.id,
+    adminUsername: r.admin_username,
+    targetUsername: r.target_username,
+    delta: r.delta,
+    balanceAfter: r.balance_after,
+    reason: r.reason,
+    createdAt: r.created_at,
+  }));
 }
 
 // Wipes market state back to a clean slate: every wallet reset to

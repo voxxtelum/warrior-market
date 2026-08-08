@@ -7,7 +7,7 @@ import { TradeModal } from '../components/TradeModal';
 import { ArrowsRightLeftIcon } from '../components/icons/ArrowsRightLeftIcon';
 import { useAuth } from '../authContext';
 import { paletteColor, withAlpha } from '../chartColors';
-import { fmtDateTime } from '../format';
+import { fmtDateTime, priceDelta } from '../format';
 import {
   getStock,
   getStockHistory,
@@ -66,14 +66,6 @@ function heatRange(values: number[]): { maxPos: number; minNeg: number } {
     maxPos: Math.max(0, ...values.filter((v) => v > 0)),
     minNeg: Math.min(0, ...values.filter((v) => v < 0)),
   };
-}
-
-function priceDelta(prev: number, curr: number) {
-  const diff = curr - prev;
-  const pct = (diff / prev) * 100;
-  const cls = diff > 0 ? 'delta-pos' : diff < 0 ? 'delta-neg' : 'delta-neutral';
-  const text = `${diff >= 0 ? '+' : ''}${diff.toFixed(2)} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%)`;
-  return { text, cls };
 }
 
 interface LeaderboardRow {
@@ -351,13 +343,13 @@ export function StockPage() {
               <span className="value">
                 {wallet ? fmtCoin(wallet.netWorth - wallet.balance) : '–'}
               </span>
-              <span className="label">Holdings value</span>
+              <span className="label">Holdings</span>
             </div>
             <div className="wallet-summary-item">
               <span className="value">
                 {wallet ? fmtCoin(wallet.netWorth) : '–'}
               </span>
-              <span className="label">Portfolio value</span>
+              <span className="label">Portfolio</span>
             </div>
           </div>
         </div>
@@ -433,12 +425,20 @@ export function StockPage() {
                       {censored ? (
                         <span className="censor-box"></span>
                       ) : (
-                        <>
+                        <span className="player-name-cell">
                           {row.avatar && (
-                            <img className="user-avatar player-name-avatar" src={row.avatar} alt="" width={20} height={20} />
+                            <img
+                              className="user-avatar player-name-avatar"
+                              src={row.avatar}
+                              alt=""
+                              width={20}
+                              height={20}
+                            />
                           )}
-                          {row.player_name}
-                        </>
+                          <span className="warrior-name">
+                            {row.player_name}
+                          </span>
+                        </span>
                       )}
                     </td>
                     <td>{fmtPrice(row.price)}</td>

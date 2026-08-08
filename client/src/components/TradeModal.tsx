@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Modal } from './Modal';
 import { useAuth } from '../authContext';
-import { getWallet, getWarriorPrice, postTrade, type WalletData } from '../api';
+import { getStock, getWallet, postTrade, type WalletData } from '../api';
+import { priceDelta } from '../format';
 
 interface TradeModalProps {
   playerName: string;
@@ -28,6 +29,8 @@ export function TradeModal({
   const { user } = useAuth();
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [price, setPrice] = useState<number | null>(null);
+  const [prevPrice, setPrevPrice] = useState<number | null>(null);
+  const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<{
@@ -37,12 +40,12 @@ export function TradeModal({
 
   const load = useCallback(() => {
     if (!user) return;
-    Promise.all([getWallet(), getWarriorPrice(playerName, server)]).then(
-      ([w, p]) => {
-        setWallet(w);
-        setPrice(p);
-      },
-    );
+    Promise.all([getWallet(), getStock()]).then(([w, stock]) => {
+      setWallet(w);
+      const series = stock.find((s) => s.player_name === playerName && s.server === server)?.series ?? [];
+      setPrice(series.length > 0 ? series[series.length - 1].price : null);
+      setPrevPrice(series.length > 1 ? series[series.length - 2].price : null);
+    });
   }, [user, playerName, server]);
 
   useEffect(load, [load]);
@@ -51,20 +54,42 @@ export function TradeModal({
     wallet?.holdings.find(
       (h) => h.playerName === playerName && h.server === server,
     ) ?? null;
+  const change = price !== null && prevPrice !== null ? priceDelta(prevPrice, price) : null;
   const numeric = Number(amount);
   const validAmount =
     amount.trim() !== '' && Number.isFinite(numeric) && numeric > 0;
+  // Comparing raw floats here would occasionally flag an exact "use 100% of
+  // balance" amount as over balance, since the slider's derived amount and
+  // the wallet balance can differ by a sub-cent float rounding error even
+  // though both display as the same cent value - so compare at cent
+  // precision instead.
   const overBalance =
-    validAmount && wallet !== null && numeric > wallet.balance;
+    validAmount && wallet !== null && Math.round(numeric * 100) > Math.round(wallet.balance * 100);
+  const estimatedShares =
+    validAmount && price !== null && price > 0 ? numeric / price : null;
 
-  async function trade(side: 'buy' | 'sell') {
+  // The slider sizes the order as a % of what's available for the current
+  // side (balance to buy with, position value to sell) - it drives `amount`
+  // directly rather than tracking its own state, so typing in the field and
+  // dragging the slider can never disagree about what the order size is.
+  const maxForSide = side === 'buy' ? (wallet?.balance ?? 0) : (holding?.marketValue ?? 0);
+  const sliderPct =
+    maxForSide > 0 ? Math.max(0, Math.min(100, Math.round(((numeric || 0) / maxForSide) * 100))) : 0;
+
+  function handleSliderChange(pct: number) {
+    if (maxForSide <= 0) return;
+    const next = (pct / 100) * maxForSide;
+    setAmount(next > 0 ? next.toFixed(2) : '');
+  }
+
+  async function trade() {
     if (!validAmount) {
       setStatus({ text: 'Enter a positive coin amount', kind: 'error' });
       return;
     }
     if (side === 'buy' && overBalance) {
       setStatus({
-        text: `Insufficient balance - you only have ${fmtCoin(wallet!.balance)} coin`,
+        text: `Insufficient balance - you only have ${fmtCoin(wallet!.balance)} coins`,
         kind: 'error',
       });
       return;
@@ -74,7 +99,7 @@ export function TradeModal({
     try {
       const result = await postTrade(playerName, server, side, numeric);
       setStatus({
-        text: `${side === 'buy' ? 'Bought' : 'Sold'} ${result.shares.toFixed(3)} shares at ${fmtCoin(result.price)} coin (${fmtCoin(result.total)} coin total)`,
+        text: `${side === 'buy' ? 'Bought' : 'Sold'} ${result.shares.toFixed(3)} shares at ${fmtCoin(result.price)} coins (${fmtCoin(result.total)} coins total)`,
         kind: 'success',
       });
       setAmount('');
@@ -91,67 +116,101 @@ export function TradeModal({
   }
 
   return (
-    <Modal title={`Trade ${playerName}`} onClose={onClose}>
+    <Modal
+      title={<>Trade <span className="warrior-name">{playerName}</span></>}
+      onClose={onClose}
+      contentClassName="trade-modal-content"
+    >
       {!user ? (
         <p className="subtitle">
           <a href="/api/auth/discord">Log in with Discord</a> to trade.
         </p>
       ) : (
         <>
-          <div className="trade-modal-info">
-            <div className="wallet-summary-item">
-              <span className="value">
-                {wallet ? fmtCoin(wallet.balance) : '–'}
-              </span>
-              <span className="label">Balance</span>
+          <div className="trade-side-toggle">
+            <button type="button" className={side === 'buy' ? 'active' : undefined} onClick={() => setSide('buy')}>
+              Buy
+            </button>
+            <button
+              type="button"
+              className={side === 'sell' ? 'sell active' : 'sell'}
+              onClick={() => setSide('sell')}
+            >
+              Sell
+            </button>
+          </div>
+
+          <div className="trade-info-list">
+            <div className="trade-info-row">
+              <span className="trade-info-label">Available balance</span>
+              <span className="trade-info-value">{wallet ? fmtCoin(wallet.balance) : '–'}</span>
             </div>
-            <div className="wallet-summary-item">
-              <span className="value">
+            <div className="trade-info-row">
+              <span className="trade-info-label">Shares owned</span>
+              <span className="trade-info-value">
                 {holding ? `${holding.shares.toFixed(3)} shares` : '0 shares'}
               </span>
-              <span className="label">Owned</span>
             </div>
-            <div className="wallet-summary-item">
-              <span className="value">
-                {price !== null ? fmtCoin(price) : '–'}
+            <div className="trade-info-row">
+              <span className="trade-info-label">Current price</span>
+              <span className="trade-info-value">{price !== null ? fmtCoin(price) : '–'}</span>
+            </div>
+            <div className="trade-info-row">
+              <span className="trade-info-label">Change (last raid)</span>
+              <span className={change ? `trade-info-value ${change.cls}` : 'trade-info-value'}>
+                {change ? change.text : <span className="no-data">–</span>}
               </span>
-              <span className="label">Current price</span>
             </div>
           </div>
 
+          <div className="trade-amount-field">
+            <span className="trade-amount-label">Amount</span>
+            <div className="trade-amount-value-row">
+              <input
+                type="number"
+                placeholder="0"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                min="0"
+                step="1"
+                autoFocus
+              />
+              <span className="trade-amount-preview">
+                {estimatedShares !== null ? `≈ ${estimatedShares.toFixed(3)} shares` : ''}
+              </span>
+            </div>
+          </div>
+
+          <div className="trade-slider-row">
+            <input
+              type="range"
+              className={side === 'sell' ? 'sell' : undefined}
+              min={0}
+              max={100}
+              step={1}
+              value={sliderPct}
+              disabled={maxForSide <= 0}
+              onChange={(e) => handleSliderChange(Number(e.target.value))}
+            />
+            <span className="trade-slider-pct">{sliderPct}%</span>
+          </div>
+
+          <button
+            type="button"
+            className={side === 'sell' ? 'trade-cta sell' : 'trade-cta'}
+            onClick={trade}
+            disabled={busy || (side === 'buy' && validAmount && overBalance)}
+          >
+            Place order
+          </button>
+
           <div className="trade-status-area">
-            {overBalance && !status && (
+            {side === 'buy' && overBalance && !status && (
               <p className="trade-modal-hint">
                 Amount exceeds your balance of {fmtCoin(wallet!.balance)} coins.
               </p>
             )}
             {status && <p className={`status ${status.kind}`}>{status.text}</p>}
-          </div>
-          <div className="trade-panel">
-            <input
-              type="number"
-              placeholder="Amount"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              min="0"
-              step="1"
-              autoFocus
-            />
-            <button
-              type="button"
-              onClick={() => trade('buy')}
-              disabled={busy || (validAmount && overBalance)}
-            >
-              Buy
-            </button>
-            <button
-              type="button"
-              className="sell-btn"
-              onClick={() => trade('sell')}
-              disabled={busy}
-            >
-              Sell
-            </button>
           </div>
         </>
       )}

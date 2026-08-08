@@ -9,6 +9,7 @@ import { AdminStockConfigPage } from "./pages/AdminStockConfigPage";
 import { AdminUsersPage } from "./pages/AdminUsersPage";
 import { AdminMarketStatsPage } from "./pages/AdminMarketStatsPage";
 import { AdminManageMarketPage } from "./pages/AdminManageMarketPage";
+import { AdminAuditLogPage } from "./pages/AdminAuditLogPage";
 import { WalletPage } from "./pages/WalletPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
 import { TradeFeedPage } from "./pages/TradeFeedPage";
@@ -31,6 +32,7 @@ function App() {
       <Route path="/admin/users" element={<AdminUsersPage />} />
       <Route path="/admin/market-stats" element={<AdminMarketStatsPage />} />
       <Route path="/admin/manage-market" element={<AdminManageMarketPage />} />
+      <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
     </Routes>
   );
 }

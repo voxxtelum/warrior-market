@@ -1,11 +1,21 @@
 import { Router } from "express";
-import { AdminActionError, adjustWalletBalance, getAdminWalletOverview, resetMarketState } from "../db";
+import {
+  AdminActionError,
+  adjustWalletBalance,
+  getAdminWalletAdjustments,
+  getAdminWalletOverview,
+  resetMarketState,
+} from "../db";
 import { rebuildRaidPriceSnapshots } from "../stock";
 
 export const adminMarketRouter = Router();
 
 adminMarketRouter.get("/wallets", (_req, res) => {
   res.json(getAdminWalletOverview());
+});
+
+adminMarketRouter.get("/audit-log", (_req, res) => {
+  res.json(getAdminWalletAdjustments());
 });
 
 adminMarketRouter.post("/wallet-adjust", (req, res) => {

@@ -36,24 +36,33 @@ export function AdjustCoinsModal({ target, onClose, onAdjusted }: AdjustCoinsMod
 
   return (
     <Modal title={`Add/remove coins - ${target.username}`} onClose={onClose}>
-      <p className="subtitle">Current balance: {target.balance.toFixed(2)} coin</p>
-      <input
-        type="number"
-        placeholder="Amount"
-        value={amount}
-        onChange={(e) => setAmount(e.target.value)}
-        min="0"
-        step="1"
-        autoFocus
-      />
-      <input type="text" placeholder="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} />
+      <p className="subtitle adjust-coins-balance">Current balance: {target.balance.toFixed(2)} coins</p>
+      <div className="adjust-coins-form">
+        <input
+          type="number"
+          className="adjust-coins-amount"
+          placeholder="Amount"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          min="0"
+          step="1"
+          autoFocus
+        />
+        <input
+          type="text"
+          className="adjust-coins-reason"
+          placeholder="Reason (optional)"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+      </div>
       {error && <p className="status error">{error}</p>}
       <div className="confirm-modal-actions">
-        <button type="button" onClick={() => submit("add")} disabled={busy}>
-          Add
-        </button>
         <button type="button" className="btn-danger" onClick={() => submit("remove")} disabled={busy}>
           Remove
+        </button>
+        <button type="button" className="btn-add-coins" onClick={() => submit("add")} disabled={busy}>
+          Add
         </button>
       </div>
     </Modal>

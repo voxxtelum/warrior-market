@@ -47,7 +47,7 @@ export function TradeFeedPage() {
                   <td>
                     {tx.username ?? <span className="anon-name">anonymous</span>}
                   </td>
-                  <td>{tx.playerName}</td>
+                  <td className="warrior-name">{tx.playerName}</td>
                   <td>{tx.side}</td>
                   <td>{tx.shares.toFixed(3)}</td>
                   <td>{tx.price.toFixed(2)}</td>

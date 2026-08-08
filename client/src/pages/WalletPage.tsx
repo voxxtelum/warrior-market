@@ -85,7 +85,7 @@ export function WalletPage() {
                 const pnl = h.marketValue !== null ? h.marketValue - h.costBasisTotal : null;
                 return (
                   <tr key={`${h.playerName}::${h.server}`}>
-                    <td>{h.playerName}</td>
+                    <td className="warrior-name">{h.playerName}</td>
                     <td>{h.shares.toFixed(3)}</td>
                     <td>{fmtCoin(h.costBasisTotal)}</td>
                     <td>{h.latestPrice !== null ? fmtCoin(h.latestPrice) : <span className="no-data">–</span>}</td>
@@ -133,7 +133,7 @@ export function WalletPage() {
               {pageTransactions?.map((tx) => (
                 <tr key={tx.id}>
                   <td>{fmtDateTime(tx.createdAt)}</td>
-                  <td>{tx.playerName}</td>
+                  <td className="warrior-name">{tx.playerName}</td>
                   <td>{tx.side}</td>
                   <td>{tx.shares.toFixed(3)}</td>
                   <td>{fmtCoin(tx.price)}</td>

@@ -12,13 +12,15 @@ import {
 } from "../api";
 
 function fmtDateTime(ts: number): string {
-  return new Date(ts).toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const d = new Date(ts);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const yy = String(d.getFullYear()).slice(-2);
+  const hours24 = d.getHours();
+  const ampm = hours24 >= 12 ? "PM" : "AM";
+  const hours = hours24 % 12 || 12;
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return `${mm}-${dd}-${yy}, ${hours}:${minutes} ${ampm}`;
 }
 
 export function AdminUsersPage() {
@@ -105,7 +107,7 @@ export function AdminUsersPage() {
                       <tr key={user.discordId}>
                         <td>
                           {user.avatar ? (
-                            <img className="user-avatar" src={user.avatar} alt="" width={28} height={28} />
+                            <img className="user-avatar" src={user.avatar} alt="" width={20} height={20} />
                           ) : (
                             <span className="user-avatar user-avatar-placeholder" />
                           )}
@@ -116,9 +118,16 @@ export function AdminUsersPage() {
                           {user.linkedWarrior ? (
                             <>
                               {user.linkedWarrior.playerName} @ {user.linkedWarrior.server}{" "}
-                              <button type="button" onClick={() => handleUnlink(user)}>
+                              <a
+                                href="#"
+                                className="text-link text-link-accent"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  handleUnlink(user);
+                                }}
+                              >
                                 Unlink
-                              </button>
+                              </a>
                             </>
                           ) : (
                             <>
@@ -137,27 +146,37 @@ export function AdminUsersPage() {
                                   </option>
                                 ))}
                               </select>{" "}
-                              <button
-                                type="button"
-                                disabled={linkSelection[user.discordId] === undefined}
-                                onClick={() => handleLink(user)}
+                              <a
+                                href="#"
+                                className="text-link text-link-accent"
+                                aria-disabled={linkSelection[user.discordId] === undefined}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  if (linkSelection[user.discordId] === undefined) return;
+                                  handleLink(user);
+                                }}
                               >
                                 Link
-                              </button>
+                              </a>
                             </>
                           )}
                         </td>
                         <td>{fmtDateTime(user.firstLoginAt)}</td>
                         <td>{fmtDateTime(user.lastLoginAt)}</td>
                         <td>
-                          <button
-                            type="button"
-                            disabled={isSelf && user.isAdmin}
+                          <a
+                            href="#"
+                            className="text-link text-link-danger"
+                            aria-disabled={isSelf && user.isAdmin}
                             title={isSelf && user.isAdmin ? "You can't revoke your own admin access" : undefined}
-                            onClick={() => toggleAdmin(user)}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              if (isSelf && user.isAdmin) return;
+                              toggleAdmin(user);
+                            }}
                           >
                             {user.isAdmin ? "Revoke admin" : "Make admin"}
-                          </button>
+                          </a>
                         </td>
                       </tr>
                     );

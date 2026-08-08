@@ -303,13 +303,6 @@ export async function getWallet(): Promise<WalletData> {
   return res.json();
 }
 
-export async function getWarriorPrice(playerName: string, server: string): Promise<number | null> {
-  const res = await fetch(`/api/trading/price/${encodeURIComponent(playerName)}/${encodeURIComponent(server)}`);
-  if (!res.ok) return null;
-  const body = await res.json();
-  return body.price;
-}
-
 export async function postTrade(
   playerName: string,
   server: string,
@@ -420,6 +413,22 @@ export async function adjustWalletBalance(userId: string, delta: number, reason?
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || "Failed to adjust balance");
   }
+}
+
+export interface AdminWalletAdjustment {
+  id: number;
+  adminUsername: string;
+  targetUsername: string;
+  delta: number;
+  balanceAfter: number;
+  reason: string | null;
+  createdAt: number;
+}
+
+export async function getAdminAuditLog(): Promise<AdminWalletAdjustment[]> {
+  const res = await fetch("/api/admin/market/audit-log");
+  if (!res.ok) throw new Error("Failed to load audit log");
+  return res.json();
 }
 
 export async function resetMarket(confirmationPhrase: string): Promise<void> {

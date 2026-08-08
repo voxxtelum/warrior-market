@@ -152,7 +152,7 @@ export function TrendsPage() {
 
                   return (
                     <tr key={damageRow.player_name}>
-                      <td>{damageRow.player_name}</td>
+                      <td className="warrior-name">{damageRow.player_name}</td>
                       <td className="stack-cell">
                         <StackCell values={damageValues} formatValue={fmtDamage} formatDelta={percentDelta} />
                       </td>

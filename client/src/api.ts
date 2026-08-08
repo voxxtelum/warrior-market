@@ -3,6 +3,7 @@ export interface AuthUser {
   username: string;
   avatar: string | null;
   isAdmin: boolean;
+  linkedWarrior: { playerName: string; server: string } | null;
 }
 
 export async function getMe(): Promise<AuthUser | null> {

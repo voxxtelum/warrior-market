@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import { buildAuthorizeUrl, completeDiscordLogin, discordAvatarUrl } from "../discordAuth";
-import { createSession, deleteSession, upsertUserFromLogin } from "../db";
+import { createSession, deleteSession, getLinkedWarrior, upsertUserFromLogin } from "../db";
 import { SESSION_COOKIE } from "../middleware/auth";
 
 export const authRouter = Router();
@@ -71,12 +71,16 @@ authRouter.get("/me", (req, res) => {
     res.json({ user: null });
     return;
   }
+  const linked = getLinkedWarrior(req.user.discord_id);
   res.json({
     user: {
       discordId: req.user.discord_id,
       username: req.user.username,
       avatar: req.user.avatar,
       isAdmin: Boolean(req.user.is_admin),
+      linkedWarrior: linked
+        ? { playerName: linked.player_name, server: linked.server }
+        : null,
     },
   });
 });

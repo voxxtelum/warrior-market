@@ -805,6 +805,22 @@ export function unlinkUser(userId: string): void {
   db.prepare(`DELETE FROM user_warrior_links WHERE user_id = ?`).run(userId);
 }
 
+export function getLinkedWarrior(
+  userId: string,
+): { player_name: string; server: string } | null {
+  const row = db
+    .prepare(
+      `SELECT w.player_name, w.server
+       FROM user_warrior_links l
+       JOIN warriors w ON w.id = l.warrior_id
+       WHERE l.user_id = ?`,
+    )
+    .get(userId) as unknown as
+    | { player_name: string; server: string }
+    | undefined;
+  return row ?? null;
+}
+
 // Keyed "player_name::server" -> avatar (or null), for merging into the
 // Stock page leaderboard - computeStock() itself stays user-unaware, this
 // join happens only in the route handler.

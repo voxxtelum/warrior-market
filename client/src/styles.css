@@ -935,9 +935,69 @@ ul.player-toggle-list input[type='checkbox'] {
   font-style: italic;
 }
 
-.warrior-stat-card {
+.warrior-card {
+  text-align: center;
+}
+
+.warrior-select-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 auto 1.5rem;
+}
+.warrior-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  flex: none;
+  width: auto;
+  background: transparent;
+  background-image: none;
+  border: none;
+  border-bottom: 2px solid currentColor;
+  border-radius: 0;
+  padding: 0 1.5rem 0 0;
+  font-size: 2rem;
+  font-weight: 600;
+  text-align: left;
+  text-align-last: left;
+  cursor: pointer;
+}
+.warrior-select:focus {
+  outline: none;
+}
+.warrior-select option {
+  font-size: 0.95rem;
+  font-weight: 400;
+}
+.warrior-select-chevron {
+  width: 1.1rem;
+  height: 1.1rem;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.warrior-subcards {
   display: flex;
-  gap: 2.5rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  text-align: left;
+}
+.warrior-subcard {
+  display: flex;
+  gap: 2rem;
+  width: 50%;
+  min-width: 280px;
+  background: var(--bg);
+  border: 1px solid rgba(var(--accent-rgb), 0.6);
+  border-radius: 4px;
+  padding: 1.25rem;
+}
+@media (max-width: 640px) {
+  .warrior-subcard {
+    width: 100%;
+  }
 }
 .warrior-stat-col {
   flex: 1 1 0;
@@ -946,6 +1006,10 @@ ul.player-toggle-list input[type='checkbox'] {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.wallet-summary-item > .value {
+  font-size: 1.5rem;
 }
 
 .modal-overlay {

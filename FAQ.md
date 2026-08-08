@@ -48,6 +48,10 @@ Look at simplified data over the last three raids for the important stuff.
 
 A general overview of how the warriors are performing in each raid
 
+#### Warriors
+
+Pick a warrior. View their totals. Cool.
+
 ### How can I link my discord account to my warrior?
 
 OK, you can ask me this one. I can do that.

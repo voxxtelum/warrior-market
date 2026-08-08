@@ -1,18 +1,32 @@
-import { NavLink } from "react-router-dom";
+import type { ComponentType } from 'react';
+import { NavLink } from 'react-router-dom';
+import { ChartBarIcon } from './icons/ChartBarIcon';
+import { ScaleIcon } from './icons/ScaleIcon';
+import { ArrowTrendingUpIcon } from './icons/ArrowTrendingUpIcon';
+import { Squares2X2Icon } from './icons/Squares2X2Icon';
 
-const LINKS: { to: string; label: string }[] = [
-  { to: "/market", label: "Market" },
-  { to: "/compare", label: "Compare" },
-  { to: "/trends", label: "Trends" },
-  { to: "/overview", label: "Raid Overview" },
+const LINKS: {
+  to: string;
+  label: string;
+  Icon: ComponentType<{ className?: string }>;
+}[] = [
+  { to: '/market', label: 'Market', Icon: ChartBarIcon },
+  { to: '/compare', label: 'Compare', Icon: ScaleIcon },
+  { to: '/trends', label: 'Trends', Icon: ArrowTrendingUpIcon },
+  { to: '/overview', label: 'Raids', Icon: Squares2X2Icon },
 ];
 
 export function MainNav() {
   return (
     <nav className="main-nav">
-      {LINKS.map((link) => (
-        <NavLink key={link.to} to={link.to} className={({ isActive }) => (isActive ? "active" : undefined)}>
-          {link.label}
+      {LINKS.map(({ to, label, Icon }) => (
+        <NavLink
+          key={to}
+          to={to}
+          className={({ isActive }) => `icon-btn${isActive ? ' active' : ''}`}
+        >
+          <Icon className="icon-btn-icon" />
+          {label}
         </NavLink>
       ))}
     </nav>

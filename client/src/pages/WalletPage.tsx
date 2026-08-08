@@ -10,9 +10,9 @@ import {
   type TransactionView,
   type WalletData,
 } from '../api';
-import { fmtCoin, fmtDateTime } from '../format';
+import { fmtCoin, fmtDateTime, priceDelta } from '../format';
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 25;
 
 export function WalletPage() {
   const { user, loading } = useAuth();
@@ -85,13 +85,13 @@ export function WalletPage() {
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Holdings</h2>
         <div className="table-scroll">
-          <table>
+          <table id="holdings-table">
             <thead>
               <tr>
                 <th>Warrior</th>
+                <th>Price</th>
                 <th>Shares</th>
                 <th>Cost basis</th>
-                <th>Price</th>
                 <th>Value</th>
                 <th>P&amp;L</th>
                 <th></th>
@@ -110,18 +110,27 @@ export function WalletPage() {
                   h.marketValue !== null
                     ? h.marketValue - h.costBasisTotal
                     : null;
+                const change =
+                  h.latestPrice !== null && h.lastRaidPrice !== null
+                    ? priceDelta(h.lastRaidPrice, h.latestPrice)
+                    : null;
                 return (
                   <tr key={`${h.playerName}::${h.server}`}>
                     <td className="warrior-name">{h.playerName}</td>
-                    <td>{h.shares.toFixed(3)}</td>
-                    <td>{fmtCoin(h.costBasisTotal)}</td>
                     <td>
                       {h.latestPrice !== null ? (
-                        fmtCoin(h.latestPrice)
+                        <div className="price-cell">
+                          <span>{fmtCoin(h.latestPrice)}</span>
+                          <span className={`price-cell-change ${change ? change.cls : 'no-data'}`}>
+                            {change ? change.text : '–'}
+                          </span>
+                        </div>
                       ) : (
                         <span className="no-data">–</span>
                       )}
                     </td>
+                    <td>{h.shares.toFixed(3)}</td>
+                    <td>{fmtCoin(h.costBasisTotal)}</td>
                     <td>
                       {h.marketValue !== null ? (
                         fmtCoin(h.marketValue)

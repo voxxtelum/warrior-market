@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../authContext";
 import { logout } from "../api";
+import { Cog6ToothIcon } from "./icons/Cog6ToothIcon";
+import { ArrowLeftOnRectangleIcon } from "./icons/ArrowLeftOnRectangleIcon";
+import { ArrowRightOnRectangleIcon } from "./icons/ArrowRightOnRectangleIcon";
 
 export function AdminMenu() {
   const [open, setOpen] = useState(false);
@@ -39,16 +42,21 @@ export function AdminMenu() {
       </button>
       <nav id="nav-menu" className={open ? "open" : undefined}>
         {loading ? null : !user ? (
-          <a href="/api/auth/discord">Log in with Discord</a>
+          <a href="/api/auth/discord" className="icon-btn">
+            <ArrowLeftOnRectangleIcon className="icon-btn-icon" />
+            Log in with Discord
+          </a>
         ) : (
           <>
             {user.isAdmin && (
-              <NavLink to="/admin" className={({ isActive }) => (isActive ? "active" : undefined)}>
+              <NavLink to="/admin" className={({ isActive }) => `icon-btn${isActive ? " active" : ""}`}>
+                <Cog6ToothIcon className="icon-btn-icon" />
                 Admin
               </NavLink>
             )}
             {!user.isAdmin && <span className="nav-username">{user.username}</span>}
-            <a href="#" onClick={(e) => { e.preventDefault(); handleLogout(); }}>
+            <a href="#" className="icon-btn" onClick={(e) => { e.preventDefault(); handleLogout(); }}>
+              <ArrowRightOnRectangleIcon className="icon-btn-icon" />
               Log out
             </a>
           </>

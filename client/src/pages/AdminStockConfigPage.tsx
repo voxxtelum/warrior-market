@@ -95,6 +95,12 @@ export function AdminStockConfigPage() {
               </label>
             ))}
         </div>
+        <div className="card-footer">
+          {status && <span className={`status ${status.kind}`}>{status.text}</span>}
+          <button type="button" onClick={handleSave} disabled={saving}>
+            Save changes
+          </button>
+        </div>
       </div>
 
       <div className="card">
@@ -154,16 +160,17 @@ export function AdminStockConfigPage() {
             </tbody>
           </table>
         </div>
-        <button type="button" style={{ marginTop: "1rem" }} onClick={addAbility}>
-          Add ability
-        </button>
-      </div>
-
-      <div className="card">
-        <button type="button" onClick={handleSave} disabled={saving}>
-          Save changes
-        </button>
-        {status && <span className={`status ${status.kind}`}>{status.text}</span>}
+        <div className="card-footer space-between">
+          <button type="button" onClick={addAbility}>
+            Add ability
+          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            {status && <span className={`status ${status.kind}`}>{status.text}</span>}
+            <button type="button" onClick={handleSave} disabled={saving}>
+              Save changes
+            </button>
+          </div>
+        </div>
       </div>
     </AdminLayout>
   );

@@ -117,7 +117,7 @@ export function AdminUsersPage() {
                         <td>
                           {user.linkedWarrior ? (
                             <>
-                              {user.linkedWarrior.playerName} @ {user.linkedWarrior.server}{" "}
+                              {user.linkedWarrior.playerName}-{user.linkedWarrior.server}{" "}
                               <a
                                 href="#"
                                 className="text-link text-link-accent"
@@ -142,7 +142,7 @@ export function AdminUsersPage() {
                                 </option>
                                 {unlinkedWarriors.map((w) => (
                                   <option key={w.id} value={w.id}>
-                                    {w.playerName} @ {w.server}
+                                    {w.playerName}-{w.server}
                                   </option>
                                 ))}
                               </select>{" "}

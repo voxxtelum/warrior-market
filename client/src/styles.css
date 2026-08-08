@@ -95,8 +95,9 @@ h2 {
 .main-nav a {
   color: var(--muted);
   text-decoration: none;
-  font-weight: 600;
+  font-weight: 400;
   font-size: 0.95rem;
+  transition: color 0.15s ease;
 }
 .main-nav a:hover {
   color: var(--fg);
@@ -114,11 +115,14 @@ h2 {
 .sub-nav a {
   color: var(--muted);
   text-decoration: none;
-  font-weight: 600;
+  font-weight: 500;
   font-size: 0.9rem;
   padding: 0.1rem 0.1rem 0.6rem;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
+  transition:
+    color 0.15s ease,
+    border-bottom-color 0.15s ease;
 }
 .sub-nav a:hover {
   color: var(--accent);
@@ -168,6 +172,7 @@ nav#nav-menu a {
   padding: 0.5rem 0.7rem;
   border-radius: 3px;
   white-space: nowrap;
+  transition: background-color 0.15s ease;
 }
 nav#nav-menu a:hover {
   background: rgba(255, 255, 255, 0.06);
@@ -237,6 +242,20 @@ select {
   color: var(--fg);
   font-size: 0.95rem;
 }
+select {
+  /* Native arrows sit flush against the box edge in most browsers,
+     largely ignoring padding-right - swap in our own so it gets proper
+     breathing room from the edge, consistent across browsers. */
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 2rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%239a9aa5'%3E%3Cpath fill-rule='evenodd' d='M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z' clip-rule='evenodd'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 1rem;
+  cursor: pointer;
+}
 button {
   padding: 0.5rem 1.25rem;
   border-radius: 2px;
@@ -245,6 +264,10 @@ button {
   color: var(--accent);
   font-weight: 400;
   cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    filter 0.15s ease;
 }
 button:hover:not(:disabled) {
   color: var(--accent-fg);
@@ -278,6 +301,11 @@ button:disabled {
   flex-shrink: 0;
 }
 
+.btn-icon-only {
+  padding: 0.45rem;
+  line-height: 0;
+}
+
 .status {
   margin-top: 0.75rem;
   font-size: 0.9rem;
@@ -294,7 +322,9 @@ button:disabled {
   background: var(--danger);
 }
 .btn-danger:hover:not(:disabled) {
-  filter: brightness(1.12);
+  color: var(--color-white);
+  background: var(--danger);
+  filter: brightness(1.15);
 }
 
 .text-link {
@@ -328,6 +358,8 @@ button:disabled {
   background: var(--color-white);
 }
 .btn-add-coins:hover:not(:disabled) {
+  color: var(--bg);
+  background: var(--color-white);
   filter: brightness(0.92);
 }
 
@@ -384,6 +416,17 @@ button:disabled {
   justify-content: flex-end;
   gap: 0.75rem;
   margin-top: 1.5rem;
+}
+
+.card-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.card-footer.space-between {
+  justify-content: space-between;
 }
 
 table {
@@ -453,6 +496,11 @@ tbody tr:hover {
 #stock-table td:nth-child(4) svg {
   display: block;
   margin: 0 auto;
+}
+
+#holdings-table th:nth-child(2),
+#holdings-table td:nth-child(2) {
+  text-align: right;
 }
 
 .chart-container {
@@ -551,6 +599,11 @@ tbody tr:hover {
   color: var(--fg);
   font-size: 0.85rem;
 }
+#ability-config-table select {
+  padding-right: 1.75rem;
+  background-position: right 0.5rem center;
+  background-size: 0.9rem;
+}
 
 .delta-pos {
   color: var(--positive);
@@ -560,6 +613,15 @@ tbody tr:hover {
 }
 .delta-neutral {
   color: var(--muted);
+}
+
+.price-cell {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+.price-cell-change {
+  font-size: 0.75rem;
 }
 
 ul.player-toggle-list {

@@ -1,38 +1,51 @@
-import { useEffect, useState } from "react";
-import { Layout } from "../components/Layout";
-import { fmtDate } from "../format";
-import { getOverviewData, getZones, type OverviewAbilityValue, type OverviewData, type OverviewMetricPoint } from "../api";
+import { useEffect, useState } from 'react';
+import { Layout } from '../components/Layout';
+import { fmtDate } from '../format';
+import {
+  getOverviewData,
+  getZones,
+  type OverviewAbilityValue,
+  type OverviewData,
+  type OverviewMetricPoint,
+} from '../api';
 
 function fmtInt(n: number): string {
   return Math.round(n).toLocaleString();
 }
 
 function fmtDecimal1(n: number): string {
-  return n.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
 }
 
 // Absolute-diff formatter for damage-scale numbers (millions), matching the
 // Trends page's convention for this magnitude of value.
 function fmtDamageDiff(n: number): string {
-  return `${n >= 0 ? "+" : ""}${(n / 1_000_000).toFixed(2)}M`;
+  return `${n >= 0 ? '+' : ''}${(n / 1_000_000).toFixed(2)}M`;
 }
 
 function fmtPlainDiff(n: number, decimals: number): string {
-  return `${n >= 0 ? "+" : ""}${n.toFixed(decimals)}`;
+  return `${n >= 0 ? '+' : ''}${n.toFixed(decimals)}`;
 }
 
 function percentText(pct: number): string {
-  return `(${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%)`;
+  return `(${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%)`;
 }
 
-function deltaParts(prev: number, curr: number, formatDiff: (n: number) => string) {
+function deltaParts(
+  prev: number,
+  curr: number,
+  formatDiff: (n: number) => string,
+) {
   const diff = curr - prev;
   if (prev === 0) {
-    if (curr === 0) return { text: "(+0%)", cls: "delta-neutral" };
-    return { text: "(new)", cls: "delta-pos" };
+    if (curr === 0) return { text: '(+0%)', cls: 'delta-neutral' };
+    return { text: '(new)', cls: 'delta-pos' };
   }
   const pct = (diff / prev) * 100;
-  const cls = pct > 0 ? "delta-pos" : pct < 0 ? "delta-neg" : "delta-neutral";
+  const cls = pct > 0 ? 'delta-pos' : pct < 0 ? 'delta-neg' : 'delta-neutral';
   return { text: `${formatDiff(diff)} ${percentText(pct)}`, cls };
 }
 
@@ -53,7 +66,8 @@ function TotalAvgCell({
   formatValue: (n: number) => string;
   formatDiff: (n: number) => string;
 }) {
-  const delta = prevTotal !== null ? deltaParts(prevTotal, total, formatDiff) : null;
+  const delta =
+    prevTotal !== null ? deltaParts(prevTotal, total, formatDiff) : null;
   return (
     <>
       <div>{formatValue(total)}</div>
@@ -74,7 +88,8 @@ function AvgOnlyCell({
   formatValue: (n: number) => string;
   formatDiff: (n: number) => string;
 }) {
-  const delta = prevAverage !== null ? deltaParts(prevAverage, average, formatDiff) : null;
+  const delta =
+    prevAverage !== null ? deltaParts(prevAverage, average, formatDiff) : null;
   return (
     <>
       <div>{formatValue(average)}</div>
@@ -113,7 +128,13 @@ function TotalAvgRow({
         </td>
       ))}
       <td className="stack-cell">
-        <TotalAvgCell total={avgTotal} average={avgAverage} prevTotal={null} formatValue={formatValue} formatDiff={formatDiff} />
+        <TotalAvgCell
+          total={avgTotal}
+          average={avgAverage}
+          prevTotal={null}
+          formatValue={formatValue}
+          formatDiff={formatDiff}
+        />
         <div className={`delta-line ${avgVsLast.cls}`}>{avgVsLast.text}</div>
       </td>
     </tr>
@@ -148,7 +169,12 @@ function AvgOnlyRow({
         </td>
       ))}
       <td className="stack-cell">
-        <AvgOnlyCell average={avgOfAverages} prevAverage={null} formatValue={formatValue} formatDiff={formatDiff} />
+        <AvgOnlyCell
+          average={avgOfAverages}
+          prevAverage={null}
+          formatValue={formatValue}
+          formatDiff={formatDiff}
+        />
         <div className={`delta-line ${avgVsLast.cls}`}>{avgVsLast.text}</div>
       </td>
     </tr>
@@ -157,7 +183,7 @@ function AvgOnlyRow({
 
 export function OverviewPage() {
   const [zones, setZones] = useState<string[] | null>(null);
-  const [zone, setZone] = useState<string>("");
+  const [zone, setZone] = useState<string>('');
   const [data, setData] = useState<OverviewData | null>(null);
 
   useEffect(() => {
@@ -173,11 +199,17 @@ export function OverviewPage() {
   }, [zone]);
 
   return (
-    <Layout title="Raid Overview" subtitle="Warriors together strong">
+    <Layout title="Raids Overview" subtitle="Warriors together strong">
       <div className="card">
         <form onSubmit={(e) => e.preventDefault()}>
-          <select value={zone} onChange={(e) => setZone(e.target.value)} disabled={!zones || zones.length === 0}>
-            {zones && zones.length === 0 && <option>No reports added yet</option>}
+          <select
+            value={zone}
+            onChange={(e) => setZone(e.target.value)}
+            disabled={!zones || zones.length === 0}
+          >
+            {zones && zones.length === 0 && (
+              <option>No reports added yet</option>
+            )}
             {zones?.map((z) => (
               <option key={z} value={z}>
                 {z}
@@ -209,8 +241,18 @@ export function OverviewPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    <TotalAvgRow label="DPS" rows={data.dps} formatValue={fmtInt} formatDiff={(n) => fmtPlainDiff(n, 1)} />
-                    <TotalAvgRow label="Damage" rows={data.damage} formatValue={fmtInt} formatDiff={fmtDamageDiff} />
+                    <TotalAvgRow
+                      label="DPS"
+                      rows={data.dps}
+                      formatValue={fmtInt}
+                      formatDiff={(n) => fmtPlainDiff(n, 1)}
+                    />
+                    <TotalAvgRow
+                      label="Damage"
+                      rows={data.damage}
+                      formatValue={fmtInt}
+                      formatDiff={fmtDamageDiff}
+                    />
                     {data.abilities.map((ability) => (
                       <AvgOnlyRow
                         key={ability.id}

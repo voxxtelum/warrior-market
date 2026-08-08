@@ -1,10 +1,53 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AdminLayout } from "../components/AdminLayout";
 import { getAdminMarketStats, type MarketStats } from "../api";
 import { fmtCoin } from "../format";
 
+type VolumeRow = MarketStats["perWarriorVolume"][number];
+type SortKey = "player" | "volume" | "trades";
+
+function sortValue(row: VolumeRow, key: SortKey): string | number {
+  if (key === "player") return row.player_name;
+  if (key === "volume") return row.volume;
+  return row.tradeCount;
+}
+
+const VOLUME_COLUMNS: { key: SortKey; label: string }[] = [
+  { key: "player", label: "Warrior" },
+  { key: "volume", label: "Volume" },
+  { key: "trades", label: "Trades" },
+];
+
 export function AdminMarketStatsPage() {
   const [stats, setStats] = useState<MarketStats | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("volume");
+  const [sortDir, setSortDir] = useState<1 | -1>(-1);
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 1 ? -1 : 1));
+    } else {
+      setSortKey(key);
+      setSortDir(key === "player" ? 1 : -1);
+    }
+  }
+
+  function arrowFor(key: SortKey): string {
+    if (sortKey !== key) return "";
+    return sortDir === 1 ? " ▲" : " ▼";
+  }
+
+  const sortedVolume = useMemo(() => {
+    if (!stats) return [];
+    return [...stats.perWarriorVolume].sort((a, b) => {
+      const av = sortValue(a, sortKey);
+      const bv = sortValue(b, sortKey);
+      if (typeof av === "string" || typeof bv === "string") {
+        return sortDir * String(av).localeCompare(String(bv));
+      }
+      return sortDir * (av - bv);
+    });
+  }, [stats, sortKey, sortDir]);
 
   useEffect(() => {
     // A non-admin briefly hits this before RequireAdmin's redirect commits
@@ -49,9 +92,12 @@ export function AdminMarketStatsPage() {
           <table>
             <thead>
               <tr>
-                <th>Warrior</th>
-                <th>Volume</th>
-                <th>Trades</th>
+                {VOLUME_COLUMNS.map((col) => (
+                  <th key={col.key} className="sortable" onClick={() => handleSort(col.key)}>
+                    {col.label}
+                    {arrowFor(col.key)}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -62,7 +108,7 @@ export function AdminMarketStatsPage() {
                   </td>
                 </tr>
               )}
-              {stats?.perWarriorVolume.map((row) => (
+              {sortedVolume.map((row) => (
                 <tr key={`${row.player_name}::${row.server}`}>
                   <td>{row.player_name}</td>
                   <td>{row.volume.toFixed(2)}</td>

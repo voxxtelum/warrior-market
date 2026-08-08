@@ -291,6 +291,7 @@ export interface HoldingView {
   shares: number;
   costBasisTotal: number;
   latestPrice: number | null;
+  lastRaidPrice: number | null;
   marketValue: number | null;
 }
 

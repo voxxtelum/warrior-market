@@ -680,7 +680,7 @@ function liquidateWarriorHoldings(
     for (const holding of holders) {
       const refund = holding.shares * price;
       db.prepare(
-        `UPDATE holdings SET shares = 0, cost_basis_total = 0 WHERE user_id = ? AND warrior_id = ?`,
+        `DELETE FROM holdings WHERE user_id = ? AND warrior_id = ?`,
       ).run(holding.user_id, warriorId);
       db.prepare(
         `UPDATE wallets SET balance = balance + ? WHERE user_id = ?`,
@@ -897,6 +897,19 @@ export function getLatestPrice(warriorId: number): number | null {
   return row ? row.price : null;
 }
 
+// The most recent raid-derived snapshot only (excludes drift/demand ticks) -
+// pairs with getLatestPrice() to build the same "change since last raid"
+// figure the trade modal and stock leaderboard show, elsewhere keyed off
+// computeStock()'s own series instead of this table.
+export function getLastRaidPrice(warriorId: number): number | null {
+  const row = db
+    .prepare(
+      `SELECT price FROM price_snapshots WHERE warrior_id = ? AND source = 'raid' ORDER BY created_at DESC, id DESC LIMIT 1`,
+    )
+    .get(warriorId) as unknown as { price: number } | undefined;
+  return row ? row.price : null;
+}
+
 // The price idle drift reverts toward, and that demand-driven trades update -
 // deliberately not derived from price_snapshots (which would mean a demand
 // move gets slowly erased by the next drift tick, same as the old
@@ -1001,6 +1014,7 @@ export function listHoldingsWithContext(userId: string): (HoldingRow & {
   player_name: string;
   server: string;
   latest_price: number | null;
+  last_raid_price: number | null;
 })[] {
   const rows = db
     .prepare(
@@ -1016,6 +1030,7 @@ export function listHoldingsWithContext(userId: string): (HoldingRow & {
   return rows.map((r) => ({
     ...r,
     latest_price: getLatestPrice(r.warrior_id),
+    last_raid_price: getLastRaidPrice(r.warrior_id),
   }));
 }
 
@@ -1102,7 +1117,17 @@ export function executeTrade(
   } else {
     if (!holding || holding.shares <= 0)
       throw new TradeError("You don't hold any shares of this warrior");
-    if (shares > holding.shares) {
+    // Cent-rounded comparison (same rationale as the balance check above) -
+    // the client's "sell 100%" slider sends a coin amount derived from
+    // holding.shares * price and rounded to the cent, which can land a hair
+    // under the exact full-position value. Treating that as a full sell
+    // (rather than leaving a sub-cent dust remainder) keeps a full sell from
+    // leaving an untradeable near-zero position behind.
+    const fullSellValue = holding.shares * price;
+    if (
+      shares > holding.shares ||
+      Math.round(coinAmount * 100) >= Math.round(fullSellValue * 100)
+    ) {
       shares = holding.shares;
       total = shares * price;
       fee = total * config.tradeFeePct;
@@ -1133,13 +1158,17 @@ export function executeTrade(
       ).run(total + fee, userId);
     } else {
       const remainingShares = holding!.shares - shares;
-      const remainingCostBasis =
-        remainingShares <= 0
-          ? 0
-          : holding!.cost_basis_total * (remainingShares / holding!.shares);
-      db.prepare(
-        `UPDATE holdings SET shares = ?, cost_basis_total = ? WHERE user_id = ? AND warrior_id = ?`,
-      ).run(remainingShares, remainingCostBasis, userId, warriorId);
+      if (remainingShares <= 0) {
+        db.prepare(
+          `DELETE FROM holdings WHERE user_id = ? AND warrior_id = ?`,
+        ).run(userId, warriorId);
+      } else {
+        const remainingCostBasis =
+          holding!.cost_basis_total * (remainingShares / holding!.shares);
+        db.prepare(
+          `UPDATE holdings SET shares = ?, cost_basis_total = ? WHERE user_id = ? AND warrior_id = ?`,
+        ).run(remainingShares, remainingCostBasis, userId, warriorId);
+      }
       db.prepare(
         `UPDATE wallets SET balance = balance + ? WHERE user_id = ?`,
       ).run(total - fee, userId);

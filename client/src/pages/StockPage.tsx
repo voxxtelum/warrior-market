@@ -6,7 +6,7 @@ import { Sparkline } from '../components/Sparkline';
 import { TradeModal } from '../components/TradeModal';
 import { ArrowsRightLeftIcon } from '../components/icons/ArrowsRightLeftIcon';
 import { useAuth } from '../authContext';
-import { NEGATIVE_COLOR, POSITIVE_COLOR, paletteColor, withAlpha } from '../chartColors';
+import { NEGATIVE_COLOR, POSITIVE_COLOR, paletteColor } from '../chartColors';
 import { fmtCoin, fmtDate, fmtDateTime, priceDelta } from '../format';
 import {
   getMarketSummary,
@@ -184,8 +184,8 @@ const COLUMNS: { key: SortKey | null; label: string }[] = [
   { key: 'player', label: 'Player' },
   { key: 'price', label: 'Price' },
   { key: null, label: 'Trend' },
-  { key: 'change', label: 'Change since last raid' },
-  { key: 'avgGrowth', label: 'Avg growth/raid' },
+  { key: 'change', label: 'Change (last raid)' },
+  { key: 'avgGrowth', label: 'Growth/raid' },
   { key: 'raids', label: 'Raids' },
   { key: null, label: '' },
 ];
@@ -331,13 +331,19 @@ export function StockPage() {
       const hasSelection =
         selectedPlayer !== null &&
         leaderboard.some((p) => p.player_name === selectedPlayer);
+      // When a player is selected, only their line is drawn - rather than
+      // fading the rest out - so the y axis autoscales to that player's own
+      // price range instead of staying stretched to fit the whole board.
+      const rows = hasSelection
+        ? leaderboard.filter((row) => row.player_name === selectedPlayer)
+        : leaderboard;
       const historyByPlayer = new Map(
         priceHistory.map((p) => [`${p.player_name}::${p.server}`, p]),
       );
       const rangeMs = RANGES.find((r) => r.key === selectedRange)?.ms ?? null;
       const cutoff = rangeMs !== null ? Date.now() - rangeMs : null;
 
-      const datasets = leaderboard.flatMap((row, i) => {
+      return rows.flatMap((row) => {
         const history = historyByPlayer.get(rowKey(row));
         if (!history) return [];
         const series =
@@ -345,9 +351,13 @@ export function StockPage() {
             ? history.series.filter((s) => s.created_at >= cutoff)
             : history.series;
         if (series.length === 0) return [];
-        const isSelected = row.player_name === selectedPlayer;
-        const alpha = !hasSelection || isSelected ? 1 : 0.12;
-        const color = withAlpha(paletteColor(i), alpha);
+        // Colored by the player's position in the full (unfiltered) board so
+        // a given player keeps the same line color whether or not they're
+        // the only one selected.
+        const colorIndex = leaderboard.findIndex(
+          (r) => rowKey(r) === rowKey(row),
+        );
+        const color = paletteColor(colorIndex);
         return [
           {
             label: censored ? '████████' : row.player_name,
@@ -360,14 +370,11 @@ export function StockPage() {
             tension: 0,
             borderColor: color,
             backgroundColor: color,
-            borderWidth: hasSelection && isSelected ? 3 : 1.5,
+            borderWidth: hasSelection ? 3 : 1.5,
             pointRadius: 0,
-            order: isSelected ? 0 : 1,
           },
         ];
       });
-
-      return datasets.sort((a, b) => a.order - b.order);
     }, [priceHistory, leaderboard, selectedPlayer, censored, selectedRange]);
 
   return (
@@ -447,6 +454,11 @@ export function StockPage() {
                   row.prevPrice !== null
                     ? priceDelta(row.prevPrice, row.price)
                     : null;
+                // Same "Change" shown in the trade modal - the live tradable
+                // price (raid + drift + demand) against the last raid's
+                // snapshot price, as opposed to `delta` above which compares
+                // the last two raid snapshots only.
+                const liveDelta = priceDelta(row.price, row.currentPrice);
                 const pct =
                   row.prevPrice !== null
                     ? ((row.price - row.prevPrice) / row.prevPrice) * 100
@@ -506,7 +518,12 @@ export function StockPage() {
                         </span>
                       )}
                     </td>
-                    <td>{fmtPrice(row.currentPrice)}</td>
+                    <td>
+                      <div className="price-cell">
+                        <span>{fmtPrice(row.currentPrice)}</span>
+                        <span className={`price-cell-change ${liveDelta.cls}`}>{liveDelta.text}</span>
+                      </div>
+                    </td>
                     <td>
                       <Sparkline prices={row.series.map((s) => s.price)} />
                     </td>

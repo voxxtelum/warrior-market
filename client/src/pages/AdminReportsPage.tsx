@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AdminLayout } from "../components/AdminLayout";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { TrashIcon } from "../components/icons/TrashIcon";
 import { addReport, deleteReport, getReports, type ReportRow } from "../api";
 
 function fmtDate(ts: number): string {
@@ -17,6 +18,18 @@ export function AdminReportsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState<{ text: string; kind: "success" | "error" } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ReportRow | null>(null);
+  const [instanceFilter, setInstanceFilter] = useState("");
+
+  const instances = useMemo(() => {
+    const zones = new Set<string>();
+    for (const r of reports ?? []) zones.add(r.zone ?? "unknown zone");
+    return [...zones].sort();
+  }, [reports]);
+
+  const filteredReports = useMemo(
+    () => (reports ?? []).filter((r) => !instanceFilter || (r.zone ?? "unknown zone") === instanceFilter),
+    [reports, instanceFilter]
+  );
 
   function loadReports() {
     getReports().then(setReports);
@@ -73,12 +86,30 @@ export function AdminReportsPage() {
 
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Reports in local data</h2>
+        {reports?.length !== 0 && (
+          <form onSubmit={(e) => e.preventDefault()}>
+            <select value={instanceFilter} onChange={(e) => setInstanceFilter(e.target.value)}>
+              <option value="">All instances</option>
+              {instances.map((zone) => (
+                <option key={zone} value={zone}>
+                  {zone}
+                </option>
+              ))}
+            </select>
+          </form>
+        )}
         <div className="table-scroll">
           <table id="report-table">
             {reports?.length === 0 ? (
               <tbody>
                 <tr>
                   <td>No reports added yet.</td>
+                </tr>
+              </tbody>
+            ) : filteredReports.length === 0 ? (
+              <tbody>
+                <tr>
+                  <td>No reports match this instance.</td>
                 </tr>
               </tbody>
             ) : (
@@ -92,8 +123,8 @@ export function AdminReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {reports
-                    ?.slice()
+                  {filteredReports
+                    .slice()
                     .reverse()
                     .map((r) => (
                       <tr key={r.code}>
@@ -105,8 +136,14 @@ export function AdminReportsPage() {
                         <td>{r.zone ?? "unknown zone"}</td>
                         <td>{fmtDate(r.start_time)}</td>
                         <td>
-                          <button type="button" className="btn-danger" onClick={() => setDeleteTarget(r)}>
-                            Delete
+                          <button
+                            type="button"
+                            className="btn-danger btn-icon-only"
+                            aria-label={`Delete "${r.title}"`}
+                            title="Delete report"
+                            onClick={() => setDeleteTarget(r)}
+                          >
+                            <TrashIcon className="icon-btn-icon" />
                           </button>
                         </td>
                       </tr>

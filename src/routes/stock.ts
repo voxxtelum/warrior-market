@@ -1,13 +1,38 @@
 import { Router } from "express";
 import { computeStock, loadStockConfig } from "../stock";
 import type { StockConfig } from "../stock";
-import { setStockConfigRaw } from "../db";
+import { getAllPriceSnapshots, setStockConfigRaw } from "../db";
 import { requireAdmin } from "../middleware/auth";
 
 export const stockRouter = Router();
 
 stockRouter.get("/", (_req, res) => {
   res.json(computeStock());
+});
+
+// The immutable snapshot ledger (raid + drift points together), shaped for
+// charting - this is what the Stock page's chart reads post-Phase-4, since
+// it's the only series dense enough to show drift and the only one that
+// can't be retroactively changed by a later stock_config edit.
+stockRouter.get("/history", (_req, res) => {
+  const rows = getAllPriceSnapshots();
+  const byPlayer = new Map<
+    string,
+    { player_name: string; server: string; series: { created_at: number; price: number; source: string; report_code: string | null }[] }
+  >();
+  for (const row of rows) {
+    const key = `${row.player_name}::${row.server}`;
+    if (!byPlayer.has(key)) {
+      byPlayer.set(key, { player_name: row.player_name, server: row.server, series: [] });
+    }
+    byPlayer.get(key)!.series.push({
+      created_at: row.created_at,
+      price: row.price,
+      source: row.source,
+      report_code: row.report_code,
+    });
+  }
+  res.json(Array.from(byPlayer.values()));
 });
 
 stockRouter.get("/config", requireAdmin, (_req, res) => {
@@ -30,6 +55,9 @@ const NUMERIC_FIELDS: (keyof StockConfig)[] = [
   "damageTrendWeight",
   "damagePeerWeight",
   "damageTrendZClamp",
+  "driftIntervalMs",
+  "driftMaxPct",
+  "driftReversionStrength",
 ];
 
 function validateStockConfig(body: unknown): string | null {

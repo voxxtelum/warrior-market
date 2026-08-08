@@ -1,5 +1,6 @@
 import { graphqlRequest } from "./wclClient";
-import { upsertReport, CastRow, DamageRow, DamageTakenRow, FightRow, ReportRow } from "./db";
+import { upsertReport, CastRow, DamageRow, DamageTakenRow, FightRow, ReportRow, getOrCreateWarriorId } from "./db";
+import { snapshotPricesForReport } from "./stock";
 import trackedConfig from "../config.json";
 
 const trackedAbilityNames = new Map<number, string>(trackedConfig.trackedAbilities.map((a) => [a.id, a.name]));
@@ -254,6 +255,14 @@ export async function fetchAndIngestReport(codeOrUrl: string): Promise<{ code: s
   }));
 
   upsertReport({ report: reportRow, fights, casts, damage, damageTaken });
+
+  // Register every participant as a canonical warrior (new ones start
+  // hidden - see getOrCreateWarriorId), then freeze this report's prices
+  // into the immutable snapshot ledger trading reads from.
+  for (const d of damage) {
+    getOrCreateWarriorId(d.player_name, d.server);
+  }
+  snapshotPricesForReport(code);
 
   return { code, title: report.title, zone: reportRow.zone };
 }

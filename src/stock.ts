@@ -1,4 +1,13 @@
-import { getAllCasts, getAllDamage, getAllDamageTaken, getStockConfigRaw, listReports } from "./db";
+import {
+  getAllCasts,
+  getAllDamage,
+  getAllDamageTaken,
+  getOrCreateWarriorId,
+  getPriceSnapshotCount,
+  getStockConfigRaw,
+  insertPriceSnapshot,
+  listReports,
+} from "./db";
 
 export interface StockAbilityConfig {
   id: number;
@@ -24,6 +33,9 @@ export interface StockConfig {
   damageTrendWeight: number;
   damagePeerWeight: number;
   damageTrendZClamp: number;
+  driftIntervalMs: number;
+  driftMaxPct: number;
+  driftReversionStrength: number;
 }
 
 // Reads the DB-stored config on every call (rather than caching once at
@@ -45,6 +57,9 @@ export function loadStockConfig(): StockConfig {
     damageTrendWeight: parsed.damageTrendWeight ?? 0.5,
     damagePeerWeight: parsed.damagePeerWeight ?? 0.5,
     damageTrendZClamp: parsed.damageTrendZClamp ?? 4,
+    driftIntervalMs: parsed.driftIntervalMs ?? 60 * 60 * 1000,
+    driftMaxPct: parsed.driftMaxPct ?? 0.005,
+    driftReversionStrength: parsed.driftReversionStrength ?? 0.3,
   } as StockConfig;
 }
 
@@ -322,4 +337,39 @@ export function computeStock(): PlayerStock[] {
   }
 
   return Array.from(seriesByPlayer.values());
+}
+
+// Freezes an immutable price for every participant of one just-ingested
+// report, at ingest time (not the raid's own start_time - see
+// backfillPriceSnapshotsIfNeeded for why that distinction matters). Reruns
+// full computeStock() rather than an incremental recompute - ingest is
+// manual/low-volume, so the recompute cost is negligible, and it keeps this
+// in lockstep with whatever computeStock() actually does.
+export function snapshotPricesForReport(reportCode: string, createdAt: number = Date.now()) {
+  const allStock = computeStock();
+  for (const playerStock of allStock) {
+    const point = playerStock.series.find((s) => s.report_code === reportCode);
+    if (!point) continue;
+    const warriorId = getOrCreateWarriorId(playerStock.player_name, playerStock.server);
+    insertPriceSnapshot(warriorId, point.price, "raid", reportCode, createdAt);
+  }
+}
+
+// One-time migration for installs that already had raid history before this
+// feature shipped: snapshots every historical report's price so trading has
+// a starting series to read from. Uses each report's own start_time (rather
+// than "now", which every backfilled row would otherwise share) so the
+// existing chart's chronological order is preserved. Safe to call on every
+// boot - it's a no-op once any snapshot exists.
+export function backfillPriceSnapshotsIfNeeded() {
+  if (getPriceSnapshotCount() > 0) return;
+  if (listReports().length === 0) return;
+
+  const allStock = computeStock();
+  for (const playerStock of allStock) {
+    const warriorId = getOrCreateWarriorId(playerStock.player_name, playerStock.server);
+    for (const point of playerStock.series) {
+      insertPriceSnapshot(warriorId, point.price, "raid", point.report_code, point.start_time);
+    }
+  }
 }

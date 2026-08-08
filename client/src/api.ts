@@ -182,6 +182,9 @@ export interface StockConfig {
   damageTrendWeight: number;
   damagePeerWeight: number;
   damageTrendZClamp: number;
+  driftIntervalMs: number;
+  driftMaxPct: number;
+  driftReversionStrength: number;
 }
 
 export async function getStockConfig(): Promise<StockConfig> {
@@ -218,4 +221,135 @@ export async function setPlayerHidden(playerName: string, server: string, hidden
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ player_name: playerName, server, hidden }),
   });
+}
+
+export interface PriceSnapshotPoint {
+  created_at: number;
+  price: number;
+  source: "raid" | "drift";
+  report_code: string | null;
+}
+
+export interface PlayerPriceHistory {
+  player_name: string;
+  server: string;
+  series: PriceSnapshotPoint[];
+}
+
+export async function getStockHistory(): Promise<PlayerPriceHistory[]> {
+  const res = await fetch("/api/stock/history");
+  return res.json();
+}
+
+export interface HoldingView {
+  playerName: string;
+  server: string;
+  shares: number;
+  costBasisTotal: number;
+  latestPrice: number | null;
+  marketValue: number | null;
+}
+
+export interface WalletData {
+  balance: number;
+  holdings: HoldingView[];
+  netWorth: number;
+}
+
+export async function getWallet(): Promise<WalletData> {
+  const res = await fetch("/api/trading/wallet");
+  if (!res.ok) throw new Error("Failed to load wallet");
+  return res.json();
+}
+
+export async function getWarriorPrice(playerName: string, server: string): Promise<number | null> {
+  const res = await fetch(`/api/trading/price/${encodeURIComponent(playerName)}/${encodeURIComponent(server)}`);
+  if (!res.ok) return null;
+  const body = await res.json();
+  return body.price;
+}
+
+export async function postTrade(
+  playerName: string,
+  server: string,
+  side: "buy" | "sell",
+  amount: number
+): Promise<{ shares: number; price: number; total: number }> {
+  const res = await fetch("/api/trading/trade", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerName, server, side, amount }),
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || "Trade failed");
+  return body;
+}
+
+export interface TransactionView {
+  id: number;
+  playerName: string;
+  server: string;
+  side: "buy" | "sell" | "liquidation";
+  shares: number;
+  price: number;
+  total: number;
+  createdAt: number;
+  username: string | null;
+  avatar: string | null;
+  isMine: boolean;
+}
+
+export async function getMyTransactions(): Promise<TransactionView[]> {
+  const res = await fetch("/api/trading/transactions/mine");
+  return res.json();
+}
+
+export async function getTradeFeed(): Promise<TransactionView[]> {
+  const res = await fetch("/api/trading/feed");
+  return res.json();
+}
+
+export interface LeaderboardEntryView {
+  username: string;
+  avatar: string | null;
+  balance: number;
+  holdingsValue: number;
+  netWorth: number;
+}
+
+export async function getLeaderboard(): Promise<LeaderboardEntryView[]> {
+  const res = await fetch("/api/trading/leaderboard");
+  return res.json();
+}
+
+export interface NotificationView {
+  id: number;
+  message: string;
+  warriorId: number | null;
+  amount: number | null;
+  createdAt: number;
+}
+
+export async function getNotifications(): Promise<NotificationView[]> {
+  const res = await fetch("/api/notifications");
+  return res.json();
+}
+
+export async function markNotificationRead(id: number): Promise<void> {
+  await fetch(`/api/notifications/${id}/read`, { method: "POST" });
+}
+
+export interface MarketStats {
+  totalCoinInWallets: number;
+  totalCoinInHoldings: number;
+  totalNetWorth: number;
+  userCount: number;
+  perWarriorVolume: { player_name: string; server: string; volume: number; tradeCount: number }[];
+  topTraders: { user_id: string; username: string; turnover: number; tradeCount: number }[];
+}
+
+export async function getAdminMarketStats(): Promise<MarketStats> {
+  const res = await fetch("/api/admin/market-stats");
+  if (!res.ok) throw new Error("Failed to load market stats");
+  return res.json();
 }

@@ -1,11 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ChartDataset } from 'chart.js/auto';
-import { Layout } from '../components/Layout';
+import { MarketLayout } from '../components/MarketLayout';
 import { LineChart } from '../components/LineChart';
 import { Sparkline } from '../components/Sparkline';
+import { TradeModal } from '../components/TradeModal';
+import { ArrowsRightLeftIcon } from '../components/icons/ArrowsRightLeftIcon';
+import { useAuth } from '../authContext';
 import { paletteColor, withAlpha } from '../chartColors';
-import { fmtDate } from '../format';
-import { getReports, getStock, type PlayerStock, type ReportRow } from '../api';
+import { fmtDateTime } from '../format';
+import {
+  getStock,
+  getStockHistory,
+  getWallet,
+  type PlayerPriceHistory,
+  type PlayerStock,
+  type WalletData,
+} from '../api';
+
+function fmtCoin(n: number): string {
+  return n.toFixed(2);
+}
 
 function hexToRgb(hex: string): [number, number, number] {
   return [
@@ -113,7 +127,9 @@ function rowKey(row: LeaderboardRow): string {
 // Positions gained (positive) or lost (negative) vs. each player's own
 // previous-raid price rank - null when there's no previous raid to rank
 // against yet (e.g. a player's first appearance on the board).
-function buildRankDeltas(leaderboard: LeaderboardRow[]): Map<string, number | null> {
+function buildRankDeltas(
+  leaderboard: LeaderboardRow[],
+): Map<string, number | null> {
   const currentRank = new Map<string, number>();
   [...leaderboard]
     .sort((a, b) => b.price - a.price)
@@ -130,7 +146,10 @@ function buildRankDeltas(leaderboard: LeaderboardRow[]): Map<string, number | nu
     const key = rowKey(row);
     const prev = previousRank.get(key);
     const curr = currentRank.get(key);
-    deltas.set(key, prev !== undefined && curr !== undefined ? prev - curr : null);
+    deltas.set(
+      key,
+      prev !== undefined && curr !== undefined ? prev - curr : null,
+    );
   }
   return deltas;
 }
@@ -140,7 +159,7 @@ function RankDeltaCell({ delta }: { delta: number | null }) {
   if (delta === 0) return null;
   return (
     <span className={delta > 0 ? 'delta-pos' : 'delta-neg'}>
-      {delta > 0 ? '▲' : '▼'}
+      {delta > 0 ? '▲ ' : '▼ '}
       {Math.abs(delta)}
     </span>
   );
@@ -165,22 +184,45 @@ const COLUMNS: { key: SortKey | null; label: string }[] = [
   { key: 'change', label: 'Change since last raid' },
   { key: 'avgGrowth', label: 'Avg growth/raid' },
   { key: 'raids', label: 'Raids' },
+  { key: null, label: '' },
 ];
 
+function refreshHistory(setPriceHistory: (h: PlayerPriceHistory[]) => void) {
+  getStockHistory().then(setPriceHistory);
+}
+
 export function StockPage() {
+  const { user } = useAuth();
   const [playersStock, setPlayersStock] = useState<PlayerStock[] | null>(null);
-  const [allReports, setAllReports] = useState<ReportRow[] | null>(null);
+  const [priceHistory, setPriceHistory] = useState<PlayerPriceHistory[] | null>(
+    null,
+  );
+  const [wallet, setWallet] = useState<WalletData | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [censored, setCensored] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('price');
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
+  const [tradeModalTarget, setTradeModalTarget] = useState<{
+    playerName: string;
+    server: string;
+  } | null>(null);
 
   useEffect(() => {
-    Promise.all([getStock(), getReports()]).then(([stock, reports]) => {
+    Promise.all([getStock(), getStockHistory()]).then(([stock, history]) => {
       setPlayersStock(stock);
-      setAllReports(reports);
+      setPriceHistory(history);
     });
   }, []);
+
+  const refreshWallet = () => {
+    if (user) getWallet().then(setWallet);
+  };
+  useEffect(refreshWallet, [user]);
+
+  function handleTraded() {
+    refreshHistory(setPriceHistory);
+    refreshWallet();
+  }
 
   const leaderboard = useMemo(
     () => (playersStock ? buildLeaderboard(playersStock) : []),
@@ -236,45 +278,89 @@ export function StockPage() {
     return heatRange(growthValues);
   }, [leaderboard]);
 
+  // x-axis is every distinct snapshot timestamp across all warriors (raid
+  // jumps and hourly drift ticks together), not one point per report -
+  // reading from the immutable price_snapshots ledger rather than the live
+  // computeStock() series (see stock.ts) so this can't retroactively change
+  // if stock_config is edited later, and so drift shows up at all.
+  const chartTimestamps = useMemo(() => {
+    if (!priceHistory) return [];
+    const set = new Set<number>();
+    for (const player of priceHistory) {
+      for (const point of player.series) set.add(point.created_at);
+    }
+    return Array.from(set).sort((a, b) => a - b);
+  }, [priceHistory]);
+
   const chartDatasets: ChartDataset<'line', (number | null)[]>[] =
     useMemo(() => {
-      if (!allReports) return [];
+      if (!priceHistory || chartTimestamps.length === 0) return [];
       const hasSelection =
         selectedPlayer !== null &&
         leaderboard.some((p) => p.player_name === selectedPlayer);
+      const historyByPlayer = new Map(
+        priceHistory.map((p) => [`${p.player_name}::${p.server}`, p]),
+      );
 
-      const datasets = leaderboard.map((row, i) => {
+      const datasets = leaderboard.flatMap((row, i) => {
+        const history = historyByPlayer.get(rowKey(row));
+        if (!history) return [];
         const isSelected = row.player_name === selectedPlayer;
         const alpha = !hasSelection || isSelected ? 1 : 0.12;
         const color = withAlpha(paletteColor(i), alpha);
-        const priceByReport = new Map(
-          row.series.map((s) => [s.report_code, s.price]),
+        const priceByTimestamp = new Map(
+          history.series.map((s) => [s.created_at, s.price]),
         );
-        return {
-          label: censored ? '████████' : row.player_name,
-          data: allReports.map((r) => priceByReport.get(r.code) ?? null),
-          spanGaps: true,
-          tension: 0.2,
-          borderColor: color,
-          backgroundColor: color,
-          borderWidth: hasSelection && isSelected ? 3 : 1.5,
-          pointRadius: !hasSelection || isSelected ? 2.5 : 1.5,
-          order: isSelected ? 0 : 1,
-        };
+        return [
+          {
+            label: censored ? '████████' : row.player_name,
+            data: chartTimestamps.map((t) => priceByTimestamp.get(t) ?? null),
+            spanGaps: true,
+            // Drift ticks make points ~6x denser than the old one-per-raid
+            // series - Chart.js's default curve interpolation would overshoot
+            // between real values at that density, so this chart specifically
+            // uses straight lines (ComparePage's chart is unrelated and keeps
+            // its own tension).
+            tension: 0,
+            borderColor: color,
+            backgroundColor: color,
+            borderWidth: hasSelection && isSelected ? 3 : 1.5,
+            pointRadius: 0,
+            order: isSelected ? 0 : 1,
+          },
+        ];
       });
 
       return datasets.sort((a, b) => a.order - b.order);
-    }, [allReports, leaderboard, selectedPlayer, censored]);
+    }, [priceHistory, chartTimestamps, leaderboard, selectedPlayer, censored]);
 
   return (
-    <Layout
-      title="Warrior Stocks"
-      subtitle={
-        <>
-          Stocks for <s>Morons</s> &lt;Dawnfire&gt; Warriors
-        </>
-      }
-    >
+    <MarketLayout>
+      {user && (
+        <div className="card">
+          <div className="wallet-summary">
+            <div className="wallet-summary-item">
+              <span className="value">
+                {wallet ? fmtCoin(wallet.balance) : '–'}
+              </span>
+              <span className="label">Balance</span>
+            </div>
+            <div className="wallet-summary-item">
+              <span className="value">
+                {wallet ? fmtCoin(wallet.netWorth - wallet.balance) : '–'}
+              </span>
+              <span className="label">Holdings value</span>
+            </div>
+            <div className="wallet-summary-item">
+              <span className="value">
+                {wallet ? fmtCoin(wallet.netWorth) : '–'}
+              </span>
+              <span className="label">Portfolio value</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <div className="table-scroll">
           <table id="stock-table">
@@ -308,13 +394,22 @@ export function StockPage() {
                     : 0;
                 const color = delta ? heatColor(pct, maxPos, minNeg) : null;
                 const growth = avgGrowthPerRaid(row.series);
-                const growthColor = growth !== null ? heatColor(growth, maxPosGrowth, minNegGrowth) : null;
+                const growthColor =
+                  growth !== null
+                    ? heatColor(growth, maxPosGrowth, minNegGrowth)
+                    : null;
                 const growthCls =
-                  growth === null ? null : growth > 0 ? 'delta-pos' : growth < 0 ? 'delta-neg' : 'delta-neutral';
+                  growth === null
+                    ? null
+                    : growth > 0
+                      ? 'delta-pos'
+                      : growth < 0
+                        ? 'delta-neg'
+                        : 'delta-neutral';
 
                 return (
                   <tr
-                    key={`${row.player_name}::${row.server}`}
+                    key={rowKey(row)}
                     style={{ cursor: 'pointer' }}
                     className={
                       row.player_name === selectedPlayer
@@ -328,7 +423,9 @@ export function StockPage() {
                     }
                   >
                     <td>
-                      <RankDeltaCell delta={rankDeltas.get(rowKey(row)) ?? null} />
+                      <RankDeltaCell
+                        delta={rankDeltas.get(rowKey(row)) ?? null}
+                      />
                     </td>
                     <td>
                       {censored ? (
@@ -356,8 +453,12 @@ export function StockPage() {
                     <td>
                       {growth !== null ? (
                         <span
-                          className={growthColor ? '' : growthCls ?? undefined}
-                          style={growthColor ? { color: growthColor } : undefined}
+                          className={
+                            growthColor ? '' : (growthCls ?? undefined)
+                          }
+                          style={
+                            growthColor ? { color: growthColor } : undefined
+                          }
                         >
                           {growth >= 0 ? '+' : ''}
                           {growth.toFixed(2)}%
@@ -367,6 +468,22 @@ export function StockPage() {
                       )}
                     </td>
                     <td>{row.raidCount}</td>
+                    <td>
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTradeModalTarget({
+                            playerName: row.player_name,
+                            server: row.server,
+                          });
+                        }}
+                      >
+                        <ArrowsRightLeftIcon className="icon-btn-icon" />
+                        Trade
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
@@ -377,11 +494,12 @@ export function StockPage() {
 
       <div className="card">
         <LineChart
-          labels={allReports?.map((r) => fmtDate(r.start_time)) ?? []}
+          labels={chartTimestamps.map(fmtDateTime)}
           datasets={chartDatasets}
           title="Warrior Stock Prices"
           height={480}
           yScaleOptions={{ title: { display: true, text: 'Price' } }}
+          xScaleOptions={{ ticks: { display: false } }}
         />
       </div>
 
@@ -395,6 +513,15 @@ export function StockPage() {
           Censor player names
         </label>
       </div>
-    </Layout>
+
+      {tradeModalTarget && (
+        <TradeModal
+          playerName={tradeModalTarget.playerName}
+          server={tradeModalTarget.server}
+          onClose={() => setTradeModalTarget(null)}
+          onTraded={handleTraded}
+        />
+      )}
+    </MarketLayout>
   );
 }

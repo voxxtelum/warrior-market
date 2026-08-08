@@ -5,6 +5,7 @@ const LINKS: { to: string; label: string; end?: boolean }[] = [
   { to: "/admin/players", label: "Players" },
   { to: "/admin/stock-config", label: "Stock Config" },
   { to: "/admin/users", label: "Users" },
+  { to: "/admin/market-stats", label: "Market Stats" },
 ];
 
 export function SubNav() {

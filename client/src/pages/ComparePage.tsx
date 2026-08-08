@@ -82,7 +82,8 @@ export function ComparePage() {
       .map((id) => {
         const sample = data.casts.find((c) => String(c.ability_id) === id);
         return { value: id, label: sample ? sample.ability_name : id };
-      });
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
 
     return { trackedOptions: tracked, otherOptions: other };
   }, [data]);
@@ -95,6 +96,8 @@ export function ComparePage() {
   }, [data]);
 
   const abilityName = [...trackedOptions, ...otherOptions].find((o) => o.value === abilityId)?.label ?? "";
+
+  const recentReports = useMemo(() => data?.reports.slice(-10) ?? [], [data]);
 
   const castRows: CastCompareRow[] = useMemo(
     () => data?.casts.filter((c) => String(c.ability_id) === abilityId) ?? [],
@@ -151,7 +154,7 @@ export function ComparePage() {
             <div className="table-scroll">
               <SortableTable
                 id="casts-table"
-                reports={data.reports}
+                reports={recentReports}
                 rows={castRows}
                 rowKey={(r) => r.player_name}
                 getLabel={(r) => r.player_name}
@@ -172,7 +175,7 @@ export function ComparePage() {
             <div className="table-scroll">
               <SortableTable
                 id="damage-table"
-                reports={data.reports}
+                reports={recentReports}
                 rows={data.damage}
                 rowKey={(r) => r.player_name}
                 getLabel={(r) => r.player_name}

@@ -20,6 +20,9 @@ const SCALAR_FIELDS: { key: ScalarKey; label: string; step: string; description:
   { key: "damageTrendWeight", label: "Damage trend weight", step: "0.05", description: "Weight of personal DPS trend (vs. own history) within the damage score" },
   { key: "damagePeerWeight", label: "Damage peer weight", step: "0.05", description: "Weight of peer DPS ranking (vs. bucket-mates this raid) within the damage score" },
   { key: "damageTrendZClamp", label: "Damage trend z-clamp", step: "0.5", description: "Max absolute z-score for the personal DPS trend, before cold-start shrink is applied" },
+  { key: "driftIntervalMs", label: "Drift interval (ms)", step: "60000", description: "How often idle price drift ticks between raids - takes effect on the next tick, no restart needed" },
+  { key: "driftMaxPct", label: "Drift max %", step: "0.001", description: "Largest fraction a single drift tick can move a price, in either direction" },
+  { key: "driftReversionStrength", label: "Drift reversion strength", step: "0.05", description: "How strongly drift pulls a price back toward its last raid-anchored value (0 = no pull, 1 = fully anchored)" },
 ];
 
 const BUCKETS = ["all", "dps", "tank"];

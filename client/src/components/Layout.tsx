@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { MainNav } from "./MainNav";
 import { AdminMenu } from "./AdminMenu";
+import { NotificationBanner } from "./NotificationBanner";
 
 interface LayoutProps {
   title: string;
@@ -21,6 +22,8 @@ export function Layout({ title, subtitle, children }: LayoutProps) {
           <AdminMenu />
         </div>
       </div>
+
+      <NotificationBanner />
 
       {children}
     </>

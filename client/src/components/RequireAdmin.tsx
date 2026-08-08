@@ -10,7 +10,7 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
 
   if (loading) return null;
-  if (!user || !user.isAdmin) return <Navigate to="/stock" replace />;
+  if (!user || !user.isAdmin) return <Navigate to="/market/stocks" replace />;
 
   return <>{children}</>;
 }

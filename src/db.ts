@@ -109,7 +109,89 @@ db.exec(`
     created_at INTEGER NOT NULL,
     expires_at INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS warriors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_name TEXT NOT NULL,
+    server TEXT NOT NULL,
+    first_seen_at INTEGER NOT NULL,
+    UNIQUE (player_name, server)
+  );
+
+  CREATE TABLE IF NOT EXISTS price_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    warrior_id INTEGER NOT NULL,
+    report_code TEXT,
+    price REAL NOT NULL,
+    source TEXT NOT NULL CHECK (source IN ('raid', 'drift')),
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_price_snapshots_warrior ON price_snapshots (warrior_id, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS wallets (
+    user_id TEXT PRIMARY KEY REFERENCES users(discord_id),
+    balance REAL NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS holdings (
+    user_id TEXT NOT NULL,
+    warrior_id INTEGER NOT NULL,
+    shares REAL NOT NULL,
+    cost_basis_total REAL NOT NULL,
+    PRIMARY KEY (user_id, warrior_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    warrior_id INTEGER NOT NULL,
+    side TEXT NOT NULL CHECK (side IN ('buy', 'sell', 'liquidation')),
+    shares REAL NOT NULL,
+    price REAL NOT NULL,
+    total REAL NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    message TEXT NOT NULL,
+    warrior_id INTEGER,
+    amount REAL,
+    created_at INTEGER NOT NULL,
+    read_at INTEGER
+  );
+
+  CREATE TABLE IF NOT EXISTS scheduler_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    last_drift_at INTEGER NOT NULL
+  );
 `);
+
+// One-time backfill: identities that already existed before this feature
+// shipped become visible warriors immediately (a guildmate's main isn't
+// "new"). Only warriors discovered from here on via getOrCreateWarriorId
+// default to hidden - this runs directly against hidden_players/warriors
+// rather than through that helper so it never hides pre-existing players.
+// Guarded on the warriors table being empty so it only ever runs once.
+const warriorsCount = (db.prepare(`SELECT COUNT(*) AS c FROM warriors`).get() as unknown as { c: number }).c;
+if (warriorsCount === 0) {
+  const existingIdentities = db
+    .prepare(
+      `SELECT player_name, server FROM casts
+       UNION
+       SELECT player_name, server FROM damage`
+    )
+    .all() as unknown as { player_name: string; server: string }[];
+  const insertWarrior = db.prepare(
+    `INSERT OR IGNORE INTO warriors (player_name, server, first_seen_at) VALUES (?, ?, ?)`
+  );
+  const backfillNow = Date.now();
+  for (const identity of existingIdentities) {
+    insertWarrior.run(identity.player_name, identity.server, backfillNow);
+  }
+}
 
 // Seed the stock scoring config on first run, since it now lives entirely in
 // the DB (tunable from the admin page) rather than config.json.
@@ -139,6 +221,9 @@ const DEFAULT_STOCK_CONFIG = {
   damageTrendWeight: 0.5,
   damagePeerWeight: 0.5,
   damageTrendZClamp: 4,
+  driftIntervalMs: 60 * 60 * 1000,
+  driftMaxPct: 0.005,
+  driftReversionStrength: 0.3,
 };
 const hasStockConfig = db.prepare(`SELECT 1 FROM stock_config WHERE id = 1`).get();
 if (!hasStockConfig) {
@@ -386,12 +471,493 @@ export function listAllPlayers(): PlayerRow[] {
     .all() as unknown as PlayerRow[];
 }
 
+// hidden=true only liquidates on the transition into hidden (INSERT OR
+// IGNORE's `changes` is 0 if the row already existed), so re-hiding an
+// already-hidden warrior - or Phase 0 auto-hiding a warrior that was just
+// created and has no holders yet - never double-liquidates.
 export function setPlayerHidden(playerName: string, server: string, hidden: boolean) {
   if (hidden) {
-    db.prepare(`INSERT OR IGNORE INTO hidden_players (player_name, server) VALUES (?, ?)`).run(playerName, server);
+    const result = db
+      .prepare(`INSERT OR IGNORE INTO hidden_players (player_name, server) VALUES (?, ?)`)
+      .run(playerName, server);
+    if (result.changes > 0) {
+      liquidateWarriorHoldings(playerName, server);
+    }
   } else {
     db.prepare(`DELETE FROM hidden_players WHERE player_name = ? AND server = ?`).run(playerName, server);
   }
+}
+
+// Force-sells every holder's position in a warrior that just got hidden, at
+// its last known price, refunds their wallet, and leaves each of them a
+// notification. A no-op if the warrior has no `warriors` row yet (hidden
+// before ever appearing in a report) or nobody holds shares in it.
+function liquidateWarriorHoldings(playerName: string, server: string) {
+  const warriorId = getWarriorId(playerName, server);
+  if (warriorId === null) return;
+  const holders = db
+    .prepare(`SELECT * FROM holdings WHERE warrior_id = ? AND shares > 0`)
+    .all(warriorId) as unknown as HoldingRow[];
+  if (holders.length === 0) return;
+  const price = getLatestPrice(warriorId);
+  if (price === null) return;
+
+  const now = Date.now();
+  db.exec("BEGIN");
+  try {
+    for (const holding of holders) {
+      const refund = holding.shares * price;
+      db.prepare(`UPDATE holdings SET shares = 0, cost_basis_total = 0 WHERE user_id = ? AND warrior_id = ?`).run(
+        holding.user_id,
+        warriorId
+      );
+      db.prepare(`UPDATE wallets SET balance = balance + ? WHERE user_id = ?`).run(refund, holding.user_id);
+      db.prepare(
+        `INSERT INTO transactions (user_id, warrior_id, side, shares, price, total, created_at)
+         VALUES (?, ?, 'liquidation', ?, ?, ?, ?)`
+      ).run(holding.user_id, warriorId, holding.shares, price, refund, now);
+      db.prepare(
+        `INSERT INTO notifications (user_id, message, warrior_id, amount, created_at) VALUES (?, ?, ?, ?, ?)`
+      ).run(
+        holding.user_id,
+        `${playerName} was hidden by an admin - your holding was liquidated and ${refund.toFixed(2)} coin refunded.`,
+        warriorId,
+        refund,
+        now
+      );
+    }
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
+export interface WarriorRow {
+  id: number;
+  player_name: string;
+  server: string;
+  first_seen_at: number;
+}
+
+// Registers a warrior the first time it's seen. Brand-new warriors default
+// to hidden (via the existing setPlayerHidden hook) until an admin unhides
+// them from /admin/players - existing warriors backfilled at startup are
+// exempt from this (see the one-time backfill above).
+export function getOrCreateWarriorId(playerName: string, server: string): number {
+  const existing = db
+    .prepare(`SELECT id FROM warriors WHERE player_name = ? AND server = ?`)
+    .get(playerName, server) as unknown as { id: number } | undefined;
+  if (existing) return existing.id;
+
+  const result = db
+    .prepare(`INSERT INTO warriors (player_name, server, first_seen_at) VALUES (?, ?, ?)`)
+    .run(playerName, server, Date.now());
+  setPlayerHidden(playerName, server, true);
+  return Number(result.lastInsertRowid);
+}
+
+export function getWarriorId(playerName: string, server: string): number | null {
+  const row = db
+    .prepare(`SELECT id FROM warriors WHERE player_name = ? AND server = ?`)
+    .get(playerName, server) as unknown as { id: number } | undefined;
+  return row ? row.id : null;
+}
+
+export function getWarriorById(id: number): WarriorRow | null {
+  return (db.prepare(`SELECT * FROM warriors WHERE id = ?`).get(id) as unknown as WarriorRow) ?? null;
+}
+
+export interface PriceSnapshotRow {
+  id: number;
+  warrior_id: number;
+  report_code: string | null;
+  price: number;
+  source: "raid" | "drift";
+  created_at: number;
+}
+
+export function insertPriceSnapshot(
+  warriorId: number,
+  price: number,
+  source: "raid" | "drift",
+  reportCode: string | null,
+  createdAt: number
+) {
+  db.prepare(
+    `INSERT INTO price_snapshots (warrior_id, report_code, price, source, created_at) VALUES (?, ?, ?, ?, ?)`
+  ).run(warriorId, reportCode, price, source, createdAt);
+}
+
+export function getPriceSnapshotCount(): number {
+  return (db.prepare(`SELECT COUNT(*) AS c FROM price_snapshots`).get() as unknown as { c: number }).c;
+}
+
+// The single source of truth for "the current price" everywhere trading
+// logic reads it - always the most recently inserted snapshot (raid or
+// drift), never a live computeStock() recompute (see stock.ts).
+export function getLatestPrice(warriorId: number): number | null {
+  const row = db
+    .prepare(`SELECT price FROM price_snapshots WHERE warrior_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`)
+    .get(warriorId) as unknown as { price: number } | undefined;
+  return row ? row.price : null;
+}
+
+export function getLatestRaidPrice(warriorId: number): number | null {
+  const row = db
+    .prepare(
+      `SELECT price FROM price_snapshots WHERE warrior_id = ? AND source = 'raid' ORDER BY created_at DESC, id DESC LIMIT 1`
+    )
+    .get(warriorId) as unknown as { price: number } | undefined;
+  return row ? row.price : null;
+}
+
+export function getPriceHistory(warriorId: number): PriceSnapshotRow[] {
+  return db
+    .prepare(`SELECT * FROM price_snapshots WHERE warrior_id = ? ORDER BY created_at ASC, id ASC`)
+    .all(warriorId) as unknown as PriceSnapshotRow[];
+}
+
+export function listWarriorsWithRaidSnapshot(): WarriorRow[] {
+  return db
+    .prepare(
+      `SELECT DISTINCT w.* FROM warriors w JOIN price_snapshots ps ON ps.warrior_id = w.id WHERE ps.source = 'raid'`
+    )
+    .all() as unknown as WarriorRow[];
+}
+
+// Full price history for every visible warrior that has at least one
+// snapshot, joined with identity - shaped for the Stock page chart, which
+// plots real time on the x-axis (raid jumps and drift ticks both included)
+// rather than one point per report like the old computeStock()-only chart
+// did. Excludes currently-hidden warriors, same as every other Stock page
+// consumer (computeStock() already filters them out of casts/damage), so a
+// warrior hidden after trading stops leaking its price history publicly.
+export function getAllPriceSnapshots(): (PriceSnapshotRow & { player_name: string; server: string })[] {
+  return db
+    .prepare(
+      `SELECT ps.*, w.player_name, w.server
+       FROM price_snapshots ps
+       JOIN warriors w ON w.id = ps.warrior_id
+       WHERE NOT EXISTS (
+         SELECT 1 FROM hidden_players hp WHERE hp.player_name = w.player_name AND hp.server = w.server
+       )
+       ORDER BY ps.created_at ASC, ps.id ASC`
+    )
+    .all() as unknown as (PriceSnapshotRow & { player_name: string; server: string })[];
+}
+
+const STARTING_BALANCE = 1000;
+
+export interface WalletRow {
+  user_id: string;
+  balance: number;
+  created_at: number;
+}
+
+export function getOrCreateWallet(userId: string): WalletRow {
+  const existing = db.prepare(`SELECT * FROM wallets WHERE user_id = ?`).get(userId) as unknown as
+    | WalletRow
+    | undefined;
+  if (existing) return existing;
+  const now = Date.now();
+  db.prepare(`INSERT INTO wallets (user_id, balance, created_at) VALUES (?, ?, ?)`).run(
+    userId,
+    STARTING_BALANCE,
+    now
+  );
+  return { user_id: userId, balance: STARTING_BALANCE, created_at: now };
+}
+
+export interface HoldingRow {
+  user_id: string;
+  warrior_id: number;
+  shares: number;
+  cost_basis_total: number;
+}
+
+export function getHolding(userId: string, warriorId: number): HoldingRow | null {
+  return (
+    (db.prepare(`SELECT * FROM holdings WHERE user_id = ? AND warrior_id = ?`).get(userId, warriorId) as unknown as
+      | HoldingRow
+      | undefined) ?? null
+  );
+}
+
+export function listHoldingsWithContext(
+  userId: string
+): (HoldingRow & { player_name: string; server: string; latest_price: number | null })[] {
+  const rows = db
+    .prepare(
+      `SELECT h.*, w.player_name, w.server
+       FROM holdings h
+       JOIN warriors w ON w.id = h.warrior_id
+       WHERE h.user_id = ? AND h.shares > 0`
+    )
+    .all(userId) as unknown as (HoldingRow & { player_name: string; server: string })[];
+  return rows.map((r) => ({ ...r, latest_price: getLatestPrice(r.warrior_id) }));
+}
+
+export interface TransactionRow {
+  id: number;
+  user_id: string;
+  warrior_id: number;
+  side: "buy" | "sell" | "liquidation";
+  shares: number;
+  price: number;
+  total: number;
+  created_at: number;
+}
+
+export class TradeError extends Error {}
+
+// coinAmount is always "coin", both directions - buying spends that much
+// coin for however many (fractional) shares it buys at the latest price;
+// selling is "sell this much coin's worth", converted to shares and clamped
+// to what's actually held (so a rounding-safe "sell everything" is just
+// passing a large amount, no separate codepath needed). The whole thing runs
+// with zero `await` in the critical section, so node:sqlite's synchronous
+// DatabaseSync is enough to make this atomic against interleaving requests -
+// nothing else can run on this single-threaded process mid-trade.
+export function executeTrade(
+  userId: string,
+  warriorId: number,
+  side: "buy" | "sell",
+  coinAmount: number
+): TransactionRow {
+  if (!Number.isFinite(coinAmount) || coinAmount <= 0) {
+    throw new TradeError("Amount must be a positive number");
+  }
+
+  if (side === "buy") {
+    const hidden = db
+      .prepare(
+        `SELECT 1 FROM warriors w
+         JOIN hidden_players hp ON hp.player_name = w.player_name AND hp.server = w.server
+         WHERE w.id = ?`
+      )
+      .get(warriorId);
+    if (hidden) throw new TradeError("This warrior isn't currently tradeable");
+  }
+
+  const price = getLatestPrice(warriorId);
+  if (price === null) throw new TradeError("No price available for this warrior yet");
+
+  const wallet = getOrCreateWallet(userId);
+  const holding = getHolding(userId, warriorId);
+
+  let shares = coinAmount / price;
+  let total = coinAmount;
+
+  if (side === "buy") {
+    if (coinAmount > wallet.balance) throw new TradeError("Insufficient balance");
+  } else {
+    if (!holding || holding.shares <= 0) throw new TradeError("You don't hold any shares of this warrior");
+    if (shares > holding.shares) {
+      shares = holding.shares;
+      total = shares * price;
+    }
+  }
+
+  const now = Date.now();
+  db.exec("BEGIN");
+  try {
+    if (side === "buy") {
+      const newShares = (holding?.shares ?? 0) + shares;
+      const newCostBasis = (holding?.cost_basis_total ?? 0) + total;
+      db.prepare(
+        `INSERT INTO holdings (user_id, warrior_id, shares, cost_basis_total) VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id, warrior_id) DO UPDATE SET shares = excluded.shares, cost_basis_total = excluded.cost_basis_total`
+      ).run(userId, warriorId, newShares, newCostBasis);
+      db.prepare(`UPDATE wallets SET balance = balance - ? WHERE user_id = ?`).run(total, userId);
+    } else {
+      const remainingShares = holding!.shares - shares;
+      const remainingCostBasis =
+        remainingShares <= 0 ? 0 : holding!.cost_basis_total * (remainingShares / holding!.shares);
+      db.prepare(`UPDATE holdings SET shares = ?, cost_basis_total = ? WHERE user_id = ? AND warrior_id = ?`).run(
+        remainingShares,
+        remainingCostBasis,
+        userId,
+        warriorId
+      );
+      db.prepare(`UPDATE wallets SET balance = balance + ? WHERE user_id = ?`).run(total, userId);
+    }
+
+    const result = db
+      .prepare(
+        `INSERT INTO transactions (user_id, warrior_id, side, shares, price, total, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(userId, warriorId, side, shares, price, total, now);
+
+    db.exec("COMMIT");
+    return { id: Number(result.lastInsertRowid), user_id: userId, warrior_id: warriorId, side, shares, price, total, created_at: now };
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
+export interface NotificationRow {
+  id: number;
+  user_id: string;
+  message: string;
+  warrior_id: number | null;
+  amount: number | null;
+  created_at: number;
+  read_at: number | null;
+}
+
+export function listUnreadNotifications(userId: string): NotificationRow[] {
+  return db
+    .prepare(`SELECT * FROM notifications WHERE user_id = ? AND read_at IS NULL ORDER BY created_at DESC`)
+    .all(userId) as unknown as NotificationRow[];
+}
+
+export function markNotificationRead(userId: string, id: number) {
+  db.prepare(`UPDATE notifications SET read_at = ? WHERE id = ? AND user_id = ?`).run(Date.now(), id, userId);
+}
+
+export interface TransactionWithContext extends TransactionRow {
+  player_name: string;
+  server: string;
+  username: string;
+  avatar: string | null;
+}
+
+export function listTransactions(
+  opts: { warriorId?: number; userId?: string; limit?: number } = {}
+): TransactionWithContext[] {
+  const clauses: string[] = [];
+  const params: (string | number)[] = [];
+  if (opts.warriorId !== undefined) {
+    clauses.push("t.warrior_id = ?");
+    params.push(opts.warriorId);
+  }
+  if (opts.userId !== undefined) {
+    clauses.push("t.user_id = ?");
+    params.push(opts.userId);
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  params.push(opts.limit ?? 100);
+
+  return db
+    .prepare(
+      `SELECT t.*, w.player_name, w.server, u.username, u.avatar
+       FROM transactions t
+       JOIN warriors w ON w.id = t.warrior_id
+       JOIN users u ON u.discord_id = t.user_id
+       ${where}
+       ORDER BY t.created_at DESC, t.id DESC
+       LIMIT ?`
+    )
+    .all(...params) as unknown as TransactionWithContext[];
+}
+
+export interface LeaderboardEntry {
+  user_id: string;
+  username: string;
+  avatar: string | null;
+  balance: number;
+  holdingsValue: number;
+  netWorth: number;
+}
+
+// Net worth per user. Latest price per warrior is resolved once here (via
+// MAX(id), since ids are inserted in chronological order) rather than
+// per-holding, so this stays cheap even with many holders.
+export function getLeaderboard(): LeaderboardEntry[] {
+  const wallets = db
+    .prepare(`SELECT w.*, u.username, u.avatar FROM wallets w JOIN users u ON u.discord_id = w.user_id`)
+    .all() as unknown as (WalletRow & { username: string; avatar: string | null })[];
+  const holdings = db.prepare(`SELECT * FROM holdings WHERE shares > 0`).all() as unknown as HoldingRow[];
+
+  const latestPrices = new Map<number, number>();
+  const priceRows = db
+    .prepare(
+      `SELECT warrior_id, price FROM price_snapshots WHERE id IN (SELECT MAX(id) FROM price_snapshots GROUP BY warrior_id)`
+    )
+    .all() as unknown as { warrior_id: number; price: number }[];
+  for (const r of priceRows) latestPrices.set(r.warrior_id, r.price);
+
+  const holdingsValueByUser = new Map<string, number>();
+  for (const h of holdings) {
+    const price = latestPrices.get(h.warrior_id) ?? 0;
+    holdingsValueByUser.set(h.user_id, (holdingsValueByUser.get(h.user_id) ?? 0) + h.shares * price);
+  }
+
+  return wallets
+    .map((w) => {
+      const holdingsValue = holdingsValueByUser.get(w.user_id) ?? 0;
+      return {
+        user_id: w.user_id,
+        username: w.username,
+        avatar: w.avatar,
+        balance: w.balance,
+        holdingsValue,
+        netWorth: w.balance + holdingsValue,
+      };
+    })
+    .sort((a, b) => b.netWorth - a.netWorth);
+}
+
+export interface MarketStats {
+  totalCoinInWallets: number;
+  totalCoinInHoldings: number;
+  totalNetWorth: number;
+  userCount: number;
+  perWarriorVolume: { player_name: string; server: string; volume: number; tradeCount: number }[];
+  topTraders: { user_id: string; username: string; turnover: number; tradeCount: number }[];
+}
+
+export function getMarketStats(): MarketStats {
+  const leaderboard = getLeaderboard();
+  const totalCoinInWallets = leaderboard.reduce((sum, u) => sum + u.balance, 0);
+  const totalCoinInHoldings = leaderboard.reduce((sum, u) => sum + u.holdingsValue, 0);
+
+  const perWarriorVolume = db
+    .prepare(
+      `SELECT w.player_name, w.server, SUM(t.total) AS volume, COUNT(*) AS tradeCount
+       FROM transactions t
+       JOIN warriors w ON w.id = t.warrior_id
+       GROUP BY t.warrior_id
+       ORDER BY volume DESC`
+    )
+    .all() as unknown as { player_name: string; server: string; volume: number; tradeCount: number }[];
+
+  const topTraders = db
+    .prepare(
+      `SELECT u.discord_id AS user_id, u.username, SUM(t.total) AS turnover, COUNT(*) AS tradeCount
+       FROM transactions t
+       JOIN users u ON u.discord_id = t.user_id
+       GROUP BY t.user_id
+       ORDER BY turnover DESC
+       LIMIT 20`
+    )
+    .all() as unknown as { user_id: string; username: string; turnover: number; tradeCount: number }[];
+
+  return {
+    totalCoinInWallets,
+    totalCoinInHoldings,
+    totalNetWorth: totalCoinInWallets + totalCoinInHoldings,
+    userCount: leaderboard.length,
+    perWarriorVolume,
+    topTraders,
+  };
+}
+
+export function getLastDriftAt(): number | null {
+  const row = db.prepare(`SELECT last_drift_at FROM scheduler_state WHERE id = 1`).get() as unknown as
+    | { last_drift_at: number }
+    | undefined;
+  return row ? row.last_drift_at : null;
+}
+
+export function setLastDriftAt(ts: number) {
+  db.prepare(
+    `INSERT INTO scheduler_state (id, last_drift_at) VALUES (1, ?)
+     ON CONFLICT(id) DO UPDATE SET last_drift_at = excluded.last_drift_at`
+  ).run(ts);
 }
 
 // Stock scoring config lives entirely in the DB (seeded with

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { AdminLayout } from "../components/AdminLayout";
+import { useAuth } from "../authContext";
 import { getAdminUsers, setUserAdmin, type AdminUserRow } from "../api";
 
 function fmtDateTime(ts: number): string {
@@ -13,6 +14,7 @@ function fmtDateTime(ts: number): string {
 }
 
 export function AdminUsersPage() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<AdminUserRow[] | null>(null);
 
   useEffect(() => {
@@ -53,26 +55,34 @@ export function AdminUsersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {users?.map((user) => (
-                    <tr key={user.discordId}>
-                      <td>
-                        {user.avatar ? (
-                          <img className="user-avatar" src={user.avatar} alt="" width={28} height={28} />
-                        ) : (
-                          <span className="user-avatar user-avatar-placeholder" />
-                        )}
-                      </td>
-                      <td>{user.username}</td>
-                      <td>{user.discordId}</td>
-                      <td>{fmtDateTime(user.firstLoginAt)}</td>
-                      <td>{fmtDateTime(user.lastLoginAt)}</td>
-                      <td>
-                        <button type="button" onClick={() => toggleAdmin(user)}>
-                          {user.isAdmin ? "Revoke admin" : "Make admin"}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {users?.map((user) => {
+                    const isSelf = user.discordId === currentUser?.discordId;
+                    return (
+                      <tr key={user.discordId}>
+                        <td>
+                          {user.avatar ? (
+                            <img className="user-avatar" src={user.avatar} alt="" width={28} height={28} />
+                          ) : (
+                            <span className="user-avatar user-avatar-placeholder" />
+                          )}
+                        </td>
+                        <td>{user.username}</td>
+                        <td>{user.discordId}</td>
+                        <td>{fmtDateTime(user.firstLoginAt)}</td>
+                        <td>{fmtDateTime(user.lastLoginAt)}</td>
+                        <td>
+                          <button
+                            type="button"
+                            disabled={isSelf && user.isAdmin}
+                            title={isSelf && user.isAdmin ? "You can't revoke your own admin access" : undefined}
+                            onClick={() => toggleAdmin(user)}
+                          >
+                            {user.isAdmin ? "Revoke admin" : "Make admin"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </>
             )}

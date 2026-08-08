@@ -782,6 +782,37 @@ ul.player-toggle-list input[type='checkbox'] {
   flex: 1 1 auto;
 }
 
+.section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.range-toggle {
+  display: flex;
+  gap: 0.25rem;
+}
+.range-toggle button {
+  padding: 0.3rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.range-toggle button:hover:not(.active) {
+  color: var(--fg);
+  border-color: var(--muted);
+}
+.range-toggle button.active {
+  background: rgba(var(--nav-active-rgb), 0.15);
+  border-color: var(--nav-active);
+  color: var(--nav-active);
+}
+
 .wallet-summary {
   display: flex;
   gap: 2rem;

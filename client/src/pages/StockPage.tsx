@@ -192,6 +192,16 @@ function refreshHistory(setPriceHistory: (h: PlayerPriceHistory[]) => void) {
   getStockHistory().then(setPriceHistory);
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+type RangeKey = '1D' | '1W' | '1M' | '6M' | 'All';
+const RANGES: { key: RangeKey; label: string; ms: number | null }[] = [
+  { key: '1D', label: '1D', ms: DAY_MS },
+  { key: '1W', label: '1W', ms: 7 * DAY_MS },
+  { key: '1M', label: '1M', ms: 30 * DAY_MS },
+  { key: '6M', label: '6M', ms: 182 * DAY_MS },
+  { key: 'All', label: 'All', ms: null },
+];
+
 export function StockPage() {
   const { user } = useAuth();
   const [playersStock, setPlayersStock] = useState<PlayerStock[] | null>(null);
@@ -202,6 +212,7 @@ export function StockPage() {
   const [marketSummary, setMarketSummary] = useState<MarketSummary | null>(null);
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [censored, setCensored] = useState(false);
+  const [selectedRange, setSelectedRange] = useState<RangeKey>('All');
   const [sortKey, setSortKey] = useState<SortKey>('price');
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
   const [tradeModalTarget, setTradeModalTarget] = useState<{
@@ -318,17 +329,24 @@ export function StockPage() {
       const historyByPlayer = new Map(
         priceHistory.map((p) => [`${p.player_name}::${p.server}`, p]),
       );
+      const rangeMs = RANGES.find((r) => r.key === selectedRange)?.ms ?? null;
+      const cutoff = rangeMs !== null ? Date.now() - rangeMs : null;
 
       const datasets = leaderboard.flatMap((row, i) => {
         const history = historyByPlayer.get(rowKey(row));
         if (!history) return [];
+        const series =
+          cutoff !== null
+            ? history.series.filter((s) => s.created_at >= cutoff)
+            : history.series;
+        if (series.length === 0) return [];
         const isSelected = row.player_name === selectedPlayer;
         const alpha = !hasSelection || isSelected ? 1 : 0.12;
         const color = withAlpha(paletteColor(i), alpha);
         return [
           {
             label: censored ? '████████' : row.player_name,
-            data: history.series.map((s) => ({ x: s.created_at, y: s.price })),
+            data: series.map((s) => ({ x: s.created_at, y: s.price })),
             // Drift ticks make points ~6x denser than the old one-per-raid
             // series - Chart.js's default curve interpolation would overshoot
             // between real values at that density, so this chart specifically
@@ -345,7 +363,7 @@ export function StockPage() {
       });
 
       return datasets.sort((a, b) => a.order - b.order);
-    }, [priceHistory, leaderboard, selectedPlayer, censored]);
+    }, [priceHistory, leaderboard, selectedPlayer, censored, selectedRange]);
 
   return (
     <MarketLayout>
@@ -538,9 +556,23 @@ export function StockPage() {
       </div>
 
       <div className="card">
+        <div className="section-header-row">
+          <h2 style={{ marginTop: 0, marginBottom: 0 }}>Warrior Stock Prices</h2>
+          <div className="range-toggle">
+            {RANGES.map((r) => (
+              <button
+                key={r.key}
+                type="button"
+                className={r.key === selectedRange ? 'active' : undefined}
+                onClick={() => setSelectedRange(r.key)}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <LineChart
           datasets={chartDatasets}
-          title="Warrior Stock Prices"
           height={480}
           yScaleOptions={{ title: { display: true, text: 'Price' } }}
           xScaleOptions={{ type: 'linear', ticks: { display: true } }}

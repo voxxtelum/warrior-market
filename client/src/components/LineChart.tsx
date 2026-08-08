@@ -16,7 +16,10 @@ interface XScaleOptions {
 interface LineChartProps<TData = (number | null)[]> {
   labels?: string[];
   datasets: ChartDataset<"line", TData>[];
-  title: string;
+  // Rendered as Chart.js's own title plugin, inside the canvas - omit when
+  // the title is instead rendered as a page-level <h2> above the chart (see
+  // StockPage), which ComparePage's per-ability/per-metric charts don't do.
+  title?: string;
   height?: number;
   yScaleOptions?: YScaleOptions;
   xScaleOptions?: XScaleOptions;
@@ -57,7 +60,7 @@ export function LineChart<TData = (number | null)[]>({
         maintainAspectRatio: false,
         plugins: {
           legend: { position: "bottom" },
-          title: { display: true, text: title, color: "#e8e8ec", font: { size: 14 } },
+          title: title ? { display: true, text: title, color: "#e8e8ec", font: { size: 14 } } : undefined,
           tooltip: (xTooltipFormatter ?? xTickFormatter)
             ? {
                 callbacks: {

@@ -3,10 +3,7 @@ import { AdminLayout } from "../components/AdminLayout";
 import { AdjustCoinsModal } from "../components/AdjustCoinsModal";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { getAdminWallets, resetMarket, type AdminWalletRow } from "../api";
-
-function fmtCoin(n: number): string {
-  return n.toFixed(2);
-}
+import { fmtCoin } from "../format";
 
 export function AdminManageMarketPage() {
   const [wallets, setWallets] = useState<AdminWalletRow[] | null>(null);

@@ -22,7 +22,10 @@ const SCALAR_FIELDS: { key: ScalarKey; label: string; step: string; description:
   { key: "damageTrendZClamp", label: "Damage trend z-clamp", step: "0.5", description: "Max absolute z-score for the personal DPS trend, before cold-start shrink is applied" },
   { key: "driftIntervalMs", label: "Drift interval (ms)", step: "60000", description: "How often idle price drift ticks between raids - takes effect on the next tick, no restart needed" },
   { key: "driftMaxPct", label: "Drift max %", step: "0.001", description: "Largest fraction a single drift tick can move a price, in either direction" },
-  { key: "driftReversionStrength", label: "Drift reversion strength", step: "0.05", description: "How strongly drift pulls a price back toward its last raid-anchored value (0 = no pull, 1 = fully anchored)" },
+  { key: "driftReversionStrength", label: "Drift reversion strength", step: "0.05", description: "How strongly drift pulls a price back toward its anchor value (0 = no pull, 1 = fully anchored)" },
+  { key: "demandMaxPctPerTrade", label: "Demand max % per trade", step: "0.001", description: "Largest fraction a single trade's buy/sell pressure can move a price, in either direction" },
+  { key: "demandLiquidityDenominator", label: "Demand liquidity denominator", step: "1000", description: "Coin amount that produces ~1% price impact - smaller means the market is more sensitive to trading" },
+  { key: "tradeFeePct", label: "Trade fee %", step: "0.0005", description: "Fee taken on every buy and sell - makes round-trip wash-trading a guaranteed loss" },
 ];
 
 const BUCKETS = ["all", "dps", "tank"];

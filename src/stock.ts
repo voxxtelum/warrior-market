@@ -8,6 +8,7 @@ import {
   insertPriceSnapshot,
   listReports,
   replaceRaidPriceSnapshots,
+  setAnchorPrice,
 } from "./db";
 
 export interface StockAbilityConfig {
@@ -37,6 +38,9 @@ export interface StockConfig {
   driftIntervalMs: number;
   driftMaxPct: number;
   driftReversionStrength: number;
+  demandMaxPctPerTrade: number;
+  demandLiquidityDenominator: number;
+  tradeFeePct: number;
 }
 
 // Reads the DB-stored config on every call (rather than caching once at
@@ -61,6 +65,9 @@ export function loadStockConfig(): StockConfig {
     driftIntervalMs: parsed.driftIntervalMs ?? 60 * 60 * 1000,
     driftMaxPct: parsed.driftMaxPct ?? 0.005,
     driftReversionStrength: parsed.driftReversionStrength ?? 0.3,
+    demandMaxPctPerTrade: parsed.demandMaxPctPerTrade ?? 0.015,
+    demandLiquidityDenominator: parsed.demandLiquidityDenominator ?? 50000,
+    tradeFeePct: parsed.tradeFeePct ?? 0.0025,
   } as StockConfig;
 }
 
@@ -353,6 +360,9 @@ export function snapshotPricesForReport(reportCode: string, createdAt: number = 
     if (!point) continue;
     const warriorId = getOrCreateWarriorId(playerStock.player_name, playerStock.server);
     insertPriceSnapshot(warriorId, point.price, "raid", reportCode, createdAt);
+    // Raid results still fully override accumulated demand/drift - a new
+    // result resets the anchor idle drift reverts toward.
+    setAnchorPrice(warriorId, point.price);
   }
 }
 
@@ -364,15 +374,17 @@ export function snapshotPricesForReport(reportCode: string, createdAt: number = 
 // fact (a report gets deleted, or the market is reset).
 export function rebuildRaidPriceSnapshots(): void {
   const allStock = computeStock();
-  const entries = allStock.flatMap((playerStock) => {
+  const entries: { warriorId: number; price: number; reportCode: string; createdAt: number }[] = [];
+  for (const playerStock of allStock) {
     const warriorId = getOrCreateWarriorId(playerStock.player_name, playerStock.server);
-    return playerStock.series.map((point) => ({
-      warriorId,
-      price: point.price,
-      reportCode: point.report_code,
-      createdAt: point.start_time,
-    }));
-  });
+    for (const point of playerStock.series) {
+      entries.push({ warriorId, price: point.price, reportCode: point.report_code, createdAt: point.start_time });
+    }
+    // Anchor reflects each warrior's most recent raid result post-rebuild -
+    // series is chronological, so the last point is the latest.
+    const lastPoint = playerStock.series[playerStock.series.length - 1];
+    if (lastPoint) setAnchorPrice(warriorId, lastPoint.price);
+  }
   replaceRaidPriceSnapshots(entries);
 }
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Modal } from "./Modal";
 import { adjustWalletBalance, type AdminWalletRow } from "../api";
+import { fmtCoin } from "../format";
 
 interface AdjustCoinsModalProps {
   target: AdminWalletRow;
@@ -36,7 +37,7 @@ export function AdjustCoinsModal({ target, onClose, onAdjusted }: AdjustCoinsMod
 
   return (
     <Modal title={`Add/remove coins - ${target.username}`} onClose={onClose}>
-      <p className="subtitle adjust-coins-balance">Current balance: {target.balance.toFixed(2)} coins</p>
+      <p className="subtitle adjust-coins-balance">Current balance: {fmtCoin(target.balance)} coins</p>
       <div className="adjust-coins-form">
         <input
           type="number"

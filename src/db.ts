@@ -185,6 +185,18 @@ db.exec(`
   );
 `);
 
+// Idle drift reverts toward this, and demand-driven trade impact updates it -
+// unlike the old "latest raid snapshot" lookup it replaces, it isn't erased
+// by a later drift tick, only by a new raid result or another trade. Older
+// DBs predate this column; add it in place (existing rows backfilled below,
+// once DEFAULT_STOCK_CONFIG is defined).
+const warriorsHasAnchorPrice = (db.prepare(`PRAGMA table_info(warriors)`).all() as unknown as { name: string }[]).some(
+  (c) => c.name === "anchor_price"
+);
+if (!warriorsHasAnchorPrice) {
+  db.exec(`ALTER TABLE warriors ADD COLUMN anchor_price REAL`);
+}
+
 // One-time backfill: identities that already existed before this feature
 // shipped become visible warriors immediately (a guildmate's main isn't
 // "new"). Only warriors discovered from here on via getOrCreateWarriorId
@@ -240,10 +252,32 @@ const DEFAULT_STOCK_CONFIG = {
   driftIntervalMs: 60 * 60 * 1000,
   driftMaxPct: 0.005,
   driftReversionStrength: 0.3,
+  demandMaxPctPerTrade: 0.015,
+  demandLiquidityDenominator: 50000,
+  tradeFeePct: 0.0025,
 };
 const hasStockConfig = db.prepare(`SELECT 1 FROM stock_config WHERE id = 1`).get();
 if (!hasStockConfig) {
   db.prepare(`INSERT INTO stock_config (id, data) VALUES (1, ?)`).run(JSON.stringify(DEFAULT_STOCK_CONFIG));
+}
+
+// Backfill anchor_price for warriors that predate the demand-signal feature -
+// their anchor becomes their latest raid price if they have one, or the
+// configured starting price otherwise. Naturally idempotent (the WHERE
+// clause is empty once every warrior has been backfilled once), so this is
+// safe to leave running on every boot.
+const warriorsMissingAnchor = db
+  .prepare(`SELECT id FROM warriors WHERE anchor_price IS NULL`)
+  .all() as unknown as { id: number }[];
+if (warriorsMissingAnchor.length > 0) {
+  const getLatestRaidForBackfill = db.prepare(
+    `SELECT price FROM price_snapshots WHERE warrior_id = ? AND source = 'raid' ORDER BY created_at DESC, id DESC LIMIT 1`
+  );
+  const updateAnchor = db.prepare(`UPDATE warriors SET anchor_price = ? WHERE id = ?`);
+  for (const { id } of warriorsMissingAnchor) {
+    const raidRow = getLatestRaidForBackfill.get(id) as unknown as { price: number } | undefined;
+    updateAnchor.run(raidRow ? raidRow.price : DEFAULT_STOCK_CONFIG.startingPrice, id);
+  }
 }
 
 export interface ReportRow {
@@ -726,13 +760,20 @@ export function getLatestPrice(warriorId: number): number | null {
   return row ? row.price : null;
 }
 
-export function getLatestRaidPrice(warriorId: number): number | null {
-  const row = db
-    .prepare(
-      `SELECT price FROM price_snapshots WHERE warrior_id = ? AND source = 'raid' ORDER BY created_at DESC, id DESC LIMIT 1`
-    )
-    .get(warriorId) as unknown as { price: number } | undefined;
-  return row ? row.price : null;
+// The price idle drift reverts toward, and that demand-driven trades update -
+// deliberately not derived from price_snapshots (which would mean a demand
+// move gets slowly erased by the next drift tick, same as the old
+// "latest raid snapshot" anchor did). Only a new raid result or another
+// trade moves this; random drift noise never does.
+export function getAnchorPrice(warriorId: number): number | null {
+  const row = db.prepare(`SELECT anchor_price FROM warriors WHERE id = ?`).get(warriorId) as unknown as
+    | { anchor_price: number | null }
+    | undefined;
+  return row ? row.anchor_price : null;
+}
+
+export function setAnchorPrice(warriorId: number, price: number): void {
+  db.prepare(`UPDATE warriors SET anchor_price = ? WHERE id = ?`).run(price, warriorId);
 }
 
 export function getPriceHistory(warriorId: number): PriceSnapshotRow[] {
@@ -834,6 +875,12 @@ export interface TransactionRow {
 
 export class TradeError extends Error {}
 
+export interface TradeConfig {
+  demandMaxPctPerTrade: number;
+  demandLiquidityDenominator: number;
+  tradeFeePct: number;
+}
+
 // coinAmount is always "coin", both directions - buying spends that much
 // coin for however many (fractional) shares it buys at the latest price;
 // selling is "sell this much coin's worth", converted to shares and clamped
@@ -842,11 +889,22 @@ export class TradeError extends Error {}
 // with zero `await` in the critical section, so node:sqlite's synchronous
 // DatabaseSync is enough to make this atomic against interleaving requests -
 // nothing else can run on this single-threaded process mid-trade.
+//
+// Demand signal: the trade also nudges price in real time (a mini bonding
+// curve - impact scales with this trade's own coin value, clamped, no
+// windowed aggregation needed) and updates warriors.anchor_price so the move
+// sticks rather than being reverted by the next idle-drift tick (see
+// getAnchorPrice/drift.ts). A tradeFeePct is taken on top for buys / out of
+// proceeds for sells, so a same-user buy-then-sell round trip is a
+// guaranteed small loss even if price didn't move - the config values come
+// from the caller (stock.ts's loadStockConfig()) rather than being read
+// here, to avoid a circular import between db.ts and stock.ts.
 export function executeTrade(
   userId: string,
   warriorId: number,
   side: "buy" | "sell",
-  coinAmount: number
+  coinAmount: number,
+  config: TradeConfig
 ): TransactionRow {
   if (!Number.isFinite(coinAmount) || coinAmount <= 0) {
     throw new TradeError("Amount must be a positive number");
@@ -871,12 +929,14 @@ export function executeTrade(
 
   let shares = coinAmount / price;
   let total = coinAmount;
+  let fee = total * config.tradeFeePct;
 
   if (side === "buy") {
     // Cent-rounded comparison - a client "use 100% of balance" amount can
     // differ from wallet.balance by a sub-cent float rounding error while
     // still displaying as the same cent value, and shouldn't be rejected.
-    if (Math.round(coinAmount * 100) > Math.round(wallet.balance * 100)) {
+    // Required balance includes the fee, which is new on top of the order.
+    if (Math.round((coinAmount + fee) * 100) > Math.round(wallet.balance * 100)) {
       throw new TradeError("Insufficient balance");
     }
   } else {
@@ -884,8 +944,18 @@ export function executeTrade(
     if (shares > holding.shares) {
       shares = holding.shares;
       total = shares * price;
+      fee = total * config.tradeFeePct;
     }
   }
+
+  // Per-trade price impact: a buy pushes price up, a sell pushes it down, by
+  // a fraction of `total` (the actual executed order value, post-clamp)
+  // relative to demandLiquidityDenominator, clamped so no single trade can
+  // move price more than demandMaxPctPerTrade.
+  const rawImpactPct = total / config.demandLiquidityDenominator;
+  const clampedImpactPct = Math.min(config.demandMaxPctPerTrade, rawImpactPct);
+  const impactPct = clampedImpactPct * (side === "buy" ? 1 : -1);
+  const priceAfter = price * (1 + impactPct);
 
   const now = Date.now();
   db.exec("BEGIN");
@@ -897,7 +967,7 @@ export function executeTrade(
         `INSERT INTO holdings (user_id, warrior_id, shares, cost_basis_total) VALUES (?, ?, ?, ?)
          ON CONFLICT(user_id, warrior_id) DO UPDATE SET shares = excluded.shares, cost_basis_total = excluded.cost_basis_total`
       ).run(userId, warriorId, newShares, newCostBasis);
-      db.prepare(`UPDATE wallets SET balance = balance - ? WHERE user_id = ?`).run(total, userId);
+      db.prepare(`UPDATE wallets SET balance = balance - ? WHERE user_id = ?`).run(total + fee, userId);
     } else {
       const remainingShares = holding!.shares - shares;
       const remainingCostBasis =
@@ -908,7 +978,7 @@ export function executeTrade(
         userId,
         warriorId
       );
-      db.prepare(`UPDATE wallets SET balance = balance + ? WHERE user_id = ?`).run(total, userId);
+      db.prepare(`UPDATE wallets SET balance = balance + ? WHERE user_id = ?`).run(total - fee, userId);
     }
 
     const result = db
@@ -917,6 +987,9 @@ export function executeTrade(
          VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
       .run(userId, warriorId, side, shares, price, total, now);
+
+    insertPriceSnapshot(warriorId, priceAfter, "drift", null, now);
+    setAnchorPrice(warriorId, priceAfter);
 
     db.exec("COMMIT");
     return { id: Number(result.lastInsertRowid), user_id: userId, warrior_id: warriorId, side, shares, price, total, created_at: now };
@@ -989,6 +1062,7 @@ export interface LeaderboardEntry {
   balance: number;
   holdingsValue: number;
   netWorth: number;
+  linkedWarrior: { playerName: string; server: string } | null;
 }
 
 // Net worth per user. Latest price per warrior is resolved once here (via
@@ -996,8 +1070,19 @@ export interface LeaderboardEntry {
 // per-holding, so this stays cheap even with many holders.
 export function getLeaderboard(): LeaderboardEntry[] {
   const wallets = db
-    .prepare(`SELECT w.*, u.username, u.avatar FROM wallets w JOIN users u ON u.discord_id = w.user_id`)
-    .all() as unknown as (WalletRow & { username: string; avatar: string | null })[];
+    .prepare(
+      `SELECT w.*, u.username, u.avatar, wr.player_name AS linked_player_name, wr.server AS linked_server
+       FROM wallets w
+       JOIN users u ON u.discord_id = w.user_id
+       LEFT JOIN user_warrior_links l ON l.user_id = w.user_id
+       LEFT JOIN warriors wr ON wr.id = l.warrior_id`
+    )
+    .all() as unknown as (WalletRow & {
+      username: string;
+      avatar: string | null;
+      linked_player_name: string | null;
+      linked_server: string | null;
+    })[];
   const holdings = db.prepare(`SELECT * FROM holdings WHERE shares > 0`).all() as unknown as HoldingRow[];
 
   const latestPrices = new Map<number, number>();
@@ -1024,6 +1109,8 @@ export function getLeaderboard(): LeaderboardEntry[] {
         balance: w.balance,
         holdingsValue,
         netWorth: w.balance + holdingsValue,
+        linkedWarrior:
+          w.linked_player_name !== null ? { playerName: w.linked_player_name, server: w.linked_server! } : null,
       };
     })
     .sort((a, b) => b.netWorth - a.netWorth);

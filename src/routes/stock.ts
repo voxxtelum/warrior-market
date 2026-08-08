@@ -62,6 +62,9 @@ const NUMERIC_FIELDS: (keyof StockConfig)[] = [
   "driftIntervalMs",
   "driftMaxPct",
   "driftReversionStrength",
+  "demandMaxPctPerTrade",
+  "demandLiquidityDenominator",
+  "tradeFeePct",
 ];
 
 function validateStockConfig(body: unknown): string | null {

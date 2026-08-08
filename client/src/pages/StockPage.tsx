@@ -7,7 +7,7 @@ import { TradeModal } from '../components/TradeModal';
 import { ArrowsRightLeftIcon } from '../components/icons/ArrowsRightLeftIcon';
 import { useAuth } from '../authContext';
 import { paletteColor, withAlpha } from '../chartColors';
-import { fmtDateTime, priceDelta } from '../format';
+import { fmtCoin, fmtDate, fmtDateTime, priceDelta } from '../format';
 import {
   getStock,
   getStockHistory,
@@ -16,10 +16,6 @@ import {
   type PlayerStock,
   type WalletData,
 } from '../api';
-
-function fmtCoin(n: number): string {
-  return n.toFixed(2);
-}
 
 function hexToRgb(hex: string): [number, number, number] {
   return [
@@ -71,6 +67,11 @@ function heatRange(values: number[]): { maxPos: number; minNeg: number } {
 interface LeaderboardRow {
   player_name: string;
   server: string;
+  // The actual current tradable price (from price_snapshots - raid + drift +
+  // demand), shown in the Price column and used to sort by it. Distinct from
+  // `price` below, which is purely raid-performance-derived and only moves
+  // on raid ingest - kept separate for the "since last raid" metrics.
+  currentPrice: number;
   price: number;
   raidCount: number;
   prevPrice: number | null;
@@ -78,7 +79,10 @@ interface LeaderboardRow {
   avatar: string | null;
 }
 
-function buildLeaderboard(playersStock: PlayerStock[]): LeaderboardRow[] {
+function buildLeaderboard(
+  playersStock: PlayerStock[],
+  currentPriceByPlayer: Map<string, number>,
+): LeaderboardRow[] {
   return playersStock
     .filter((p) => p.series.length > 0)
     .map((p) => {
@@ -87,6 +91,7 @@ function buildLeaderboard(playersStock: PlayerStock[]): LeaderboardRow[] {
       return {
         player_name: p.player_name,
         server: p.server,
+        currentPrice: currentPriceByPlayer.get(`${p.player_name}::${p.server}`) ?? last.price,
         price: last.price,
         raidCount: p.series.length,
         prevPrice: prev ? prev.price : null,
@@ -163,7 +168,7 @@ type SortKey = 'player' | 'price' | 'change' | 'avgGrowth' | 'raids';
 
 function sortValue(row: LeaderboardRow, key: SortKey): string | number | null {
   if (key === 'player') return row.player_name;
-  if (key === 'price') return row.price;
+  if (key === 'price') return row.currentPrice;
   if (key === 'change') return changeValue(row);
   if (key === 'avgGrowth') return avgGrowthPerRaid(row.series);
   if (key === 'raids') return row.raidCount;
@@ -218,9 +223,23 @@ export function StockPage() {
     refreshWallet();
   }
 
+  // The most recent price_snapshots point per player (raid + drift + demand
+  // together) - the actual price a trade would fill at right now, as opposed
+  // to `playersStock`'s purely raid-derived series.
+  const currentPriceByPlayer = useMemo(() => {
+    const map = new Map<string, number>();
+    if (priceHistory) {
+      for (const p of priceHistory) {
+        const last = p.series[p.series.length - 1];
+        if (last) map.set(`${p.player_name}::${p.server}`, last.price);
+      }
+    }
+    return map;
+  }, [priceHistory]);
+
   const leaderboard = useMemo(
-    () => (playersStock ? buildLeaderboard(playersStock) : []),
-    [playersStock],
+    () => (playersStock ? buildLeaderboard(playersStock, currentPriceByPlayer) : []),
+    [playersStock, currentPriceByPlayer],
   );
 
   const rankDeltas = useMemo(() => buildRankDeltas(leaderboard), [leaderboard]);
@@ -272,23 +291,17 @@ export function StockPage() {
     return heatRange(growthValues);
   }, [leaderboard]);
 
-  // x-axis is every distinct snapshot timestamp across all warriors (raid
-  // jumps and hourly drift ticks together), not one point per report -
-  // reading from the immutable price_snapshots ledger rather than the live
-  // computeStock() series (see stock.ts) so this can't retroactively change
-  // if stock_config is edited later, and so drift shows up at all.
-  const chartTimestamps = useMemo(() => {
-    if (!priceHistory) return [];
-    const set = new Set<number>();
-    for (const player of priceHistory) {
-      for (const point of player.series) set.add(point.created_at);
-    }
-    return Array.from(set).sort((a, b) => a - b);
-  }, [priceHistory]);
-
-  const chartDatasets: ChartDataset<'line', (number | null)[]>[] =
+  // Each dataset supplies its own real {x, y} points (x = epoch ms) on a
+  // linear x-axis, rather than being aligned to a shared category grid - so
+  // axis spacing matches real elapsed time instead of stretching dense,
+  // hourly-drift-heavy stretches between raids to match a handful of raid
+  // points. Reading from the immutable price_snapshots ledger (raid jumps
+  // and drift ticks together) rather than the live computeStock() series
+  // (see stock.ts) so this can't retroactively change if stock_config is
+  // edited later, and so drift shows up at all.
+  const chartDatasets: ChartDataset<'line', { x: number; y: number }[]>[] =
     useMemo(() => {
-      if (!priceHistory || chartTimestamps.length === 0) return [];
+      if (!priceHistory) return [];
       const hasSelection =
         selectedPlayer !== null &&
         leaderboard.some((p) => p.player_name === selectedPlayer);
@@ -302,14 +315,10 @@ export function StockPage() {
         const isSelected = row.player_name === selectedPlayer;
         const alpha = !hasSelection || isSelected ? 1 : 0.12;
         const color = withAlpha(paletteColor(i), alpha);
-        const priceByTimestamp = new Map(
-          history.series.map((s) => [s.created_at, s.price]),
-        );
         return [
           {
             label: censored ? '████████' : row.player_name,
-            data: chartTimestamps.map((t) => priceByTimestamp.get(t) ?? null),
-            spanGaps: true,
+            data: history.series.map((s) => ({ x: s.created_at, y: s.price })),
             // Drift ticks make points ~6x denser than the old one-per-raid
             // series - Chart.js's default curve interpolation would overshoot
             // between real values at that density, so this chart specifically
@@ -326,7 +335,7 @@ export function StockPage() {
       });
 
       return datasets.sort((a, b) => a.order - b.order);
-    }, [priceHistory, chartTimestamps, leaderboard, selectedPlayer, censored]);
+    }, [priceHistory, leaderboard, selectedPlayer, censored]);
 
   return (
     <MarketLayout>
@@ -441,7 +450,7 @@ export function StockPage() {
                         </span>
                       )}
                     </td>
-                    <td>{fmtPrice(row.price)}</td>
+                    <td>{fmtPrice(row.currentPrice)}</td>
                     <td>
                       <Sparkline prices={row.series.map((s) => s.price)} />
                     </td>
@@ -501,12 +510,13 @@ export function StockPage() {
 
       <div className="card">
         <LineChart
-          labels={chartTimestamps.map(fmtDateTime)}
           datasets={chartDatasets}
           title="Warrior Stock Prices"
           height={480}
           yScaleOptions={{ title: { display: true, text: 'Price' } }}
-          xScaleOptions={{ ticks: { display: false } }}
+          xScaleOptions={{ type: 'linear', ticks: { display: true } }}
+          xTickFormatter={fmtDate}
+          xTooltipFormatter={fmtDateTime}
         />
       </div>
 

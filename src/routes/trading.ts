@@ -11,6 +11,7 @@ import {
   type TransactionWithContext,
 } from "../db";
 import { requireAuth } from "../middleware/auth";
+import { loadStockConfig } from "../stock";
 
 export const tradingRouter = Router();
 
@@ -52,6 +53,9 @@ tradingRouter.get("/wallet", requireAuth, (req, res) => {
     balance: wallet.balance,
     holdings,
     netWorth: wallet.balance + holdingsValue,
+    // Exposed here (rather than /api/stock/config, which is admin-only) so
+    // the trade modal can show a live fee preview for any logged-in trader.
+    tradeFeePct: loadStockConfig().tradeFeePct,
   });
 });
 
@@ -74,7 +78,12 @@ tradingRouter.post("/trade", requireAuth, (req, res) => {
   }
 
   try {
-    const tx = executeTrade(req.user!.discord_id, warriorId, side, amount);
+    const config = loadStockConfig();
+    const tx = executeTrade(req.user!.discord_id, warriorId, side, amount, {
+      demandMaxPctPerTrade: config.demandMaxPctPerTrade,
+      demandLiquidityDenominator: config.demandLiquidityDenominator,
+      tradeFeePct: config.tradeFeePct,
+    });
     res.status(201).json({ shares: tx.shares, price: tx.price, total: tx.total });
   } catch (err) {
     if (err instanceof TradeError) {
@@ -106,6 +115,7 @@ tradingRouter.get("/leaderboard", (_req, res) => {
       balance: e.balance,
       holdingsValue: e.holdingsValue,
       netWorth: e.netWorth,
+      linkedWarrior: e.linkedWarrior,
     }))
   );
 });

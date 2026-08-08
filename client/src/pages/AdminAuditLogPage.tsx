@@ -3,12 +3,12 @@ import { AdminLayout } from "../components/AdminLayout";
 import { Modal } from "../components/Modal";
 import { Pagination } from "../components/Pagination";
 import { getAdminAuditLog, type AdminWalletAdjustment } from "../api";
-import { fmtDateTime } from "../format";
+import { fmtCoin, fmtDateTime } from "../format";
 
 const PAGE_SIZE = 50;
 
 function fmtDelta(delta: number): string {
-  return `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}`;
+  return `${delta >= 0 ? "+" : ""}${fmtCoin(delta)}`;
 }
 
 export function AdminAuditLogPage() {
@@ -61,7 +61,7 @@ export function AdminAuditLogPage() {
                   <td>{entry.adminUsername}</td>
                   <td>{entry.targetUsername}</td>
                   <td>{fmtDelta(entry.delta)}</td>
-                  <td>{entry.balanceAfter.toFixed(2)}</td>
+                  <td>{fmtCoin(entry.balanceAfter)}</td>
                   <td>
                     {entry.reason ? (
                       <a

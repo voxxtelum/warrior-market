@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Modal } from './Modal';
 import { useAuth } from '../authContext';
-import { getStock, getWallet, postTrade, type WalletData } from '../api';
-import { priceDelta } from '../format';
+import {
+  getStock,
+  getWallet,
+  getWarriorPrice,
+  postTrade,
+  type WalletData,
+} from '../api';
+import { fmtCoin, priceDelta } from '../format';
 
 interface TradeModalProps {
   playerName: string;
   server: string;
   onClose: () => void;
   onTraded?: () => void;
-}
-
-function fmtCoin(n: number): string {
-  return n.toFixed(2);
 }
 
 // Both directions take a coin amount ("buy $X worth" / "sell $X worth") -
@@ -40,11 +42,22 @@ export function TradeModal({
 
   const load = useCallback(() => {
     if (!user) return;
-    Promise.all([getWallet(), getStock()]).then(([w, stock]) => {
+    // Current price comes from the actual tradable-price endpoint (what a
+    // trade fills at right now - raid + drift + demand together), not
+    // getStock()'s purely raid-performance series - that series is only
+    // used for prevPrice, driving the "Change (last raid)" label, which is
+    // deliberately raid-cadence.
+    Promise.all([
+      getWallet(),
+      getStock(),
+      getWarriorPrice(playerName, server),
+    ]).then(([w, stock, currentPrice]) => {
       setWallet(w);
-      const series = stock.find((s) => s.player_name === playerName && s.server === server)?.series ?? [];
-      setPrice(series.length > 0 ? series[series.length - 1].price : null);
-      setPrevPrice(series.length > 1 ? series[series.length - 2].price : null);
+      const series =
+        stock.find((s) => s.player_name === playerName && s.server === server)
+          ?.series ?? [];
+      setPrice(currentPrice);
+      setPrevPrice(series.length > 0 ? series[series.length - 1].price : null);
     });
   }, [user, playerName, server]);
 
@@ -54,17 +67,31 @@ export function TradeModal({
     wallet?.holdings.find(
       (h) => h.playerName === playerName && h.server === server,
     ) ?? null;
-  const change = price !== null && prevPrice !== null ? priceDelta(prevPrice, price) : null;
+  const change =
+    price !== null && prevPrice !== null ? priceDelta(prevPrice, price) : null;
   const numeric = Number(amount);
   const validAmount =
     amount.trim() !== '' && Number.isFinite(numeric) && numeric > 0;
+  const tradeFeePct = wallet?.tradeFeePct ?? 0;
+  // Fee is added on top of the order for buys (extra cost) and subtracted
+  // from proceeds for sells (less credited) - never changes the share count.
+  const feeAmount = validAmount ? numeric * tradeFeePct : null;
+  const totalAmount =
+    validAmount && feeAmount !== null
+      ? side === 'buy'
+        ? numeric + feeAmount
+        : numeric - feeAmount
+      : null;
   // Comparing raw floats here would occasionally flag an exact "use 100% of
   // balance" amount as over balance, since the slider's derived amount and
   // the wallet balance can differ by a sub-cent float rounding error even
   // though both display as the same cent value - so compare at cent
-  // precision instead.
+  // precision instead. Buy-side balance requirement includes the fee.
   const overBalance =
-    validAmount && wallet !== null && Math.round(numeric * 100) > Math.round(wallet.balance * 100);
+    validAmount &&
+    wallet !== null &&
+    Math.round((side === 'buy' ? numeric * (1 + tradeFeePct) : numeric) * 100) >
+      Math.round(wallet.balance * 100);
   const estimatedShares =
     validAmount && price !== null && price > 0 ? numeric / price : null;
 
@@ -72,9 +99,18 @@ export function TradeModal({
   // side (balance to buy with, position value to sell) - it drives `amount`
   // directly rather than tracking its own state, so typing in the field and
   // dragging the slider can never disagree about what the order size is.
-  const maxForSide = side === 'buy' ? (wallet?.balance ?? 0) : (holding?.marketValue ?? 0);
+  // Buy-side max is reduced so that amount + fee never exceeds balance.
+  const maxForSide =
+    side === 'buy'
+      ? (wallet?.balance ?? 0) / (1 + tradeFeePct)
+      : (holding?.marketValue ?? 0);
   const sliderPct =
-    maxForSide > 0 ? Math.max(0, Math.min(100, Math.round(((numeric || 0) / maxForSide) * 100))) : 0;
+    maxForSide > 0
+      ? Math.max(
+          0,
+          Math.min(100, Math.round(((numeric || 0) / maxForSide) * 100)),
+        )
+      : 0;
 
   function handleSliderChange(pct: number) {
     if (maxForSide <= 0) return;
@@ -117,7 +153,11 @@ export function TradeModal({
 
   return (
     <Modal
-      title={<>Trade <span className="warrior-name">{playerName}</span></>}
+      title={
+        <>
+          Trade <span className="warrior-name">{playerName}</span>
+        </>
+      }
       onClose={onClose}
       contentClassName="trade-modal-content"
     >
@@ -128,7 +168,11 @@ export function TradeModal({
       ) : (
         <>
           <div className="trade-side-toggle">
-            <button type="button" className={side === 'buy' ? 'active' : undefined} onClick={() => setSide('buy')}>
+            <button
+              type="button"
+              className={side === 'buy' ? 'active' : undefined}
+              onClick={() => setSide('buy')}
+            >
               Buy
             </button>
             <button
@@ -143,7 +187,9 @@ export function TradeModal({
           <div className="trade-info-list">
             <div className="trade-info-row">
               <span className="trade-info-label">Available balance</span>
-              <span className="trade-info-value">{wallet ? fmtCoin(wallet.balance) : '–'}</span>
+              <span className="trade-info-value">
+                {wallet ? fmtCoin(wallet.balance) : '–'}
+              </span>
             </div>
             <div className="trade-info-row">
               <span className="trade-info-label">Shares owned</span>
@@ -153,11 +199,17 @@ export function TradeModal({
             </div>
             <div className="trade-info-row">
               <span className="trade-info-label">Current price</span>
-              <span className="trade-info-value">{price !== null ? fmtCoin(price) : '–'}</span>
+              <span className="trade-info-value">
+                {price !== null ? fmtCoin(price) : '–'}
+              </span>
             </div>
             <div className="trade-info-row">
-              <span className="trade-info-label">Change (last raid)</span>
-              <span className={change ? `trade-info-value ${change.cls}` : 'trade-info-value'}>
+              <span className="trade-info-label">Change</span>
+              <span
+                className={
+                  change ? `trade-info-value ${change.cls}` : 'trade-info-value'
+                }
+              >
                 {change ? change.text : <span className="no-data">–</span>}
               </span>
             </div>
@@ -176,7 +228,9 @@ export function TradeModal({
                 autoFocus
               />
               <span className="trade-amount-preview">
-                {estimatedShares !== null ? `≈ ${estimatedShares.toFixed(3)} shares` : ''}
+                {estimatedShares !== null
+                  ? `≈ ${estimatedShares.toFixed(3)} shares`
+                  : ''}
               </span>
             </div>
           </div>
@@ -195,6 +249,23 @@ export function TradeModal({
             <span className="trade-slider-pct">{sliderPct}%</span>
           </div>
 
+          <div className="trade-info-list">
+            <div className="trade-info-row">
+              <span className="trade-info-label">
+                Fee ({(tradeFeePct * 100).toFixed(2)}%)
+              </span>
+              <span className="trade-info-value">
+                {feeAmount !== null ? fmtCoin(feeAmount) : '–'}
+              </span>
+            </div>
+            <div className="trade-info-row">
+              <span className="trade-info-label">Total</span>
+              <span className="trade-info-value">
+                {totalAmount !== null ? fmtCoin(totalAmount) : '–'}
+              </span>
+            </div>
+          </div>
+
           <button
             type="button"
             className={side === 'sell' ? 'trade-cta sell' : 'trade-cta'}
@@ -207,7 +278,8 @@ export function TradeModal({
           <div className="trade-status-area">
             {side === 'buy' && overBalance && !status && (
               <p className="trade-modal-hint">
-                Amount exceeds your balance of {fmtCoin(wallet!.balance)} coins.
+                Total (including fee) exceeds your balance of{' '}
+                {fmtCoin(wallet!.balance)} coins.
               </p>
             )}
             {status && <p className={`status ${status.kind}`}>{status.text}</p>}

@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
-import { MarketLayout } from "../components/MarketLayout";
-import { getLeaderboard, type LeaderboardEntryView } from "../api";
+import { useEffect, useState } from 'react';
+import { MarketLayout } from '../components/MarketLayout';
+import { getLeaderboard, type LeaderboardEntryView } from '../api';
+import { fmtCoin } from '../format';
 
 export function LeaderboardPage() {
   const [entries, setEntries] = useState<LeaderboardEntryView[] | null>(null);
@@ -34,10 +35,32 @@ export function LeaderboardPage() {
               {entries?.map((e, i) => (
                 <tr key={e.username + i}>
                   <td>{i + 1}</td>
-                  <td>{e.username}</td>
-                  <td>{e.balance.toFixed(2)}</td>
-                  <td>{e.holdingsValue.toFixed(2)}</td>
-                  <td>{e.netWorth.toFixed(2)}</td>
+                  <td>
+                    <span className="player-name-cell">
+                      {e.avatar && (
+                        <img
+                          className="user-avatar player-name-avatar"
+                          src={e.avatar}
+                          alt=""
+                          width={20}
+                          height={20}
+                        />
+                      )}
+                      {e.username}
+                      {e.linkedWarrior && (
+                        <>
+                          {` (`}
+                          <span className="warrior-name">
+                            {`${e.linkedWarrior.playerName}-${e.linkedWarrior.server}`}
+                          </span>
+                          {`)`}
+                        </>
+                      )}
+                    </span>
+                  </td>
+                  <td>{fmtCoin(e.balance)}</td>
+                  <td>{fmtCoin(e.holdingsValue)}</td>
+                  <td>{fmtCoin(e.netWorth)}</td>
                 </tr>
               ))}
             </tbody>

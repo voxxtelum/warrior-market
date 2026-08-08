@@ -224,6 +224,9 @@ export interface StockConfig {
   driftIntervalMs: number;
   driftMaxPct: number;
   driftReversionStrength: number;
+  demandMaxPctPerTrade: number;
+  demandLiquidityDenominator: number;
+  tradeFeePct: number;
 }
 
 export async function getStockConfig(): Promise<StockConfig> {
@@ -295,12 +298,23 @@ export interface WalletData {
   balance: number;
   holdings: HoldingView[];
   netWorth: number;
+  tradeFeePct: number;
 }
 
 export async function getWallet(): Promise<WalletData> {
   const res = await fetch("/api/trading/wallet");
   if (!res.ok) throw new Error("Failed to load wallet");
   return res.json();
+}
+
+// The actual current tradable price (price_snapshots' latest row - raid +
+// drift + demand together), as opposed to getStock()'s purely
+// raid-performance-derived series. This is what a trade actually fills at.
+export async function getWarriorPrice(playerName: string, server: string): Promise<number | null> {
+  const res = await fetch(`/api/trading/price/${encodeURIComponent(playerName)}/${encodeURIComponent(server)}`);
+  if (!res.ok) throw new Error('Failed to load price');
+  const body = await res.json();
+  return body.price;
 }
 
 export async function postTrade(
@@ -349,6 +363,7 @@ export interface LeaderboardEntryView {
   balance: number;
   holdingsValue: number;
   netWorth: number;
+  linkedWarrior: { playerName: string; server: string } | null;
 }
 
 export async function getLeaderboard(): Promise<LeaderboardEntryView[]> {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AdminLayout } from "../components/AdminLayout";
 import { getAdminMarketStats, type MarketStats } from "../api";
+import { fmtCoin } from "../format";
 
 export function AdminMarketStatsPage() {
   const [stats, setStats] = useState<MarketStats | null>(null);
@@ -24,15 +25,15 @@ export function AdminMarketStatsPage() {
             <span className="label">Traders</span>
           </div>
           <div className="wallet-summary-item">
-            <span className="value">{stats ? stats.totalCoinInWallets.toFixed(2) : "–"}</span>
+            <span className="value">{stats ? fmtCoin(stats.totalCoinInWallets) : "–"}</span>
             <span className="label">Coin in wallets</span>
           </div>
           <div className="wallet-summary-item">
-            <span className="value">{stats ? stats.totalCoinInHoldings.toFixed(2) : "–"}</span>
+            <span className="value">{stats ? fmtCoin(stats.totalCoinInHoldings) : "–"}</span>
             <span className="label">Coin deployed in holdings</span>
           </div>
           <div className="wallet-summary-item">
-            <span className="value">{stats ? stats.totalNetWorth.toFixed(2) : "–"}</span>
+            <span className="value">{stats ? fmtCoin(stats.totalNetWorth) : "–"}</span>
             <span className="label">Total net worth</span>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Modal } from './Modal';
 import { useAuth } from '../authContext';
+import { useIsMobile } from '../hooks/useIsMobile';
 import {
   getStock,
   getWallet,
@@ -29,6 +30,7 @@ export function TradeModal({
   onTraded,
 }: TradeModalProps) {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [price, setPrice] = useState<number | null>(null);
   const [prevPrice, setPrevPrice] = useState<number | null>(null);
@@ -225,7 +227,7 @@ export function TradeModal({
                 onChange={(e) => setAmount(e.target.value)}
                 min="0"
                 step="1"
-                autoFocus
+                autoFocus={!isMobile}
               />
               <span className="trade-amount-preview">
                 {estimatedShares !== null

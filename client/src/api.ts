@@ -300,14 +300,23 @@ export async function getWallet(): Promise<WalletData> {
   return res.json();
 }
 
-// The actual current tradable price (price_snapshots' latest row - raid +
-// drift + demand together), as opposed to getStock()'s purely
-// raid-performance-derived series. This is what a trade actually fills at.
-export async function getWarriorPrice(playerName: string, server: string): Promise<number | null> {
+export interface WarriorPrice {
+  // The actual current tradable price (price_snapshots' latest row - raid +
+  // drift + demand together), as opposed to getStock()'s purely
+  // raid-performance-derived series. This is what a trade actually fills at.
+  price: number | null;
+  // Frozen ledger value for the most recent raid, as opposed to
+  // getStock()'s live-recomputed series (which reapplies the *current*
+  // scoring config across all history, and so can drift far from what's
+  // actually in the ledger/chart). Use this, not getStock(), for any
+  // "change since last raid" figure compared against the live price.
+  lastRaidPrice: number | null;
+}
+
+export async function getWarriorPrice(playerName: string, server: string): Promise<WarriorPrice> {
   const res = await fetch(`/api/trading/price/${encodeURIComponent(playerName)}/${encodeURIComponent(server)}`);
   if (!res.ok) throw new Error('Failed to load price');
-  const body = await res.json();
-  return body.price;
+  return res.json();
 }
 
 export async function postTrade(

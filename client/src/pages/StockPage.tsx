@@ -75,6 +75,12 @@ interface LeaderboardRow {
   // `price` below, which is purely raid-performance-derived and only moves
   // on raid ingest - kept separate for the "since last raid" metrics.
   currentPrice: number;
+  // Frozen ledger value for the most recent raid (price_snapshots, source =
+  // 'raid') - the correct baseline for comparing against currentPrice, since
+  // both come from the same frozen ledger. Distinct from `price` below,
+  // which is computeStock()'s live-recomputed value for that same raid and
+  // can drift far from the ledger once scoring config has changed since.
+  lastRaidPrice: number | null;
   price: number;
   raidCount: number;
   prevPrice: number | null;
@@ -85,18 +91,19 @@ interface LeaderboardRow {
 function buildLeaderboard(
   playersStock: PlayerStock[],
   currentPriceByPlayer: Map<string, number>,
+  lastRaidPriceByPlayer: Map<string, number>,
 ): LeaderboardRow[] {
   return playersStock
     .filter((p) => p.series.length > 0)
     .map((p) => {
       const last = p.series[p.series.length - 1];
       const prev = p.series.length > 1 ? p.series[p.series.length - 2] : null;
+      const key = `${p.player_name}::${p.server}`;
       return {
         player_name: p.player_name,
         server: p.server,
-        currentPrice:
-          currentPriceByPlayer.get(`${p.player_name}::${p.server}`) ??
-          last.price,
+        currentPrice: currentPriceByPlayer.get(key) ?? last.price,
+        lastRaidPrice: lastRaidPriceByPlayer.get(key) ?? null,
         price: last.price,
         raidCount: p.series.length,
         prevPrice: prev ? prev.price : null,
@@ -264,10 +271,29 @@ export function StockPage() {
     return map;
   }, [priceHistory]);
 
+  // The frozen ledger's most recent raid-sourced snapshot per player -
+  // series is chronological, so the last entry with source 'raid' is it.
+  const lastRaidPriceByPlayer = useMemo(() => {
+    const map = new Map<string, number>();
+    if (priceHistory) {
+      for (const p of priceHistory) {
+        for (let i = p.series.length - 1; i >= 0; i--) {
+          if (p.series[i].source === 'raid') {
+            map.set(`${p.player_name}::${p.server}`, p.series[i].price);
+            break;
+          }
+        }
+      }
+    }
+    return map;
+  }, [priceHistory]);
+
   const leaderboard = useMemo(
     () =>
-      playersStock ? buildLeaderboard(playersStock, currentPriceByPlayer) : [],
-    [playersStock, currentPriceByPlayer],
+      playersStock
+        ? buildLeaderboard(playersStock, currentPriceByPlayer, lastRaidPriceByPlayer)
+        : [],
+    [playersStock, currentPriceByPlayer, lastRaidPriceByPlayer],
   );
 
   const rankDeltas = useMemo(() => buildRankDeltas(leaderboard), [leaderboard]);
@@ -462,10 +488,16 @@ export function StockPage() {
                     ? priceDelta(row.prevPrice, row.price)
                     : null;
                 // Same "Change" shown in the trade modal - the live tradable
-                // price (raid + drift + demand) against the last raid's
-                // snapshot price, as opposed to `delta` above which compares
-                // the last two raid snapshots only.
-                const liveDelta = priceDelta(row.price, row.currentPrice);
+                // price against the frozen ledger's last raid snapshot, as
+                // opposed to `delta` above which compares the last two raid
+                // snapshots only. Deliberately uses row.lastRaidPrice (frozen
+                // ledger), not row.price (computeStock()'s live-recomputed
+                // value) - mixing a frozen number with a live-recomputed one
+                // produces a delta that doesn't match what's on the chart.
+                const liveDelta =
+                  row.lastRaidPrice !== null
+                    ? priceDelta(row.lastRaidPrice, row.currentPrice)
+                    : null;
                 const pct =
                   row.prevPrice !== null
                     ? ((row.price - row.prevPrice) / row.prevPrice) * 100
@@ -533,7 +565,9 @@ export function StockPage() {
                     <td>
                       <div className="price-cell">
                         <span>{fmtPrice(row.currentPrice)}</span>
-                        <span className={`price-cell-change ${liveDelta.cls}`}>{liveDelta.text}</span>
+                        {liveDelta && (
+                          <span className={`price-cell-change ${liveDelta.cls}`}>{liveDelta.text}</span>
+                        )}
                       </div>
                     </td>
                     <td>

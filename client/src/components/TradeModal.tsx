@@ -3,7 +3,6 @@ import { Modal } from './Modal';
 import { useAuth } from '../authContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 import {
-  getStock,
   getWallet,
   getWarriorPrice,
   postTrade,
@@ -44,23 +43,20 @@ export function TradeModal({
 
   const load = useCallback(() => {
     if (!user) return;
-    // Current price comes from the actual tradable-price endpoint (what a
-    // trade fills at right now - raid + drift + demand together), not
-    // getStock()'s purely raid-performance series - that series is only
-    // used for prevPrice, driving the "Change (last raid)" label, which is
-    // deliberately raid-cadence.
-    Promise.all([
-      getWallet(),
-      getStock(),
-      getWarriorPrice(playerName, server),
-    ]).then(([w, stock, currentPrice]) => {
-      setWallet(w);
-      const series =
-        stock.find((s) => s.player_name === playerName && s.server === server)
-          ?.series ?? [];
-      setPrice(currentPrice);
-      setPrevPrice(series.length > 0 ? series[series.length - 1].price : null);
-    });
+    // Both price and prevPrice come from the same tradable-price endpoint -
+    // price is the live tradable price (raid + drift + demand), prevPrice is
+    // the frozen last-raid snapshot. Deliberately not getStock()'s
+    // live-recomputed series, which reapplies the *current* scoring config
+    // across all history and can drift far from what's actually in the
+    // ledger/chart - comparing that against the live price here would mix a
+    // frozen number with a hypothetical one.
+    Promise.all([getWallet(), getWarriorPrice(playerName, server)]).then(
+      ([w, warriorPrice]) => {
+        setWallet(w);
+        setPrice(warriorPrice.price);
+        setPrevPrice(warriorPrice.lastRaidPrice);
+      },
+    );
   }, [user, playerName, server]);
 
   useEffect(load, [load]);

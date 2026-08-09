@@ -251,35 +251,6 @@ export function computeStock(): PlayerStock[] {
       };
     });
 
-    // Pre-pass for damage trend score: unlike castScore/damagePeerScore
-    // (percentile ranks, always zero-sum within a report), a z-score
-    // against each player's own history has no such constraint - during a
-    // genuine gear-up period most of the roster scores positive at once,
-    // inflating every price together instead of just reshuffling standing.
-    // Demeaning against this report's own average trend score fixes that:
-    // only outpacing your raid-mates' improvement moves your price.
-    const rawTrendScoreByKey = new Map<string, number>();
-    let trendScoreSum = 0;
-    let trendScoreCount = 0;
-    for (const participant of participants) {
-      const histKey = `${participant.key}::${report.zone ?? ""}`;
-      const ewma = dpsEwmaByPlayerZone.get(histKey);
-      let rawTrendScore = 0;
-      if (ewma) {
-        const sd = Math.sqrt(ewma.variance);
-        const rawZ = sd > 0 ? (participant.dps - ewma.mean) / sd : 0;
-        const clampedZ = Math.max(-stockConfig.damageTrendZClamp, Math.min(stockConfig.damageTrendZClamp, rawZ));
-        const shrink = Math.min(1, ewma.count / stockConfig.coldStartReports);
-        rawTrendScore = clampedZ * shrink;
-      }
-      rawTrendScoreByKey.set(participant.key, rawTrendScore);
-      if (!participant.lowAttendance) {
-        trendScoreSum += rawTrendScore;
-        trendScoreCount++;
-      }
-    }
-    const trendScoreMean = trendScoreCount > 0 ? trendScoreSum / trendScoreCount : 0;
-
     for (const participant of participants) {
       // Read this player's history in this zone once - ewma.count (before
       // it's updated below) is how many prior reports they've had here,
@@ -317,11 +288,18 @@ export function computeStock(): PlayerStock[] {
         castScore *= stockConfig.newPlayerPenaltyLeniency;
       }
 
-      // Damage trend score: this player's raw trend score (computed in the
-      // pre-pass above) demeaned against the report's average, so it
-      // rewards outpacing your raid-mates' improvement rather than just
-      // improving in absolute terms.
-      const damageTrendScore = (rawTrendScoreByKey.get(participant.key) ?? 0) - trendScoreMean;
+      // Damage trend score: z-score against this player's own recency-
+      // weighted DPS baseline in this same zone, shrunk toward 0 until they
+      // have enough history for the baseline to mean something. Rewards
+      // personal improvement over time (gear upgrades, better rotation).
+      let damageTrendScore = 0;
+      if (ewma) {
+        const sd = Math.sqrt(ewma.variance);
+        const rawZ = sd > 0 ? (participant.dps - ewma.mean) / sd : 0;
+        const clampedZ = Math.max(-stockConfig.damageTrendZClamp, Math.min(stockConfig.damageTrendZClamp, rawZ));
+        const shrink = Math.min(1, ewma.count / stockConfig.coldStartReports);
+        damageTrendScore = clampedZ * shrink;
+      }
 
       // Damage peer score: percentile rank of DPS among this report's
       // bucket-mates (tank vs dps), same mechanism as cast score. Rewards

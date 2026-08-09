@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   executeTrade,
+  getLastRaidPrice,
   getLatestPrice,
   getLeaderboard,
   getMarketSummary,
@@ -141,5 +142,10 @@ tradingRouter.get("/price/:playerName/:server", (req, res) => {
     res.status(404).json({ error: "Unknown warrior" });
     return;
   }
-  res.json({ price: getLatestPrice(warriorId) });
+  res.json({
+    price: getLatestPrice(warriorId),
+    // Frozen ledger value, not computeStock()'s live-recomputed series - see
+    // getLastRaidPrice()'s own comment for why those two can diverge.
+    lastRaidPrice: getLastRaidPrice(warriorId),
+  });
 });

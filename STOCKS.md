@@ -40,8 +40,6 @@ This is the only thing that "really" moves a price — everything else (drift, t
 
 Those two get blended into a **damage score**.
 
-**Important:** the trend score gets one more adjustment — it's compared against *this raid's own average trend score* before being used. Why? Because "am I improving?" isn't a fair, self-contained question during a gear-up period — if the whole raid team is genuinely getting better at once, everyone would score positive together and the whole market would inflate every week even though nobody actually out-performed anybody. Subtracting the raid's own average fixes that: only improving *faster than your raid-mates* moves your price up from this. This is why a raid where everyone objectively plays better can still see some prices go down — those are the warriors who improved less than the night's average.
-
 **Step 5 — combine into one report score**, and update the price:
 
 ```
@@ -148,10 +146,12 @@ new price      = current price × (1 + capped impact)     [buy: positive, sell: 
 
 This is the part that trips people up when tuning config, so it gets its own section: **not every number on the Stock page comes from the same place.**
 
-- **Frozen** — the actual tradable **Price** column, the price chart, and everything wallet/portfolio-related (holdings value, trade fills). These all come from the permanent `price_snapshots` ledger — the record of every raid result, drift tick, and trade that's ever actually happened. Once a row lands in that ledger, it never changes on its own.
-- **Live** — the **Trend** sparkline, the **Change (last raid)** column, and **Growth/raid**. These come from re-running the entire raid-scoring calculation from scratch, from the raw WarcraftLogs data, every single time the Stock page loads — using whatever the config says *right now*. Nothing about them is saved or cached.
+- **Frozen** — the actual tradable **Price** column (including the small "change since last raid" figure shown right underneath it, and the same figure in the trade modal), the price chart, and everything wallet/portfolio-related (holdings value, trade fills). These all come from the permanent `price_snapshots` ledger — the record of every raid result, drift tick, and trade that's ever actually happened. Once a row lands in that ledger, it never changes on its own.
+- **Live** — the **Trend** sparkline, the **Change (last raid)** *column* (further right in the table, distinct from the small delta under Price), and **Growth/raid**. These come from re-running the entire raid-scoring calculation from scratch, from the raw WarcraftLogs data, every single time the Stock page loads — using whatever the config says *right now*. Nothing about them is saved or cached.
 
-That second group is why changing a weight can *look* like it rewrote history: the moment you save new `damageWeight`/`castWeight`/etc. and reload the page, the Trend line, "Change (last raid)," and "Growth/raid" for every warrior immediately reflect the new weights applied across their entire raid history — while the Price column and chart sitting right next to them don't move at all, because those are reading the frozen ledger instead.
+That second group is why changing a weight can *look* like it rewrote history: the moment you save new `damageWeight`/`castWeight`/etc. and reload the page, the Trend line, the "Change (last raid)" column, and "Growth/raid" for every warrior immediately reflect the new weights applied across their entire raid history — while the Price column, its small change figure, and the chart sitting right next to them don't move at all, because those are reading the frozen ledger instead.
+
+Don't mix the two groups together — e.g. comparing the frozen current price against the live-recomputed last-raid value produces a number that matches neither the chart nor the config. The small delta under the Price column and in the trade modal deliberately stay frozen-to-frozen (current price vs. the ledger's own last raid-sourced snapshot) for exactly this reason.
 
 ## Where to tune all of this
 

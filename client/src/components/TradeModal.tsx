@@ -270,7 +270,7 @@ export function TradeModal({
 
           <button
             type="button"
-            className={side === 'sell' ? 'trade-cta sell' : 'trade-cta'}
+            className="trade-cta"
             onClick={trade}
             disabled={busy || (side === 'buy' && validAmount && overBalance)}
           >

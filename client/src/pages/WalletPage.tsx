@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { MarketLayout } from '../components/MarketLayout';
 import { Pagination } from '../components/Pagination';
-import { PortfolioBreakdownChart } from '../components/PortfolioBreakdownChart';
+import { PortfolioBreakdownCard } from '../components/PortfolioBreakdownCard';
+import { SidePill } from '../components/SidePill';
 import { TradeModal } from '../components/TradeModal';
 import { ArrowsRightLeftIcon } from '../components/icons/ArrowsRightLeftIcon';
 import { useAuth } from '../authContext';
@@ -11,8 +12,9 @@ import {
   type TransactionView,
   type WalletData,
 } from '../api';
-import { fmtCoin, fmtDateTime, priceDelta } from '../format';
+import { fmtCoin, fmtDateTime, fmtRelativeTime, priceDelta } from '../format';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { computePortfolioConcentration } from '../portfolio';
 
 const PAGE_SIZE = 25;
 
@@ -60,6 +62,8 @@ export function WalletPage() {
     );
   }
 
+  const concentration = computePortfolioConcentration(wallet?.holdings ?? []);
+
   return (
     <MarketLayout>
       <div className="card">
@@ -71,10 +75,26 @@ export function WalletPage() {
             <span className="label">Balance</span>
           </div>
           <div className="wallet-summary-item">
+            <span className="value">{wallet ? concentration.count : '–'}</span>
+            <span className="label">Holdings</span>
+          </div>
+          <div className="wallet-summary-item">
             <span className="value">
               {wallet ? fmtCoin(wallet.netWorth - wallet.balance) : '–'}
             </span>
-            <span className="label">Holdings</span>
+            <span className="label">Holdings Value</span>
+          </div>
+          <div className="wallet-summary-item">
+            <span className="value">
+              {wallet && concentration.largest
+                ? `${concentration.largestPct.toFixed(0)}%`
+                : '–'}
+            </span>
+            <span className="label">
+              {concentration.largest
+                ? `Largest: ${concentration.largest.playerName}`
+                : 'Largest'}
+            </span>
           </div>
           <div className="wallet-summary-item">
             <span className="value">
@@ -85,10 +105,10 @@ export function WalletPage() {
         </div>
       </div>
 
-      <div className="card">
-        <h2 style={{ marginTop: 0 }}>Portfolio breakdown</h2>
-        <PortfolioBreakdownChart holdings={wallet?.holdings ?? []} />
-      </div>
+      <PortfolioBreakdownCard
+        holdings={wallet?.holdings ?? []}
+        recentTransactions={transactions ?? []}
+      />
 
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Holdings</h2>
@@ -207,7 +227,7 @@ export function WalletPage() {
               <tr>
                 <th className="mobile-hide">When</th>
                 <th>Warrior</th>
-                <th>Side</th>
+                <th className="side-pill-cell">Side</th>
                 <th className="mobile-hide">Shares</th>
                 <th className="mobile-hide">Price</th>
                 <th>Total</th>
@@ -224,9 +244,14 @@ export function WalletPage() {
               )}
               {pageTransactions?.map((tx) => (
                 <tr key={tx.id}>
-                  <td className="mobile-hide">{fmtDateTime(tx.createdAt)}</td>
+                  <td className="mobile-hide">
+                    {fmtDateTime(tx.createdAt)}
+                    <span className="time-ago">{fmtRelativeTime(tx.createdAt)}</span>
+                  </td>
                   <td className="warrior-name">{tx.playerName}</td>
-                  <td>{tx.side}</td>
+                  <td className="side-pill-cell">
+                    <SidePill side={tx.side} />
+                  </td>
                   <td className="mobile-hide">{tx.shares.toFixed(3)}</td>
                   <td className="mobile-hide">{fmtCoin(tx.price)}</td>
                   <td>{fmtCoin(tx.total)}</td>

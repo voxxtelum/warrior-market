@@ -16,22 +16,6 @@ export async function logout(): Promise<void> {
   await fetch("/api/auth/logout", { method: "POST" });
 }
 
-export interface AdminUserRow {
-  discordId: string;
-  username: string;
-  avatar: string | null;
-  isAdmin: boolean;
-  firstLoginAt: number;
-  lastLoginAt: number;
-  linkedWarrior: { id: number; playerName: string; server: string } | null;
-}
-
-export async function getAdminUsers(): Promise<AdminUserRow[]> {
-  const res = await fetch("/api/admin/users");
-  if (!res.ok) throw new Error("Failed to load users");
-  return res.json();
-}
-
 export async function setUserAdmin(discordId: string, isAdmin: boolean): Promise<void> {
   await fetch(`/api/admin/users/${encodeURIComponent(discordId)}/admin`, {
     method: "POST",
@@ -391,22 +375,6 @@ export async function markNotificationRead(id: number): Promise<void> {
   await fetch(`/api/notifications/${id}/read`, { method: "POST" });
 }
 
-export interface MarketStats {
-  totalCoinInWallets: number;
-  totalCoinInHoldings: number;
-  totalNetWorth: number;
-  totalTradeVolume: number;
-  userCount: number;
-  perWarriorVolume: { player_name: string; server: string; volume: number; tradeCount: number }[];
-  topTraders: { user_id: string; username: string; turnover: number; tradeCount: number }[];
-}
-
-export async function getAdminMarketStats(): Promise<MarketStats> {
-  const res = await fetch("/api/admin/market-stats");
-  if (!res.ok) throw new Error("Failed to load market stats");
-  return res.json();
-}
-
 export interface MarketSummary {
   totalMarketSize: number;
   totalTradeVolume: number;
@@ -445,9 +413,14 @@ export interface AdminWalletRow {
   userId: string;
   username: string;
   avatar: string | null;
+  linkedWarrior: { id: number; playerName: string; server: string } | null;
+  firstLoginAt: number;
+  lastLoginAt: number;
   balance: number;
   holdingsValue: number;
   netWorth: number;
+  turnover: number;
+  tradeCount: number;
 }
 
 export async function getAdminWallets(): Promise<AdminWalletRow[]> {
@@ -510,7 +483,10 @@ export interface AdminUserDetail {
   userId: string;
   username: string;
   avatar: string | null;
-  linkedWarrior: { playerName: string; server: string } | null;
+  isAdmin: boolean;
+  linkedWarrior: { id: number; playerName: string; server: string } | null;
+  firstLoginAt: number;
+  lastLoginAt: number;
   balance: number;
   holdings: AdminUserHolding[];
   netWorth: number;
@@ -544,6 +520,38 @@ export interface WarriorHoldersResponse {
 export async function getWarriorHolders(warriorId: number): Promise<WarriorHoldersResponse> {
   const res = await fetch(`/api/admin/market/warriors/${warriorId}/holders`);
   if (!res.ok) throw new Error("Failed to load warrior holders");
+  return res.json();
+}
+
+export interface WarriorVolumeRow {
+  warriorId: number;
+  playerName: string;
+  server: string;
+  volume: number;
+  tradeCount: number;
+  totalShares: number;
+}
+
+export async function getWarriorVolumeOverview(): Promise<WarriorVolumeRow[]> {
+  const res = await fetch("/api/admin/market/warriors/volume");
+  if (!res.ok) throw new Error("Failed to load warrior volume");
+  return res.json();
+}
+
+export interface WarriorTradeRow {
+  id: number;
+  username: string;
+  avatar: string | null;
+  side: "buy" | "sell" | "liquidation";
+  shares: number;
+  price: number;
+  total: number;
+  createdAt: number;
+}
+
+export async function getWarriorTrades(warriorId: number): Promise<WarriorTradeRow[]> {
+  const res = await fetch(`/api/admin/market/warriors/${warriorId}/trades`);
+  if (!res.ok) throw new Error("Failed to load warrior trades");
   return res.json();
 }
 

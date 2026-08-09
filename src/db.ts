@@ -807,16 +807,16 @@ export function unlinkUser(userId: string): void {
 
 export function getLinkedWarrior(
   userId: string,
-): { player_name: string; server: string } | null {
+): { warrior_id: number; player_name: string; server: string } | null {
   const row = db
     .prepare(
-      `SELECT w.player_name, w.server
+      `SELECT w.id AS warrior_id, w.player_name, w.server
        FROM user_warrior_links l
        JOIN warriors w ON w.id = l.warrior_id
        WHERE l.user_id = ?`,
     )
     .get(userId) as unknown as
-    | { player_name: string; server: string }
+    | { warrior_id: number; player_name: string; server: string }
     | undefined;
   return row ?? null;
 }
@@ -1111,6 +1111,100 @@ export function getWarriorHolders(warriorId: number): WarriorHolderRow[] {
   }));
 }
 
+export interface WarriorVolumeEntry {
+  warriorId: number;
+  playerName: string;
+  server: string;
+  volume: number;
+  tradeCount: number;
+  totalShares: number;
+}
+
+// Per-warrior trade volume for the admin Characters tab - only includes
+// warriors with at least one trade (same as the old Market Stats "Volume by
+// warrior" table it replaces). totalShares is today's outstanding position
+// (sum of current holdings), separate from volume (all-time traded coin).
+export function getWarriorVolumeOverview(): WarriorVolumeEntry[] {
+  const rows = db
+    .prepare(
+      `SELECT w.id AS warrior_id, w.player_name, w.server, SUM(t.total) AS volume, COUNT(*) AS tradeCount
+       FROM transactions t
+       JOIN warriors w ON w.id = t.warrior_id
+       GROUP BY t.warrior_id
+       ORDER BY volume DESC`,
+    )
+    .all() as unknown as {
+    warrior_id: number;
+    player_name: string;
+    server: string;
+    volume: number;
+    tradeCount: number;
+  }[];
+
+  const sharesByWarrior = new Map<number, number>();
+  const shareRows = db
+    .prepare(
+      `SELECT warrior_id, SUM(shares) AS totalShares FROM holdings WHERE shares > 0 GROUP BY warrior_id`,
+    )
+    .all() as unknown as { warrior_id: number; totalShares: number }[];
+  for (const r of shareRows) sharesByWarrior.set(r.warrior_id, r.totalShares);
+
+  return rows.map((r) => ({
+    warriorId: r.warrior_id,
+    playerName: r.player_name,
+    server: r.server,
+    volume: r.volume,
+    tradeCount: r.tradeCount,
+    totalShares: sharesByWarrior.get(r.warrior_id) ?? 0,
+  }));
+}
+
+export interface WarriorTradeEntry {
+  id: number;
+  username: string;
+  avatar: string | null;
+  side: 'buy' | 'sell' | 'liquidation';
+  shares: number;
+  price: number;
+  total: number;
+  createdAt: number;
+}
+
+// Every trade against one warrior, across all users - the admin Characters
+// tab's "View Trades" detail card paginates this client-side the same way
+// the per-user trade-history table does, so a generous cap here is enough.
+export function getWarriorTrades(warriorId: number): WarriorTradeEntry[] {
+  const rows = db
+    .prepare(
+      `SELECT t.id, u.username, u.avatar, t.side, t.shares, t.price, t.total, t.created_at
+       FROM transactions t
+       JOIN users u ON u.discord_id = t.user_id
+       WHERE t.warrior_id = ?
+       ORDER BY t.created_at DESC, t.id DESC
+       LIMIT 300`,
+    )
+    .all(warriorId) as unknown as {
+    id: number;
+    username: string;
+    avatar: string | null;
+    side: 'buy' | 'sell' | 'liquidation';
+    shares: number;
+    price: number;
+    total: number;
+    created_at: number;
+  }[];
+  return rows.map((r) => ({
+    id: r.id,
+    username: r.username,
+    avatar: r.avatar,
+    side: r.side,
+    shares: r.shares,
+    price: r.price,
+    total: r.total,
+    createdAt: r.created_at,
+  }));
+}
+
 export class TradeError extends Error {}
 
 export interface TradeConfig {
@@ -1399,23 +1493,42 @@ export interface AdminWalletOverviewEntry {
   userId: string;
   username: string;
   avatar: string | null;
+  linkedWarrior: { id: number; playerName: string; server: string } | null;
+  firstLoginAt: number;
+  lastLoginAt: number;
   balance: number;
   holdingsValue: number;
   netWorth: number;
+  turnover: number;
+  tradeCount: number;
 }
 
 // Like getLeaderboard(), but starts from every registered user (not just
 // ones who already have a wallets row) so the Manage Market page can show
 // (and adjust the balance of) a user who's never traded - they implicitly
 // have STARTING_BALANCE and no holdings until getOrCreateWallet() lazily
-// creates their real row.
+// creates their real row. This is also the single source for the
+// consolidated admin Users table, so it carries the login/link/turnover
+// fields that used to live on the separate Admin Users and Market Stats
+// pages.
 export function getAdminWalletOverview(): AdminWalletOverviewEntry[] {
   const users = db
-    .prepare(`SELECT discord_id, username, avatar FROM users`)
+    .prepare(
+      `SELECT u.discord_id, u.username, u.avatar, u.first_login_at, u.last_login_at,
+              l.warrior_id AS linked_warrior_id, w.player_name AS linked_player_name, w.server AS linked_server
+       FROM users u
+       LEFT JOIN user_warrior_links l ON l.user_id = u.discord_id
+       LEFT JOIN warriors w ON w.id = l.warrior_id`,
+    )
     .all() as unknown as {
     discord_id: string;
     username: string;
     avatar: string | null;
+    first_login_at: number;
+    last_login_at: number;
+    linked_warrior_id: number | null;
+    linked_player_name: string | null;
+    linked_server: string | null;
   }[];
   const walletByUser = new Map(
     (db.prepare(`SELECT * FROM wallets`).all() as unknown as WalletRow[]).map(
@@ -1443,6 +1556,22 @@ export function getAdminWalletOverview(): AdminWalletOverviewEntry[] {
     );
   }
 
+  const turnoverByUser = new Map<string, number>();
+  const tradeCountByUser = new Map<string, number>();
+  const turnoverRows = db
+    .prepare(
+      `SELECT user_id, SUM(total) AS turnover, COUNT(*) AS tradeCount FROM transactions GROUP BY user_id`,
+    )
+    .all() as unknown as {
+    user_id: string;
+    turnover: number;
+    tradeCount: number;
+  }[];
+  for (const r of turnoverRows) {
+    turnoverByUser.set(r.user_id, r.turnover);
+    tradeCountByUser.set(r.user_id, r.tradeCount);
+  }
+
   return users
     .map((u) => {
       const balance = walletByUser.get(u.discord_id) ?? STARTING_BALANCE;
@@ -1451,9 +1580,21 @@ export function getAdminWalletOverview(): AdminWalletOverviewEntry[] {
         userId: u.discord_id,
         username: u.username,
         avatar: u.avatar,
+        linkedWarrior:
+          u.linked_warrior_id !== null
+            ? {
+                id: u.linked_warrior_id,
+                playerName: u.linked_player_name!,
+                server: u.linked_server!,
+              }
+            : null,
+        firstLoginAt: u.first_login_at,
+        lastLoginAt: u.last_login_at,
         balance,
         holdingsValue,
         netWorth: balance + holdingsValue,
+        turnover: turnoverByUser.get(u.discord_id) ?? 0,
+        tradeCount: tradeCountByUser.get(u.discord_id) ?? 0,
       };
     })
     .sort((a, b) => b.netWorth - a.netWorth);
@@ -1579,99 +1720,25 @@ export function resetMarketState(): void {
   setLastDriftAt(Date.now());
 }
 
-export interface MarketStats {
-  totalCoinInWallets: number;
-  totalCoinInHoldings: number;
-  totalNetWorth: number;
-  totalTradeVolume: number;
-  userCount: number;
-  perWarriorVolume: {
-    player_name: string;
-    server: string;
-    volume: number;
-    tradeCount: number;
-  }[];
-  topTraders: {
-    user_id: string;
-    username: string;
-    turnover: number;
-    tradeCount: number;
-  }[];
-}
-
-export function getMarketStats(): MarketStats {
-  const leaderboard = getLeaderboard();
-  const totalCoinInWallets = leaderboard.reduce((sum, u) => sum + u.balance, 0);
-  const totalCoinInHoldings = leaderboard.reduce(
-    (sum, u) => sum + u.holdingsValue,
-    0,
-  );
-
-  const perWarriorVolume = db
-    .prepare(
-      `SELECT w.player_name, w.server, SUM(t.total) AS volume, COUNT(*) AS tradeCount
-       FROM transactions t
-       JOIN warriors w ON w.id = t.warrior_id
-       GROUP BY t.warrior_id
-       ORDER BY volume DESC`,
-    )
-    .all() as unknown as {
-    player_name: string;
-    server: string;
-    volume: number;
-    tradeCount: number;
-  }[];
-
-  const topTraders = db
-    .prepare(
-      `SELECT u.discord_id AS user_id, u.username, SUM(t.total) AS turnover, COUNT(*) AS tradeCount
-       FROM transactions t
-       JOIN users u ON u.discord_id = t.user_id
-       GROUP BY t.user_id
-       ORDER BY turnover DESC
-       LIMIT 20`,
-    )
-    .all() as unknown as {
-    user_id: string;
-    username: string;
-    turnover: number;
-    tradeCount: number;
-  }[];
-
-  // All-time, every side (buy/sell/liquidation) included - matches
-  // perWarriorVolume/topTraders' existing definition of "volume" exactly, so
-  // this headline number reconciles with the detail tables below it.
-  const totalTradeVolume = perWarriorVolume.reduce(
-    (sum, r) => sum + r.volume,
-    0,
-  );
-
-  return {
-    totalCoinInWallets,
-    totalCoinInHoldings,
-    totalNetWorth: totalCoinInWallets + totalCoinInHoldings,
-    totalTradeVolume,
-    userCount: leaderboard.length,
-    perWarriorVolume,
-    topTraders,
-  };
-}
-
 export interface MarketSummary {
   totalMarketSize: number;
   totalTradeVolume: number;
 }
 
-// Public-safe subset of getMarketStats() - just the two headline numbers,
-// no per-warrior/per-trader breakdowns (topTraders reveals identities+
-// turnover, which is admin-only info per the trade feed's anonymization
-// rules elsewhere).
+// Public-safe headline numbers only - no per-warrior/per-trader breakdowns
+// (those reveal identities+turnover, which is admin-only info per the trade
+// feed's anonymization rules elsewhere; see getAdminWalletOverview and
+// getWarriorVolumeOverview for the admin-only detail views).
 export function getMarketSummary(): MarketSummary {
-  const stats = getMarketStats();
-  return {
-    totalMarketSize: stats.totalNetWorth,
-    totalTradeVolume: stats.totalTradeVolume,
-  };
+  const leaderboard = getLeaderboard();
+  const totalMarketSize = leaderboard.reduce((sum, u) => sum + u.netWorth, 0);
+  // All-time, every side (buy/sell/liquidation) included.
+  const totalTradeVolume = (
+    db
+      .prepare(`SELECT COALESCE(SUM(total), 0) AS total FROM transactions`)
+      .get() as unknown as { total: number }
+  ).total;
+  return { totalMarketSize, totalTradeVolume };
 }
 
 export function getLastDriftAt(): number | null {
@@ -1757,26 +1824,6 @@ export function upsertUserFromLogin(
   return db
     .prepare(`SELECT * FROM users WHERE discord_id = ?`)
     .get(discordId) as unknown as UserRow;
-}
-
-export function listUsers(): (UserRow & {
-  linked_warrior_id: number | null;
-  linked_player_name: string | null;
-  linked_server: string | null;
-})[] {
-  return db
-    .prepare(
-      `SELECT u.*, l.warrior_id AS linked_warrior_id, w.player_name AS linked_player_name, w.server AS linked_server
-       FROM users u
-       LEFT JOIN user_warrior_links l ON l.user_id = u.discord_id
-       LEFT JOIN warriors w ON w.id = l.warrior_id
-       ORDER BY u.last_login_at DESC`,
-    )
-    .all() as unknown as (UserRow & {
-    linked_warrior_id: number | null;
-    linked_player_name: string | null;
-    linked_server: string | null;
-  })[];
 }
 
 export function setUserAdmin(discordId: string, isAdmin: boolean) {

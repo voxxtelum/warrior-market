@@ -21,6 +21,13 @@
   --negative: #ff6b6b;
   --negative-rgb: 255, 107, 107;
 
+  /* Affirmation buttons (Place order, Save changes) and the liquidation
+     trade-side pill - --accent-green-light is a lighter tint used on hover
+     instead of the filter:brightness() trick other buttons use. */
+  --accent-green: #10e585;
+  --accent-green-rgb: 16, 229, 133;
+  --accent-green-light: #64eeb0;
+
   --success: #6bcf6b;
   --danger: #d64933;
 
@@ -425,6 +432,15 @@ button:disabled {
   filter: brightness(1.15);
 }
 
+.btn-affirm {
+  color: var(--card);
+  background: var(--accent-green);
+}
+.btn-affirm:hover:not(:disabled) {
+  color: var(--card);
+  background: var(--accent-green-light);
+}
+
 .text-link {
   background: none;
   border: none;
@@ -436,6 +452,7 @@ button:disabled {
 }
 .text-link:hover:not(:disabled):not([aria-disabled='true']) {
   text-decoration: underline;
+  background: none;
 }
 .text-link:disabled,
 .text-link[aria-disabled='true'] {
@@ -450,17 +467,85 @@ button:disabled {
 .text-link-danger {
   color: var(--danger);
 }
+/* A .text-link that's a <button> (e.g. "Back to users") otherwise picks up
+   the generic button:hover color/background below, fighting its plain-link
+   look - these win on specificity to keep it looking identical to the <a>
+   based text-links. */
+.text-link-accent:hover:not(:disabled):not([aria-disabled='true']) {
+  color: var(--accent);
+}
+.text-link-danger:hover:not(:disabled):not([aria-disabled='true']) {
+  color: var(--danger);
+}
 
 .admin-user-heading {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.admin-user-heading-left {
+  display: flex;
   align-items: center;
   gap: 0.6rem;
-  margin-bottom: 1.25rem;
+}
+.admin-user-heading-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
 }
 .admin-user-heading h2 {
   margin: 0;
   font-size: 1.1rem;
   font-weight: 600;
+}
+.admin-user-heading-admin-toggle {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 0.8rem;
+}
+.admin-user-heading-link-action {
+  font-size: 0.8rem;
+}
+
+.admin-heading-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--warrior);
+  font-size: 1.1rem;
+  font-family: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+.admin-heading-select:focus {
+  outline: none;
+}
+
+.admin-user-meta {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+.admin-user-meta-item {
+  display: flex;
+  flex-direction: column;
+}
+.admin-user-meta-value {
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+.admin-user-meta-item .label {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 0.3rem;
 }
 
 .addcoins-row {
@@ -553,12 +638,12 @@ input.addcoins-input {
   cursor: default;
 }
 
-.manage-market-tabs {
+.manage-app-tabs {
   display: flex;
   gap: 0.5rem;
   margin-bottom: 1.25rem;
 }
-.manage-market-tabs button {
+.manage-app-tabs button {
   padding: 0.55rem 1.1rem;
   font-size: 0.85rem;
   font-weight: 400;
@@ -568,24 +653,27 @@ input.addcoins-input {
   color: var(--muted);
   cursor: pointer;
 }
-.manage-market-tabs button:hover:not(.active) {
+.manage-app-tabs button:hover:not(.active) {
   background: transparent;
   color: var(--fg);
 }
-.manage-market-tabs button.active {
+.manage-app-tabs button.active {
   background: rgba(var(--accent-rgb), 0.15);
   color: var(--accent);
 }
 
-#users-table th,
-#users-table td {
-  text-align: left;
-  white-space: normal;
-  font-size: 0.8rem;
+.detail-card-enter {
+  animation: detail-card-in 0.18s ease;
 }
-#users-table .user-avatar-placeholder {
-  width: 20px;
-  height: 20px;
+@keyframes detail-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .confirm-modal-body {
@@ -652,6 +740,10 @@ th:nth-child(2),
 td:nth-child(2) {
   text-align: left;
 }
+th.text-right,
+td.text-right {
+  text-align: right;
+}
 thead th {
   color: var(--muted);
   font-weight: 600;
@@ -717,6 +809,150 @@ tbody tr:hover {
   .chart-container {
     height: 280px !important;
   }
+}
+
+.portfolio-lower-grid {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+  margin-top: 1.25rem;
+}
+.portfolio-pnl-col {
+  /* 70% minus half the row gap - flex-basis percentages don't otherwise
+     account for `gap`, which would push the two columns' total width past
+     100% of the container by the full gap amount. */
+  flex: 0 0 calc(70% - 0.75rem);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.portfolio-activity-col {
+  flex: 0 0 calc(30% - 0.75rem);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+@media (max-width: 640px) {
+  .portfolio-lower-grid {
+    flex-direction: column;
+  }
+  .portfolio-pnl-col,
+  .portfolio-activity-col {
+    flex: 1 1 auto;
+  }
+}
+.portfolio-side-heading {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.activity-teaser {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.activity-teaser-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+.side-pill {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 2.5rem;
+  padding: 0.1rem 0;
+  border-radius: 2px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: rgba(var(--positive-rgb), 0.15);
+  color: var(--positive);
+}
+.side-pill.sell {
+  background: rgba(var(--negative-rgb), 0.15);
+  color: var(--negative);
+}
+.side-pill.liquidation {
+  background: rgba(var(--accent-green-rgb), 0.15);
+  color: var(--accent-green);
+}
+.side-pill-cell {
+  text-align: center;
+}
+.activity-teaser-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.activity-teaser-amount {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.activity-teaser-time {
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.time-ago {
+  color: var(--muted);
+  font-size: 0.75rem;
+  margin-left: 0.4rem;
+  white-space: nowrap;
+}
+
+.pnl-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.pnl-strip-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+}
+.pnl-strip-name {
+  flex: 0 0 110px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pnl-strip-bar-track {
+  flex: 1;
+  height: 6px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+.pnl-strip-bar {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--positive);
+}
+.pnl-strip-bar.negative {
+  background: var(--negative);
+}
+.pnl-strip-item > span:last-child {
+  flex-shrink: 0;
+  min-width: 3.6em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 #report-table a {
@@ -1057,14 +1293,11 @@ ul.player-toggle-list input[type='checkbox'] {
   letter-spacing: 0.04em;
   border-radius: 2px;
   border: none;
-  background: rgba(var(--positive-rgb), 0.75);
+  background: rgba(var(--accent-green-rgb), 0.75);
   color: var(--card);
 }
 .trade-cta:hover:not(:disabled) {
-  filter: brightness(1.1);
-}
-.trade-cta.sell {
-  background: rgba(var(--negative-rgb), 0.75);
+  background: var(--accent-green-light);
 }
 .trade-cta:disabled {
   opacity: 0.5;

@@ -4,11 +4,7 @@ import { ComparePage } from "./pages/ComparePage";
 import { TrendsPage } from "./pages/TrendsPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { AdminReportsPage } from "./pages/AdminReportsPage";
-import { AdminPlayersPage } from "./pages/AdminPlayersPage";
-import { AdminStockConfigPage } from "./pages/AdminStockConfigPage";
-import { AdminUsersPage } from "./pages/AdminUsersPage";
-import { AdminMarketStatsPage } from "./pages/AdminMarketStatsPage";
-import { AdminManageMarketPage } from "./pages/AdminManageMarketPage";
+import { AdminManageAppPage } from "./pages/AdminManageAppPage";
 import { AdminAuditLogPage } from "./pages/AdminAuditLogPage";
 import { WalletPage } from "./pages/WalletPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
@@ -35,11 +31,7 @@ function App() {
       <Route path="/overview" element={<Navigate to="/warriors/raids" replace />} />
       <Route path="/faq" element={<FaqPage />} />
       <Route path="/admin" element={<AdminReportsPage />} />
-      <Route path="/admin/players" element={<AdminPlayersPage />} />
-      <Route path="/admin/stock-config" element={<AdminStockConfigPage />} />
-      <Route path="/admin/users" element={<AdminUsersPage />} />
-      <Route path="/admin/market-stats" element={<AdminMarketStatsPage />} />
-      <Route path="/admin/manage-market" element={<AdminManageMarketPage />} />
+      <Route path="/admin/manage-app" element={<AdminManageAppPage />} />
       <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
     </Routes>
   );

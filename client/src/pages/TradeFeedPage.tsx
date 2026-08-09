@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { MarketLayout } from '../components/MarketLayout';
 import { Pagination } from '../components/Pagination';
+import { SidePill } from '../components/SidePill';
 import { getTradeFeed, type TransactionView } from '../api';
-import { fmtDateTime } from '../format';
+import { fmtDateTime, fmtRelativeTime } from '../format';
 
 const PAGE_SIZE = 25;
 
@@ -27,7 +28,7 @@ export function TradeFeedPage() {
                 <th className="mobile-hide">When</th>
                 <th>Trader</th>
                 <th>Warrior</th>
-                <th>Side</th>
+                <th className="side-pill-cell">Side</th>
                 <th className="mobile-hide">Shares</th>
                 <th className="mobile-hide">Price</th>
                 <th>Total</th>
@@ -46,14 +47,19 @@ export function TradeFeedPage() {
                   key={tx.id}
                   className={tx.isMine ? 'selected-row' : undefined}
                 >
-                  <td className="mobile-hide">{fmtDateTime(tx.createdAt)}</td>
+                  <td className="mobile-hide">
+                    {fmtDateTime(tx.createdAt)}
+                    <span className="time-ago">{fmtRelativeTime(tx.createdAt)}</span>
+                  </td>
                   <td>
                     {tx.username ?? (
                       <span className="anon-name">anonymous</span>
                     )}
                   </td>
                   <td className="warrior-name">{tx.playerName}</td>
-                  <td>{tx.side}</td>
+                  <td className="side-pill-cell">
+                    <SidePill side={tx.side} />
+                  </td>
                   <td className="mobile-hide">{tx.shares.toFixed(3)}</td>
                   <td className="mobile-hide">{tx.price.toFixed(2)}</td>
                   <td>{tx.total.toFixed(2)}</td>

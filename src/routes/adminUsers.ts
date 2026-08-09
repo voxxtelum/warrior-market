@@ -1,24 +1,7 @@
 import { Router } from "express";
-import { LinkError, linkUserToWarrior, listUsers, listWarriors, setUserAdmin, unlinkUser } from "../db";
+import { LinkError, linkUserToWarrior, listWarriors, setUserAdmin, unlinkUser } from "../db";
 
 export const adminUsersRouter = Router();
-
-adminUsersRouter.get("/", (_req, res) => {
-  res.json(
-    listUsers().map((u) => ({
-      discordId: u.discord_id,
-      username: u.username,
-      avatar: u.avatar,
-      isAdmin: Boolean(u.is_admin),
-      firstLoginAt: u.first_login_at,
-      lastLoginAt: u.last_login_at,
-      linkedWarrior:
-        u.linked_warrior_id !== null
-          ? { id: u.linked_warrior_id, playerName: u.linked_player_name, server: u.linked_server }
-          : null,
-    }))
-  );
-});
 
 adminUsersRouter.post("/:discordId/admin", (req, res) => {
   const isAdmin = req.body?.isAdmin;

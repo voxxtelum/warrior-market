@@ -10,6 +10,8 @@ import {
   getUserById,
   getWarriorById,
   getWarriorHolders,
+  getWarriorTrades,
+  getWarriorVolumeOverview,
   listHoldingsWithContext,
   listTransactions,
   resetMarketState,
@@ -89,9 +91,12 @@ adminMarketRouter.get("/users/:userId", (req, res) => {
     userId,
     username: targetUser.username,
     avatar: targetUser.avatar,
+    isAdmin: Boolean(targetUser.is_admin),
     linkedWarrior: linked
-      ? { playerName: linked.player_name, server: linked.server }
+      ? { id: linked.warrior_id, playerName: linked.player_name, server: linked.server }
       : null,
+    firstLoginAt: targetUser.first_login_at,
+    lastLoginAt: targetUser.last_login_at,
     balance: wallet.balance,
     holdings,
     netWorth: wallet.balance + holdingsValue,
@@ -128,6 +133,27 @@ adminMarketRouter.get("/warriors/:warriorId/holders", (req, res) => {
       }))
       .sort((a, b) => b.percentOfWarrior - a.percentOfWarrior),
   });
+});
+
+// Per-warrior trade volume for the Characters tab's sortable table.
+adminMarketRouter.get("/warriors/volume", (_req, res) => {
+  res.json(getWarriorVolumeOverview());
+});
+
+// All trades against one warrior across every user, for the Characters
+// tab's "View Trades" detail card (client paginates this client-side).
+adminMarketRouter.get("/warriors/:warriorId/trades", (req, res) => {
+  const warriorId = Number(req.params.warriorId);
+  if (!Number.isInteger(warriorId)) {
+    res.status(400).json({ error: "Invalid warrior id" });
+    return;
+  }
+  const warrior = getWarriorById(warriorId);
+  if (!warrior) {
+    res.status(404).json({ error: "Unknown warrior" });
+    return;
+  }
+  res.json(getWarriorTrades(warriorId));
 });
 
 adminMarketRouter.post("/reset", (req, res) => {

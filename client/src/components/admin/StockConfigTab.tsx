@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
-import { AdminLayout } from "../components/AdminLayout";
-import { getStockConfig, saveStockConfig, type StockAbilityConfig, type StockConfig } from "../api";
+import { getStockConfig, saveStockConfig, type StockAbilityConfig, type StockConfig } from "../../api";
 
 type ScalarKey = Exclude<keyof StockConfig, "abilities">;
 
@@ -30,16 +29,13 @@ const SCALAR_FIELDS: { key: ScalarKey; label: string; step: string; description:
 
 const BUCKETS = ["all", "dps", "tank"];
 
-export function AdminStockConfigPage() {
+export function StockConfigTab() {
   const [scalars, setScalars] = useState<Record<ScalarKey, number> | null>(null);
   const [abilities, setAbilities] = useState<StockAbilityConfig[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ text: string; kind: "success" | "error" } | null>(null);
 
   useEffect(() => {
-    // A non-admin briefly hits this before RequireAdmin's redirect commits
-    // (same client-side-only-guard tradeoff as the other admin pages) - swallow
-    // the 401/403 rather than crashing on it, since the redirect is already coming.
     getStockConfig()
       .then((config) => {
         const { abilities: loadedAbilities, ...loadedScalars } = config;
@@ -76,7 +72,7 @@ export function AdminStockConfigPage() {
   }
 
   return (
-    <AdminLayout>
+    <>
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Scoring settings</h2>
         <div className="config-grid">
@@ -97,7 +93,7 @@ export function AdminStockConfigPage() {
         </div>
         <div className="card-footer">
           {status && <span className={`status ${status.kind}`}>{status.text}</span>}
-          <button type="button" onClick={handleSave} disabled={saving}>
+          <button type="button" className="btn-affirm" onClick={handleSave} disabled={saving}>
             Save changes
           </button>
         </div>
@@ -166,12 +162,12 @@ export function AdminStockConfigPage() {
           </button>
           <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
             {status && <span className={`status ${status.kind}`}>{status.text}</span>}
-            <button type="button" onClick={handleSave} disabled={saving}>
+            <button type="button" className="btn-affirm" onClick={handleSave} disabled={saving}>
               Save changes
             </button>
           </div>
         </div>
       </div>
-    </AdminLayout>
+    </>
   );
 }

@@ -1682,7 +1682,7 @@ button.modal-close:hover {
 }
 .docs-content table {
   width: 100%;
-  table-layout: fixed;
+  table-layout: auto;
   margin: 0.75rem 0 1.25rem;
   font-size: 1em;
 }

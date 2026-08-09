@@ -1061,6 +1061,56 @@ export interface TransactionRow {
   created_at: number;
 }
 
+// Raw rows (no join) ordered so each warrior's transactions for this user
+// form a contiguous chronological block - built for pnl.ts's single-pass
+// average-cost replay, which depends on seeing every prior buy before a
+// sell for the same (user, warrior) pair. Always the FULL history, never
+// paginated - a limited slice would corrupt the replayed cost basis.
+export function listAllTransactionsForUser(userId: string): TransactionRow[] {
+  return db
+    .prepare(
+      `SELECT * FROM transactions WHERE user_id = ?
+       ORDER BY warrior_id ASC, created_at ASC, id ASC`,
+    )
+    .all(userId) as unknown as TransactionRow[];
+}
+
+export interface WarriorHolderRow {
+  userId: string;
+  username: string;
+  avatar: string | null;
+  shares: number;
+  costBasisTotal: number;
+  marketValue: number | null;
+}
+
+export function getWarriorHolders(warriorId: number): WarriorHolderRow[] {
+  const price = getLatestPrice(warriorId);
+  const rows = db
+    .prepare(
+      `SELECT h.user_id, h.shares, h.cost_basis_total, u.username, u.avatar
+       FROM holdings h
+       JOIN users u ON u.discord_id = h.user_id
+       WHERE h.warrior_id = ? AND h.shares > 0
+       ORDER BY h.shares DESC`,
+    )
+    .all(warriorId) as unknown as {
+    user_id: string;
+    shares: number;
+    cost_basis_total: number;
+    username: string;
+    avatar: string | null;
+  }[];
+  return rows.map((r) => ({
+    userId: r.user_id,
+    username: r.username,
+    avatar: r.avatar,
+    shares: r.shares,
+    costBasisTotal: r.cost_basis_total,
+    marketValue: price !== null ? r.shares * price : null,
+  }));
+}
+
 export class TradeError extends Error {}
 
 export interface TradeConfig {
@@ -1665,6 +1715,14 @@ export interface UserRow {
   is_admin: number;
   first_login_at: number;
   last_login_at: number;
+}
+
+export function getUserById(discordId: string): UserRow | null {
+  return (
+    (db
+      .prepare(`SELECT * FROM users WHERE discord_id = ?`)
+      .get(discordId) as unknown as UserRow) ?? null
+  );
 }
 
 // Upserts the logged-in user's profile on every login. is_admin is left

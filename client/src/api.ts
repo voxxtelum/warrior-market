@@ -347,6 +347,7 @@ export interface TransactionView {
   username: string | null;
   avatar: string | null;
   isMine: boolean;
+  realizedPnl: number | null;
 }
 
 export async function getMyTransactions(): Promise<TransactionView[]> {
@@ -480,6 +481,69 @@ export interface AdminWalletAdjustment {
 export async function getAdminAuditLog(): Promise<AdminWalletAdjustment[]> {
   const res = await fetch("/api/admin/market/audit-log");
   if (!res.ok) throw new Error("Failed to load audit log");
+  return res.json();
+}
+
+export interface AdminUserHolding {
+  playerName: string;
+  server: string;
+  shares: number;
+  costBasisTotal: number;
+  latestPrice: number | null;
+  lastRaidPrice: number | null;
+  marketValue: number | null;
+}
+
+export interface AdminUserTransaction {
+  id: number;
+  playerName: string;
+  server: string;
+  side: "buy" | "sell" | "liquidation";
+  shares: number;
+  price: number;
+  total: number;
+  createdAt: number;
+  realizedPnl: number | null;
+}
+
+export interface AdminUserDetail {
+  userId: string;
+  username: string;
+  avatar: string | null;
+  linkedWarrior: { playerName: string; server: string } | null;
+  balance: number;
+  holdings: AdminUserHolding[];
+  netWorth: number;
+  transactions: AdminUserTransaction[];
+}
+
+export async function getAdminUserDetail(userId: string): Promise<AdminUserDetail> {
+  const res = await fetch(`/api/admin/market/users/${encodeURIComponent(userId)}`);
+  if (!res.ok) throw new Error("Failed to load user detail");
+  return res.json();
+}
+
+export interface WarriorHolderView {
+  userId: string;
+  username: string;
+  avatar: string | null;
+  shares: number;
+  costBasisTotal: number;
+  marketValue: number | null;
+  percentOfWarrior: number;
+}
+
+export interface WarriorHoldersResponse {
+  playerName: string;
+  server: string;
+  latestPrice: number | null;
+  totalInvested: number;
+  holders: WarriorHolderView[];
+}
+
+export async function getWarriorHolders(warriorId: number): Promise<WarriorHoldersResponse> {
+  const res = await fetch(`/api/admin/market/warriors/${warriorId}/holders`);
+  if (!res.ok) throw new Error("Failed to load warrior holders");
   return res.json();
 }
 

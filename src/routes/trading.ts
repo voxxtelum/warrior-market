@@ -12,6 +12,7 @@ import {
   type TransactionWithContext,
 } from "../db";
 import { requireAuth } from "../middleware/auth";
+import { computeRealizedPnlByUser } from "../pnl";
 import { loadStockConfig } from "../stock";
 
 export const tradingRouter = Router();
@@ -98,7 +99,13 @@ tradingRouter.post("/trade", requireAuth, (req, res) => {
 
 tradingRouter.get("/transactions/mine", requireAuth, (req, res) => {
   const rows = listTransactions({ userId: req.user!.discord_id, limit: 200 });
-  res.json(rows.map((tx) => serializeTransaction(tx, req.user)));
+  const pnlByTxId = computeRealizedPnlByUser(req.user!.discord_id);
+  res.json(
+    rows.map((tx) => ({
+      ...serializeTransaction(tx, req.user),
+      realizedPnl: pnlByTxId.get(tx.id) ?? null,
+    }))
+  );
 });
 
 // Public - identity is anonymized per serializeTransaction unless the

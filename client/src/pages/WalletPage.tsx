@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { MarketLayout } from '../components/MarketLayout';
 import { Pagination } from '../components/Pagination';
+import { PortfolioBreakdownChart } from '../components/PortfolioBreakdownChart';
 import { TradeModal } from '../components/TradeModal';
 import { ArrowsRightLeftIcon } from '../components/icons/ArrowsRightLeftIcon';
 import { useAuth } from '../authContext';
@@ -82,6 +83,11 @@ export function WalletPage() {
             <span className="label">Portfolio</span>
           </div>
         </div>
+      </div>
+
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Portfolio breakdown</h2>
+        <PortfolioBreakdownChart holdings={wallet?.holdings ?? []} />
       </div>
 
       <div className="card">
@@ -205,12 +211,13 @@ export function WalletPage() {
                 <th className="mobile-hide">Shares</th>
                 <th className="mobile-hide">Price</th>
                 <th>Total</th>
+                <th>P&amp;L</th>
               </tr>
             </thead>
             <tbody>
               {transactions?.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="no-data">
+                  <td colSpan={7} className="no-data">
                     No trades yet.
                   </td>
                 </tr>
@@ -223,6 +230,24 @@ export function WalletPage() {
                   <td className="mobile-hide">{tx.shares.toFixed(3)}</td>
                   <td className="mobile-hide">{fmtCoin(tx.price)}</td>
                   <td>{fmtCoin(tx.total)}</td>
+                  <td>
+                    {tx.realizedPnl !== null ? (
+                      <span
+                        className={
+                          tx.realizedPnl > 0
+                            ? 'delta-pos'
+                            : tx.realizedPnl < 0
+                              ? 'delta-neg'
+                              : 'delta-neutral'
+                        }
+                      >
+                        {tx.realizedPnl >= 0 ? '+' : ''}
+                        {fmtCoin(tx.realizedPnl)}
+                      </span>
+                    ) : (
+                      <span className="no-data">–</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

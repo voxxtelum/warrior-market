@@ -25,6 +25,13 @@ const SCALAR_FIELDS: { key: ScalarKey; label: string; step: string; description:
   { key: "demandMaxPctPerTrade", label: "Demand max % per trade", step: "0.001", description: "Largest fraction a single trade's buy/sell pressure can move a price, in either direction" },
   { key: "demandLiquidityDenominator", label: "Demand liquidity denominator", step: "1000", description: "Coin amount that produces ~1% price impact - smaller means the market is more sensitive to trading" },
   { key: "tradeFeePct", label: "Trade fee %", step: "0.0005", description: "Fee taken on every buy and sell - makes round-trip wash-trading a guaranteed loss" },
+  { key: "demandAnchorDecayPct", label: "Demand anchor decay %", step: "0.01", description: "Fraction of the gap between a warrior's trading anchor and their raid anchor that closes every drift tick - how fast a demand-driven pump fades without sustained buying" },
+  { key: "marketGravityStrength", label: "Market gravity strength", step: "0.01", description: "How strongly every price is pulled toward the current market-wide average each drift tick - keeps the whole market from drifting up (or down) together" },
+  { key: "swingChancePct", label: "Swing chance %", step: "0.005", description: "Per-warrior, per-tick odds of a large overnight swing that bypasses the normal drift cap. 0 disables it" },
+  { key: "swingUpMagnitudePct", label: "Swing up magnitude %", step: "0.01", description: "Base size of an overnight swing to the upside" },
+  { key: "swingDownMagnitudePct", label: "Swing down magnitude %", step: "0.01", description: "Base size of an overnight swing to the downside" },
+  { key: "swingMagnitudeFuzzPct", label: "Swing magnitude fuzz %", step: "0.005", description: "Random +/- range applied around the base swing magnitude" },
+  { key: "swingCooldownGapPct", label: "Swing cooldown gap %", step: "0.01", description: "How far a price must still be displaced from its anchor (in a swing's direction) to block another same-direction swing" },
 ];
 
 const BUCKETS = ["all", "dps", "tank"];

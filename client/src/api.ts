@@ -212,6 +212,13 @@ export interface StockConfig {
   demandMaxPctPerTrade: number;
   demandLiquidityDenominator: number;
   tradeFeePct: number;
+  demandAnchorDecayPct: number;
+  marketGravityStrength: number;
+  swingChancePct: number;
+  swingUpMagnitudePct: number;
+  swingDownMagnitudePct: number;
+  swingMagnitudeFuzzPct: number;
+  swingCooldownGapPct: number;
 }
 
 export async function getStockConfig(): Promise<StockConfig> {

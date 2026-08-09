@@ -131,7 +131,7 @@ db.exec(`
     warrior_id INTEGER NOT NULL,
     report_code TEXT,
     price REAL NOT NULL,
-    source TEXT NOT NULL CHECK (source IN ('raid', 'drift')),
+    source TEXT NOT NULL CHECK (source IN ('raid', 'drift', 'swing')),
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_price_snapshots_warrior ON price_snapshots (warrior_id, created_at DESC);
@@ -201,6 +201,49 @@ if (!warriorsHasAnchorPrice) {
   db.exec(`ALTER TABLE warriors ADD COLUMN anchor_price REAL`);
 }
 
+// raid_anchor_price is the "fundamental" anchor, set only by raid results
+// (see setRaidAnchorPrice, called from stock.ts alongside setAnchorPrice).
+// anchor_price remains the trading anchor moved by both raids and demand;
+// the gap between the two is how far demand has pushed a price from
+// fundamentals, and drift.ts decays that gap back down every tick instead
+// of letting a demand-driven move stick forever.
+const warriorsHasRaidAnchorPrice = (
+  db.prepare(`PRAGMA table_info(warriors)`).all() as unknown as {
+    name: string;
+  }[]
+).some((c) => c.name === 'raid_anchor_price');
+if (!warriorsHasRaidAnchorPrice) {
+  db.exec(`ALTER TABLE warriors ADD COLUMN raid_anchor_price REAL`);
+}
+
+// price_snapshots.source has a CHECK constraint, which SQLite can't widen
+// via ALTER TABLE - installs that predate the 'swing' source need the table
+// rebuilt. Guarded by inspecting the stored constraint text so this only
+// ever runs once; the CREATE TABLE above already includes 'swing' for fresh
+// installs, so this is a no-op there.
+const priceSnapshotsSql = (
+  db
+    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'price_snapshots'`)
+    .get() as unknown as { sql: string } | undefined
+)?.sql;
+if (priceSnapshotsSql && !priceSnapshotsSql.includes("'swing'")) {
+  db.exec(`
+    CREATE TABLE price_snapshots_new (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      warrior_id INTEGER NOT NULL,
+      report_code TEXT,
+      price REAL NOT NULL,
+      source TEXT NOT NULL CHECK (source IN ('raid', 'drift', 'swing')),
+      created_at INTEGER NOT NULL
+    );
+    INSERT INTO price_snapshots_new (id, warrior_id, report_code, price, source, created_at)
+      SELECT id, warrior_id, report_code, price, source, created_at FROM price_snapshots;
+    DROP TABLE price_snapshots;
+    ALTER TABLE price_snapshots_new RENAME TO price_snapshots;
+    CREATE INDEX IF NOT EXISTS idx_price_snapshots_warrior ON price_snapshots (warrior_id, created_at DESC);
+  `);
+}
+
 // One-time backfill: identities that already existed before this feature
 // shipped become visible warriors immediately (a guildmate's main isn't
 // "new"). Only warriors discovered from here on via getOrCreateWarriorId
@@ -263,6 +306,13 @@ const DEFAULT_STOCK_CONFIG = {
   demandMaxPctPerTrade: 0.015,
   demandLiquidityDenominator: 50000,
   tradeFeePct: 0.0025,
+  demandAnchorDecayPct: 0.05,
+  marketGravityStrength: 0.03,
+  swingChancePct: 0.01,
+  swingUpMagnitudePct: 0.1,
+  swingDownMagnitudePct: 0.1,
+  swingMagnitudeFuzzPct: 0.02,
+  swingCooldownGapPct: 0.08,
 };
 const hasStockConfig = db
   .prepare(`SELECT 1 FROM stock_config WHERE id = 1`)
@@ -294,6 +344,31 @@ if (warriorsMissingAnchor.length > 0) {
       | undefined;
     updateAnchor.run(
       raidRow ? raidRow.price : DEFAULT_STOCK_CONFIG.startingPrice,
+      id,
+    );
+  }
+}
+
+// Backfill raid_anchor_price the same way, for installs that predate the
+// anchor-decay feature - it becomes each warrior's latest raid price (or
+// their current anchor_price, or startingPrice) so nothing reverts sharply
+// on first boot after upgrading. Idempotent for the same reason as above.
+const warriorsMissingRaidAnchor = db
+  .prepare(`SELECT id, anchor_price FROM warriors WHERE raid_anchor_price IS NULL`)
+  .all() as unknown as { id: number; anchor_price: number | null }[];
+if (warriorsMissingRaidAnchor.length > 0) {
+  const getLatestRaidForRaidAnchorBackfill = db.prepare(
+    `SELECT price FROM price_snapshots WHERE warrior_id = ? AND source = 'raid' ORDER BY created_at DESC, id DESC LIMIT 1`,
+  );
+  const updateRaidAnchor = db.prepare(
+    `UPDATE warriors SET raid_anchor_price = ? WHERE id = ?`,
+  );
+  for (const { id, anchor_price } of warriorsMissingRaidAnchor) {
+    const raidRow = getLatestRaidForRaidAnchorBackfill.get(id) as unknown as
+      | { price: number }
+      | undefined;
+    updateRaidAnchor.run(
+      raidRow ? raidRow.price : (anchor_price ?? DEFAULT_STOCK_CONFIG.startingPrice),
       id,
     );
   }
@@ -845,14 +920,14 @@ export interface PriceSnapshotRow {
   warrior_id: number;
   report_code: string | null;
   price: number;
-  source: 'raid' | 'drift';
+  source: 'raid' | 'drift' | 'swing';
   created_at: number;
 }
 
 export function insertPriceSnapshot(
   warriorId: number,
   price: number,
-  source: 'raid' | 'drift',
+  source: 'raid' | 'drift' | 'swing',
   reportCode: string | null,
   createdAt: number,
 ) {
@@ -940,6 +1015,25 @@ export function getAnchorPrice(warriorId: number): number | null {
 
 export function setAnchorPrice(warriorId: number, price: number): void {
   db.prepare(`UPDATE warriors SET anchor_price = ? WHERE id = ?`).run(
+    price,
+    warriorId,
+  );
+}
+
+// The "fundamental" anchor - set only by raid results (see stock.ts's
+// snapshotPricesForReport/rebuildRaidPriceSnapshots), never by trades or
+// drift. drift.ts decays anchor_price toward this every tick, so a
+// demand-driven move fades without sustained buying instead of sticking
+// forever.
+export function getRaidAnchorPrice(warriorId: number): number | null {
+  const row = db
+    .prepare(`SELECT raid_anchor_price FROM warriors WHERE id = ?`)
+    .get(warriorId) as unknown as { raid_anchor_price: number | null } | undefined;
+  return row ? row.raid_anchor_price : null;
+}
+
+export function setRaidAnchorPrice(warriorId: number, price: number): void {
+  db.prepare(`UPDATE warriors SET raid_anchor_price = ? WHERE id = ?`).run(
     price,
     warriorId,
   );

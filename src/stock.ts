@@ -9,6 +9,7 @@ import {
   listReports,
   replaceRaidPriceSnapshots,
   setAnchorPrice,
+  setRaidAnchorPrice,
 } from "./db";
 
 export interface StockAbilityConfig {
@@ -41,6 +42,13 @@ export interface StockConfig {
   demandMaxPctPerTrade: number;
   demandLiquidityDenominator: number;
   tradeFeePct: number;
+  demandAnchorDecayPct: number;
+  marketGravityStrength: number;
+  swingChancePct: number;
+  swingUpMagnitudePct: number;
+  swingDownMagnitudePct: number;
+  swingMagnitudeFuzzPct: number;
+  swingCooldownGapPct: number;
 }
 
 // Reads the DB-stored config on every call (rather than caching once at
@@ -68,6 +76,13 @@ export function loadStockConfig(): StockConfig {
     demandMaxPctPerTrade: parsed.demandMaxPctPerTrade ?? 0.015,
     demandLiquidityDenominator: parsed.demandLiquidityDenominator ?? 50000,
     tradeFeePct: parsed.tradeFeePct ?? 0.0025,
+    demandAnchorDecayPct: parsed.demandAnchorDecayPct ?? 0.05,
+    marketGravityStrength: parsed.marketGravityStrength ?? 0.03,
+    swingChancePct: parsed.swingChancePct ?? 0.01,
+    swingUpMagnitudePct: parsed.swingUpMagnitudePct ?? 0.1,
+    swingDownMagnitudePct: parsed.swingDownMagnitudePct ?? 0.1,
+    swingMagnitudeFuzzPct: parsed.swingMagnitudeFuzzPct ?? 0.02,
+    swingCooldownGapPct: parsed.swingCooldownGapPct ?? 0.08,
   } as StockConfig;
 }
 
@@ -236,6 +251,35 @@ export function computeStock(): PlayerStock[] {
       };
     });
 
+    // Pre-pass for damage trend score: unlike castScore/damagePeerScore
+    // (percentile ranks, always zero-sum within a report), a z-score
+    // against each player's own history has no such constraint - during a
+    // genuine gear-up period most of the roster scores positive at once,
+    // inflating every price together instead of just reshuffling standing.
+    // Demeaning against this report's own average trend score fixes that:
+    // only outpacing your raid-mates' improvement moves your price.
+    const rawTrendScoreByKey = new Map<string, number>();
+    let trendScoreSum = 0;
+    let trendScoreCount = 0;
+    for (const participant of participants) {
+      const histKey = `${participant.key}::${report.zone ?? ""}`;
+      const ewma = dpsEwmaByPlayerZone.get(histKey);
+      let rawTrendScore = 0;
+      if (ewma) {
+        const sd = Math.sqrt(ewma.variance);
+        const rawZ = sd > 0 ? (participant.dps - ewma.mean) / sd : 0;
+        const clampedZ = Math.max(-stockConfig.damageTrendZClamp, Math.min(stockConfig.damageTrendZClamp, rawZ));
+        const shrink = Math.min(1, ewma.count / stockConfig.coldStartReports);
+        rawTrendScore = clampedZ * shrink;
+      }
+      rawTrendScoreByKey.set(participant.key, rawTrendScore);
+      if (!participant.lowAttendance) {
+        trendScoreSum += rawTrendScore;
+        trendScoreCount++;
+      }
+    }
+    const trendScoreMean = trendScoreCount > 0 ? trendScoreSum / trendScoreCount : 0;
+
     for (const participant of participants) {
       // Read this player's history in this zone once - ewma.count (before
       // it's updated below) is how many prior reports they've had here,
@@ -273,18 +317,11 @@ export function computeStock(): PlayerStock[] {
         castScore *= stockConfig.newPlayerPenaltyLeniency;
       }
 
-      // Damage trend score: z-score against this player's own recency-
-      // weighted DPS baseline in this same zone, shrunk toward 0 until they
-      // have enough history for the baseline to mean something. Rewards
-      // personal improvement over time (gear upgrades, better rotation).
-      let damageTrendScore = 0;
-      if (ewma) {
-        const sd = Math.sqrt(ewma.variance);
-        const rawZ = sd > 0 ? (participant.dps - ewma.mean) / sd : 0;
-        const clampedZ = Math.max(-stockConfig.damageTrendZClamp, Math.min(stockConfig.damageTrendZClamp, rawZ));
-        const shrink = Math.min(1, ewma.count / stockConfig.coldStartReports);
-        damageTrendScore = clampedZ * shrink;
-      }
+      // Damage trend score: this player's raw trend score (computed in the
+      // pre-pass above) demeaned against the report's average, so it
+      // rewards outpacing your raid-mates' improvement rather than just
+      // improving in absolute terms.
+      const damageTrendScore = (rawTrendScoreByKey.get(participant.key) ?? 0) - trendScoreMean;
 
       // Damage peer score: percentile rank of DPS among this report's
       // bucket-mates (tank vs dps), same mechanism as cast score. Rewards
@@ -361,8 +398,10 @@ export function snapshotPricesForReport(reportCode: string, createdAt: number = 
     const warriorId = getOrCreateWarriorId(playerStock.player_name, playerStock.server);
     insertPriceSnapshot(warriorId, point.price, "raid", reportCode, createdAt);
     // Raid results still fully override accumulated demand/drift - a new
-    // result resets the anchor idle drift reverts toward.
+    // result resets both the trading anchor and the fundamental raid
+    // anchor (see setRaidAnchorPrice/drift.ts) to the same value.
     setAnchorPrice(warriorId, point.price);
+    setRaidAnchorPrice(warriorId, point.price);
   }
 }
 
@@ -383,7 +422,10 @@ export function rebuildRaidPriceSnapshots(): void {
     // Anchor reflects each warrior's most recent raid result post-rebuild -
     // series is chronological, so the last point is the latest.
     const lastPoint = playerStock.series[playerStock.series.length - 1];
-    if (lastPoint) setAnchorPrice(warriorId, lastPoint.price);
+    if (lastPoint) {
+      setAnchorPrice(warriorId, lastPoint.price);
+      setRaidAnchorPrice(warriorId, lastPoint.price);
+    }
   }
   replaceRaidPriceSnapshots(entries);
 }

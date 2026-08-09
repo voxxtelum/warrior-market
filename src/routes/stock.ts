@@ -65,6 +65,13 @@ const NUMERIC_FIELDS: (keyof StockConfig)[] = [
   "demandMaxPctPerTrade",
   "demandLiquidityDenominator",
   "tradeFeePct",
+  "demandAnchorDecayPct",
+  "marketGravityStrength",
+  "swingChancePct",
+  "swingUpMagnitudePct",
+  "swingDownMagnitudePct",
+  "swingMagnitudeFuzzPct",
+  "swingCooldownGapPct",
 ];
 
 function validateStockConfig(body: unknown): string | null {

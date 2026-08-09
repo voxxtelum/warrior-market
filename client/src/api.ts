@@ -399,6 +399,12 @@ export async function getFaq(): Promise<string> {
   return res.text();
 }
 
+export async function getStocksDoc(): Promise<string> {
+  const res = await fetch("/api/stocks-doc");
+  if (!res.ok) throw new Error("Failed to load STOCKS.md");
+  return res.text();
+}
+
 export interface WarriorStats {
   player_name: string;
   server: string;

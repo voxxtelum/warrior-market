@@ -50,7 +50,7 @@ body {
     sans-serif;
   background: var(--bg);
   color: var(--fg);
-  max-width: 1100px;
+  max-width: 1280px;
   margin-inline: auto;
 }
 @media (max-width: 768px) {
@@ -1604,4 +1604,106 @@ button.modal-close:hover {
 }
 .faq-content > :not(h2, h3) {
   margin: 0.6rem 1rem;
+}
+
+.docs-link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.docs-link-button:hover {
+  filter: brightness(1.15);
+}
+
+.docs-content {
+  /* Single control point for the whole card's text size - every rule below
+     uses em (relative to this) rather than rem (relative to the page root),
+     so changing this one value rescales everything together. */
+  font-size: 0.85rem;
+}
+.docs-content h1 {
+  margin-top: 0;
+  font-size: 1.3em;
+}
+.docs-content h2 {
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 1.2em;
+}
+.docs-content h2:first-of-type {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+.docs-content h3 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 1.05em;
+}
+.docs-content p,
+.docs-content li {
+  line-height: 1.6;
+}
+.docs-content ol,
+.docs-content ul {
+  padding-left: 1.25rem;
+  margin: 0.6rem 0;
+}
+.docs-content code {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.9em;
+  color: var(--accent-gold);
+}
+.docs-content pre {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+}
+.docs-content pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+.docs-content hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 0;
+}
+.docs-content table {
+  width: 100%;
+  table-layout: fixed;
+  margin: 0.75rem 0 1.25rem;
+  font-size: 1em;
+}
+.docs-content th,
+.docs-content td {
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+}
+.docs-content th:nth-child(1),
+.docs-content td:nth-child(1) {
+  width: 15%;
+}
+.docs-content th:nth-child(2),
+.docs-content td:nth-child(2) {
+  width: 10%;
+}
+.docs-content th:nth-child(3),
+.docs-content td:nth-child(3),
+.docs-content th:nth-child(4),
+.docs-content td:nth-child(4) {
+  width: 37.5%;
 }

@@ -23,6 +23,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/client/dist ./client/dist
 COPY config.json ./
 COPY FAQ.md ./
+COPY STOCKS.md ./
 
 EXPOSE 3000
 CMD ["node", "dist/server.js"]

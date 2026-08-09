@@ -13,14 +13,14 @@ export function LeaderboardPage() {
   return (
     <MarketLayout>
       <div className="card">
-        <div className="table-scroll">
+        <div className="table-scroll table-compact">
           <table>
             <thead>
               <tr>
-                <th>#</th>
+                <th className="mobile-hide">#</th>
                 <th>Trader</th>
-                <th>Balance</th>
-                <th>Holdings value</th>
+                <th className="mobile-hide">Balance</th>
+                <th className="mobile-hide">Holdings value</th>
                 <th>Net worth</th>
               </tr>
             </thead>
@@ -34,7 +34,7 @@ export function LeaderboardPage() {
               )}
               {entries?.map((e, i) => (
                 <tr key={e.username + i}>
-                  <td>{i + 1}</td>
+                  <td className="mobile-hide">{i + 1}</td>
                   <td>
                     <span className="player-name-cell">
                       {e.avatar && (
@@ -58,8 +58,8 @@ export function LeaderboardPage() {
                       )}
                     </span>
                   </td>
-                  <td>{fmtCoin(e.balance)}</td>
-                  <td>{fmtCoin(e.holdingsValue)}</td>
+                  <td className="mobile-hide">{fmtCoin(e.balance)}</td>
+                  <td className="mobile-hide">{fmtCoin(e.holdingsValue)}</td>
                   <td>{fmtCoin(e.netWorth)}</td>
                 </tr>
               ))}

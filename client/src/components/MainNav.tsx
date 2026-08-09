@@ -1,36 +1,119 @@
-import type { ComponentType } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { ChartBarIcon } from './icons/ChartBarIcon';
-import { ScaleIcon } from './icons/ScaleIcon';
-import { ArrowTrendingUpIcon } from './icons/ArrowTrendingUpIcon';
-import { Squares2X2Icon } from './icons/Squares2X2Icon';
 import { FireIcon } from './icons/FireIcon';
+import { QuestionMarkCircleIcon } from './icons/QuestionMarkCircleIcon';
+import { Cog6ToothIcon } from './icons/Cog6ToothIcon';
+import { Bars3Icon } from './icons/Bars3Icon';
+import { useAuth } from '../authContext';
+import { logout } from '../api';
+import { ConfirmModal } from './ConfirmModal';
 
-const LINKS: {
-  to: string;
-  label: string;
-  Icon: ComponentType<{ className?: string }>;
-}[] = [
-  { to: '/market', label: 'Market', Icon: ChartBarIcon },
-  { to: '/compare', label: 'Compare', Icon: ScaleIcon },
-  { to: '/trends', label: 'Trends', Icon: ArrowTrendingUpIcon },
-  { to: '/overview', label: 'Raids', Icon: Squares2X2Icon },
-  { to: '/warriors', label: 'Warriors', Icon: FireIcon },
-];
+function navLinkClass({ isActive }: { isActive: boolean }): string {
+  return `icon-btn${isActive ? ' active' : ''}`;
+}
+
+function NavItems({ onNavigate }: { onNavigate: () => void }) {
+  const { user, loading, refetch } = useAuth();
+  const [confirmingLogout, setConfirmingLogout] = useState(false);
+
+  async function handleLogout() {
+    await logout();
+    refetch();
+    setConfirmingLogout(false);
+    onNavigate();
+  }
+
+  const displayName = user?.linkedWarrior?.playerName ?? user?.username;
+
+  return (
+    <>
+      <NavLink to="/market" className={navLinkClass} onClick={onNavigate}>
+        <ChartBarIcon className="icon-btn-icon" />
+        Market
+      </NavLink>
+      <NavLink to="/warriors" className={navLinkClass} onClick={onNavigate}>
+        <FireIcon className="icon-btn-icon icon-fire" />
+        Warriors
+      </NavLink>
+      <NavLink to="/faq" className={navLinkClass} onClick={onNavigate}>
+        <QuestionMarkCircleIcon className="icon-btn-icon" />
+        FAQ
+      </NavLink>
+      {user?.isAdmin && (
+        <NavLink to="/admin" className={navLinkClass} onClick={onNavigate}>
+          <Cog6ToothIcon className="icon-btn-icon" />
+          Admin
+        </NavLink>
+      )}
+      {!loading &&
+        (user ? (
+          <button
+            type="button"
+            className="nav-identity"
+            onClick={() => setConfirmingLogout(true)}
+          >
+            {user.avatar ? (
+              <img className="user-avatar" src={user.avatar} alt="" width={24} height={24} />
+            ) : (
+              <span className="user-avatar user-avatar-placeholder" />
+            )}
+            <span>{displayName}</span>
+          </button>
+        ) : (
+          <a href="/api/auth/discord" className="icon-btn" onClick={onNavigate}>
+            Log in with Discord
+          </a>
+        ))}
+      {confirmingLogout && (
+        <ConfirmModal
+          title="Log out?"
+          body={<p>You'll need to log back in with Discord to trade or manage your account.</p>}
+          confirmLabel="Log out"
+          onConfirm={handleLogout}
+          onClose={() => setConfirmingLogout(false)}
+        />
+      )}
+    </>
+  );
+}
 
 export function MainNav() {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [open]);
+
   return (
-    <nav className="main-nav">
-      {LINKS.map(({ to, label, Icon }) => (
-        <NavLink
-          key={to}
-          to={to}
-          className={({ isActive }) => `icon-btn${isActive ? ' active' : ''}`}
+    <>
+      <nav className="main-nav">
+        <NavItems onNavigate={() => {}} />
+      </nav>
+
+      <div className="nav-wrapper main-nav-mobile" ref={menuRef}>
+        <button
+          className="nav-toggle"
+          aria-label="Toggle navigation menu"
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((o) => !o);
+          }}
         >
-          <Icon className="icon-btn-icon" />
-          {label}
-        </NavLink>
-      ))}
-    </nav>
+          <Bars3Icon className="icon-btn-icon" />
+        </button>
+        <nav className={`nav-dropdown${open ? ' open' : ''}`}>
+          <NavItems onNavigate={() => setOpen(false)} />
+        </nav>
+      </div>
+    </>
   );
 }

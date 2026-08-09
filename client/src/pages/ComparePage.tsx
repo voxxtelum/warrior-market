@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ChartDataset } from "chart.js/auto";
-import { Layout } from "../components/Layout";
+import { WarriorsLayout } from "../components/WarriorsLayout";
 import { SortableTable } from "../components/SortableTable";
 import { LineChart } from "../components/LineChart";
 import { paletteColor, withAlpha } from "../chartColors";
@@ -114,7 +114,7 @@ export function ComparePage() {
   );
 
   return (
-    <Layout title="Compare" subtitle="What kind of warrior are you?">
+    <WarriorsLayout>
       <div className="card">
         <form onSubmit={(e) => e.preventDefault()}>
           <select value={zone} onChange={(e) => setZone(e.target.value)} disabled={!zones || zones.length === 0}>
@@ -151,7 +151,7 @@ export function ComparePage() {
         </div>
         {data && trackedOptions.length + otherOptions.length > 0 && (
           <>
-            <div className="table-scroll">
+            <div className="table-scroll table-compact">
               <SortableTable
                 id="casts-table"
                 reports={recentReports}
@@ -172,7 +172,7 @@ export function ComparePage() {
         <h2 style={{ marginTop: 0 }}>Damage</h2>
         {data && (
           <>
-            <div className="table-scroll">
+            <div className="table-scroll table-compact">
               <SortableTable
                 id="damage-table"
                 reports={recentReports}
@@ -188,6 +188,6 @@ export function ComparePage() {
           </>
         )}
       </div>
-    </Layout>
+    </WarriorsLayout>
   );
 }

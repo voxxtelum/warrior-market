@@ -46,6 +46,16 @@ body {
   max-width: 1100px;
   margin-inline: auto;
 }
+@media (max-width: 768px) {
+  body {
+    padding: 1rem;
+  }
+}
+@media (max-width: 480px) {
+  body {
+    padding: 0.75rem;
+  }
+}
 
 input,
 textarea,
@@ -57,6 +67,20 @@ button {
 h1 {
   font-size: 1.5rem;
   margin-bottom: 0.25rem;
+}
+h1.page-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.page-title-icon {
+  width: 1.35rem;
+  height: 1.35rem;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.icon-fire {
+  color: var(--accent-gold);
 }
 h2 {
   font-size: 1.25rem;
@@ -74,6 +98,14 @@ h2 {
   align-items: flex-start;
   gap: 1rem;
   margin-bottom: 1.5rem;
+}
+@media (max-width: 480px) {
+  .page-header {
+    flex-wrap: wrap;
+  }
+  .header-actions {
+    gap: 0.75rem;
+  }
 }
 
 .accent-gold {
@@ -131,6 +163,44 @@ h2 {
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
+.sub-nav-mobile-wrap {
+  display: none;
+}
+@media (max-width: 768px) {
+  .sub-nav {
+    display: none;
+  }
+  .sub-nav-mobile-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-bottom: 1.5rem;
+  }
+  .sub-nav-select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--fg);
+    font-size: 1.05rem;
+    padding: 0;
+    cursor: pointer;
+  }
+  .sub-nav-select:focus {
+    outline: none;
+  }
+  .sub-nav-select option {
+    font-size: 0.95rem;
+    font-weight: 400;
+  }
+  .sub-nav-select-chevron {
+    width: 1rem;
+    height: 1rem;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+}
 
 .nav-wrapper {
   position: relative;
@@ -146,8 +216,13 @@ h2 {
   line-height: 1;
   cursor: pointer;
 }
+@media (max-width: 768px) {
+  .nav-toggle {
+    padding: 0.6rem 0.85rem;
+  }
+}
 
-nav#nav-menu {
+nav.nav-dropdown {
   display: none;
   position: absolute;
   top: calc(100% + 0.4rem);
@@ -162,11 +237,11 @@ nav#nav-menu {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   z-index: 20;
 }
-nav#nav-menu.open {
+nav.nav-dropdown.open {
   display: flex;
 }
 
-nav#nav-menu a {
+nav.nav-dropdown a {
   color: var(--fg);
   text-decoration: none;
   padding: 0.5rem 0.7rem;
@@ -174,19 +249,42 @@ nav#nav-menu a {
   white-space: nowrap;
   transition: background-color 0.15s ease;
 }
-nav#nav-menu a:hover {
+nav.nav-dropdown a:hover {
   background: rgba(255, 255, 255, 0.06);
 }
-nav#nav-menu a.active {
+nav.nav-dropdown a.active {
   background: var(--accent);
   color: var(--accent-fg);
 }
 
-.nav-username {
-  color: var(--muted);
-  padding: 0.5rem 0.7rem;
+.main-nav-mobile {
+  display: none;
+}
+@media (max-width: 768px) {
+  .main-nav {
+    display: none;
+  }
+  .main-nav-mobile {
+    display: block;
+  }
+}
+
+.nav-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--fg);
+  font-size: 0.95rem;
   white-space: nowrap;
-  font-size: 0.9rem;
+  cursor: pointer;
+}
+.header-actions .nav-identity:hover {
+  color: var(--accent-gold);
+  background: none;
 }
 
 .user-avatar {
@@ -472,6 +570,19 @@ tbody tr:hover {
   overflow-x: auto;
 }
 
+@media (max-width: 768px) {
+  .mobile-hide {
+    display: none;
+  }
+  .table-compact table {
+    font-size: 0.85rem;
+  }
+  .table-compact th,
+  .table-compact td {
+    padding: 0.45rem 0.4rem;
+  }
+}
+
 #trade-feed-table th:nth-child(3) {
   text-align: center;
 }
@@ -507,6 +618,11 @@ tbody tr:hover {
   position: relative;
   height: 420px;
   margin-top: 1.25rem;
+}
+@media (max-width: 768px) {
+  .chart-container {
+    height: 280px !important;
+  }
 }
 
 #report-table a {
@@ -869,6 +985,12 @@ ul.player-toggle-list input[type='checkbox'] {
 .stats-row .card {
   margin-bottom: 0;
 }
+@media (max-width: 768px) {
+  .stats-row {
+    flex-direction: column;
+    margin-bottom: 0;
+  }
+}
 .personal-stats-card {
   flex: 0 0 auto;
   background: rgba(var(--accent-rgb), 0.12);
@@ -1010,6 +1132,23 @@ ul.player-toggle-list input[type='checkbox'] {
 
 .wallet-summary-item > .value {
   font-size: 1.5rem;
+}
+@media (max-width: 768px) {
+  .card:has(.wallet-summary) {
+    padding: 0.85rem 1rem;
+    margin-bottom: 1rem;
+  }
+  .wallet-summary {
+    gap: 1.25rem;
+  }
+  .wallet-summary-item .value,
+  .wallet-summary-item > .value {
+    font-size: 1.1rem;
+  }
+  .wallet-summary-item .label {
+    font-size: 0.62rem;
+    margin-top: 0.15rem;
+  }
 }
 
 .modal-overlay {

@@ -1,25 +1,27 @@
 import type { ReactNode } from "react";
 import { MainNav } from "./MainNav";
-import { AdminMenu } from "./AdminMenu";
 import { NotificationBanner } from "./NotificationBanner";
 
 interface LayoutProps {
   title: string;
   subtitle: ReactNode;
+  icon?: ReactNode;
   children: ReactNode;
 }
 
-export function Layout({ title, subtitle, children }: LayoutProps) {
+export function Layout({ title, subtitle, icon, children }: LayoutProps) {
   return (
     <>
       <div className="page-header">
         <div>
-          <h1>{title}</h1>
+          <h1 className={icon ? "page-title" : undefined}>
+            {icon}
+            {title}
+          </h1>
           <p className="subtitle">{subtitle}</p>
         </div>
         <div className="header-actions">
           <MainNav />
-          <AdminMenu />
         </div>
       </div>
 

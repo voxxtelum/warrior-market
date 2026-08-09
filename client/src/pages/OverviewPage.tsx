@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Layout } from '../components/Layout';
+import { WarriorsLayout } from '../components/WarriorsLayout';
 import { fmtDate } from '../format';
 import {
   getOverviewData,
@@ -117,7 +117,7 @@ function TotalAvgRow({
     <tr>
       <td>{label}</td>
       {rows.map((row, i) => (
-        <td key={i} className="stack-cell">
+        <td key={i} className="stack-cell mobile-hide">
           <TotalAvgCell
             total={row.total}
             average={row.average}
@@ -159,7 +159,7 @@ function AvgOnlyRow({
     <tr>
       <td>{label}</td>
       {values.map((v, i) => (
-        <td key={i} className="stack-cell">
+        <td key={i} className="stack-cell mobile-hide">
           <AvgOnlyCell
             average={v.average}
             prevAverage={i === 0 ? null : values[i - 1].average}
@@ -199,7 +199,7 @@ export function OverviewPage() {
   }, [zone]);
 
   return (
-    <Layout title="Raids Overview" subtitle="Warriors together strong">
+    <WarriorsLayout>
       <div className="card">
         <form onSubmit={(e) => e.preventDefault()}>
           <select
@@ -220,7 +220,7 @@ export function OverviewPage() {
       </div>
 
       <div className="card">
-        <div className="table-scroll">
+        <div className="table-scroll table-compact">
           <table id="overview-table">
             {data && data.reports.length === 0 ? (
               <tbody>
@@ -235,7 +235,7 @@ export function OverviewPage() {
                     <tr>
                       <th>Metric</th>
                       {data.reports.map((r) => (
-                        <th key={r.code}>{fmtDate(r.start_time)}</th>
+                        <th key={r.code} className="mobile-hide">{fmtDate(r.start_time)}</th>
                       ))}
                       <th>{data.reports.length}-Week Avg</th>
                     </tr>
@@ -269,6 +269,6 @@ export function OverviewPage() {
           </table>
         </div>
       </div>
-    </Layout>
+    </WarriorsLayout>
   );
 }

@@ -14,7 +14,7 @@ import { WalletPage } from "./pages/WalletPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
 import { TradeFeedPage } from "./pages/TradeFeedPage";
 import { FaqPage } from "./pages/FaqPage";
-import { WarriorsPage } from "./pages/WarriorsPage";
+import { WarriorsBreakdownPage } from "./pages/WarriorsBreakdownPage";
 
 function App() {
   return (
@@ -25,11 +25,15 @@ function App() {
       <Route path="/market/leaderboard" element={<LeaderboardPage />} />
       <Route path="/market/feed" element={<TradeFeedPage />} />
       <Route path="/market/wallet" element={<WalletPage />} />
-      <Route path="/compare" element={<ComparePage />} />
-      <Route path="/trends" element={<TrendsPage />} />
-      <Route path="/overview" element={<OverviewPage />} />
+      <Route path="/warriors" element={<Navigate to="/warriors/compare" replace />} />
+      <Route path="/warriors/compare" element={<ComparePage />} />
+      <Route path="/warriors/trends" element={<TrendsPage />} />
+      <Route path="/warriors/raids" element={<OverviewPage />} />
+      <Route path="/warriors/breakdown" element={<WarriorsBreakdownPage />} />
+      <Route path="/compare" element={<Navigate to="/warriors/compare" replace />} />
+      <Route path="/trends" element={<Navigate to="/warriors/trends" replace />} />
+      <Route path="/overview" element={<Navigate to="/warriors/raids" replace />} />
       <Route path="/faq" element={<FaqPage />} />
-      <Route path="/warriors" element={<WarriorsPage />} />
       <Route path="/admin" element={<AdminReportsPage />} />
       <Route path="/admin/players" element={<AdminPlayersPage />} />
       <Route path="/admin/stock-config" element={<AdminStockConfigPage />} />

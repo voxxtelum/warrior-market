@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Layout } from '../components/Layout';
+import { WarriorsLayout } from '../components/WarriorsLayout';
 import { ChevronDownIcon } from '../components/icons/ChevronDownIcon';
 import { useAuth } from '../authContext';
 import { getWarriorStats, type WarriorStats } from '../api';
@@ -92,7 +92,7 @@ function StatSubcard({
   );
 }
 
-export function WarriorsPage() {
+export function WarriorsBreakdownPage() {
   const { user, loading: authLoading } = useAuth();
   const [warriors, setWarriors] = useState<WarriorStats[] | null>(null);
   const [selectedKey, setSelectedKey] = useState<string>('');
@@ -124,7 +124,7 @@ export function WarriorsPage() {
   const selected = warriors?.find((w) => warriorKey(w) === selectedKey) ?? null;
 
   return (
-    <Layout title="Warriors" subtitle="Cool">
+    <WarriorsLayout>
       <div className="card warrior-card">
         <div className="warrior-select-wrap">
           <select
@@ -166,6 +166,6 @@ export function WarriorsPage() {
           </div>
         )}
       </div>
-    </Layout>
+    </WarriorsLayout>
   );
 }

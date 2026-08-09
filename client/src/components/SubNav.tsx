@@ -1,6 +1,6 @@
-import { NavLink } from "react-router-dom";
+import { TabNav, type TabNavLink } from "./TabNav";
 
-const LINKS: { to: string; label: string; end?: boolean }[] = [
+const LINKS: TabNavLink[] = [
   { to: "/admin", label: "Add Report", end: true },
   { to: "/admin/players", label: "Players" },
   { to: "/admin/stock-config", label: "Stock Config" },
@@ -11,18 +11,5 @@ const LINKS: { to: string; label: string; end?: boolean }[] = [
 ];
 
 export function SubNav() {
-  return (
-    <nav className="sub-nav">
-      {LINKS.map((link) => (
-        <NavLink
-          key={link.to}
-          to={link.to}
-          end={link.end}
-          className={({ isActive }) => (isActive ? "active" : undefined)}
-        >
-          {link.label}
-        </NavLink>
-      ))}
-    </nav>
-  );
+  return <TabNav links={LINKS} />;
 }

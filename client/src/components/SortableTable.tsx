@@ -74,8 +74,12 @@ export function SortableTable<T>({
           <th className="sortable" onClick={() => handleSort("label")}>
             Player{arrowFor("label")}
           </th>
-          {reports.map((r) => (
-            <th key={r.code} className="sortable" onClick={() => handleSort(r.code)}>
+          {reports.map((r, i) => (
+            <th
+              key={r.code}
+              className={`sortable${i < reports.length - 1 ? ' mobile-hide' : ''}`}
+              onClick={() => handleSort(r.code)}
+            >
               {fmtDate(r.start_time)}
               {arrowFor(r.code)}
             </th>
@@ -91,9 +95,13 @@ export function SortableTable<T>({
             className={isSelected?.(row) ? "selected-row" : undefined}
           >
             <td className="warrior-name">{getLabel(row)}</td>
-            {reports.map((r) => {
+            {reports.map((r, i) => {
               const v = getValue(row, r.code);
-              return <td key={r.code}>{typeof v === "number" ? v.toLocaleString() : <span className="no-data">–</span>}</td>;
+              return (
+                <td key={r.code} className={i < reports.length - 1 ? "mobile-hide" : undefined}>
+                  {typeof v === "number" ? v.toLocaleString() : <span className="no-data">–</span>}
+                </td>
+              );
             })}
           </tr>
         ))}

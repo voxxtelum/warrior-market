@@ -11,11 +11,13 @@ import {
   type WalletData,
 } from '../api';
 import { fmtCoin, fmtDateTime, priceDelta } from '../format';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 const PAGE_SIZE = 25;
 
 export function WalletPage() {
   const { user, loading } = useAuth();
+  const isMobile = useIsMobile();
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [transactions, setTransactions] = useState<TransactionView[] | null>(
     null,
@@ -84,17 +86,17 @@ export function WalletPage() {
 
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Holdings</h2>
-        <div className="table-scroll">
+        <div className="table-scroll table-compact">
           <table id="holdings-table">
             <thead>
               <tr>
                 <th>Warrior</th>
                 <th>Price</th>
-                <th>Shares</th>
-                <th>Cost basis</th>
-                <th>Value</th>
+                <th className="mobile-hide">Shares</th>
+                <th className="mobile-hide">Cost basis</th>
+                <th className="mobile-hide">Value</th>
                 <th>P&amp;L</th>
-                <th></th>
+                <th className="mobile-hide"></th>
               </tr>
             </thead>
             <tbody>
@@ -115,7 +117,19 @@ export function WalletPage() {
                     ? priceDelta(h.lastRaidPrice, h.latestPrice)
                     : null;
                 return (
-                  <tr key={`${h.playerName}::${h.server}`}>
+                  <tr
+                    key={`${h.playerName}::${h.server}`}
+                    style={isMobile ? { cursor: 'pointer' } : undefined}
+                    onClick={
+                      isMobile
+                        ? () =>
+                            setTradeModalTarget({
+                              playerName: h.playerName,
+                              server: h.server,
+                            })
+                        : undefined
+                    }
+                  >
                     <td className="warrior-name">{h.playerName}</td>
                     <td>
                       {h.latestPrice !== null ? (
@@ -129,9 +143,9 @@ export function WalletPage() {
                         <span className="no-data">–</span>
                       )}
                     </td>
-                    <td>{h.shares.toFixed(3)}</td>
-                    <td>{fmtCoin(h.costBasisTotal)}</td>
-                    <td>
+                    <td className="mobile-hide">{h.shares.toFixed(3)}</td>
+                    <td className="mobile-hide">{fmtCoin(h.costBasisTotal)}</td>
+                    <td className="mobile-hide">
                       {h.marketValue !== null ? (
                         fmtCoin(h.marketValue)
                       ) : (
@@ -156,7 +170,7 @@ export function WalletPage() {
                         <span className="no-data">–</span>
                       )}
                     </td>
-                    <td>
+                    <td className="mobile-hide">
                       <button
                         type="button"
                         className="icon-btn"
@@ -181,15 +195,15 @@ export function WalletPage() {
 
       <div className="card">
         <h2 style={{ marginTop: 0 }}>My trade history</h2>
-        <div className="table-scroll">
+        <div className="table-scroll table-compact">
           <table>
             <thead>
               <tr>
-                <th>When</th>
+                <th className="mobile-hide">When</th>
                 <th>Warrior</th>
                 <th>Side</th>
-                <th>Shares</th>
-                <th>Price</th>
+                <th className="mobile-hide">Shares</th>
+                <th className="mobile-hide">Price</th>
                 <th>Total</th>
               </tr>
             </thead>
@@ -203,11 +217,11 @@ export function WalletPage() {
               )}
               {pageTransactions?.map((tx) => (
                 <tr key={tx.id}>
-                  <td>{fmtDateTime(tx.createdAt)}</td>
+                  <td className="mobile-hide">{fmtDateTime(tx.createdAt)}</td>
                   <td className="warrior-name">{tx.playerName}</td>
                   <td>{tx.side}</td>
-                  <td>{tx.shares.toFixed(3)}</td>
-                  <td>{fmtCoin(tx.price)}</td>
+                  <td className="mobile-hide">{tx.shares.toFixed(3)}</td>
+                  <td className="mobile-hide">{fmtCoin(tx.price)}</td>
                   <td>{fmtCoin(tx.total)}</td>
                 </tr>
               ))}

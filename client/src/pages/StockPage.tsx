@@ -6,6 +6,7 @@ import { Sparkline } from '../components/Sparkline';
 import { TradeModal } from '../components/TradeModal';
 import { ArrowsRightLeftIcon } from '../components/icons/ArrowsRightLeftIcon';
 import { useAuth } from '../authContext';
+import { useIsMobile } from '../hooks/useIsMobile';
 import { NEGATIVE_COLOR, POSITIVE_COLOR, paletteColor } from '../chartColors';
 import { fmtCoin, fmtDate, fmtDateTime, priceDelta } from '../format';
 import {
@@ -179,15 +180,15 @@ function sortValue(row: LeaderboardRow, key: SortKey): string | number | null {
   return null;
 }
 
-const COLUMNS: { key: SortKey | null; label: string }[] = [
-  { key: null, label: 'Δ' },
+const COLUMNS: { key: SortKey | null; label: string; mobileHide?: boolean }[] = [
+  { key: null, label: 'Δ', mobileHide: true },
   { key: 'player', label: 'Player' },
   { key: 'price', label: 'Price' },
   { key: null, label: 'Trend' },
-  { key: 'change', label: 'Change (last raid)' },
-  { key: 'avgGrowth', label: 'Growth/raid' },
-  { key: 'raids', label: 'Raids' },
-  { key: null, label: '' },
+  { key: 'change', label: 'Change (last raid)', mobileHide: true },
+  { key: 'avgGrowth', label: 'Growth/raid', mobileHide: true },
+  { key: 'raids', label: 'Raids', mobileHide: true },
+  { key: null, label: '', mobileHide: true },
 ];
 
 function refreshHistory(setPriceHistory: (h: PlayerPriceHistory[]) => void) {
@@ -206,6 +207,7 @@ const RANGES: { key: RangeKey; label: string; ms: number | null }[] = [
 
 export function StockPage() {
   const { user } = useAuth();
+  const isMobile = useIsMobile();
   const [playersStock, setPlayersStock] = useState<PlayerStock[] | null>(null);
   const [priceHistory, setPriceHistory] = useState<PlayerPriceHistory[] | null>(
     null,
@@ -405,7 +407,7 @@ export function StockPage() {
           </div>
         )}
 
-        <div className="card global-stats-card">
+        <div className="card global-stats-card mobile-hide">
           <div className="wallet-summary">
             <div className="wallet-summary-item">
               <span className="value">
@@ -428,14 +430,19 @@ export function StockPage() {
       </div>
 
       <div className="card">
-        <div className="table-scroll">
+        <div className="table-scroll table-compact">
           <table id="stock-table">
             <thead>
               <tr>
                 {COLUMNS.map((col) => (
                   <th
                     key={col.label}
-                    className={col.key !== null ? 'sortable' : undefined}
+                    className={[
+                      col.key !== null ? 'sortable' : null,
+                      col.mobileHide ? 'mobile-hide' : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' ') || undefined}
                     onClick={
                       col.key !== null
                         ? () => handleSort(col.key as SortKey)
@@ -488,12 +495,17 @@ export function StockPage() {
                         : undefined
                     }
                     onClick={() =>
-                      setSelectedPlayer((p) =>
-                        p === row.player_name ? null : row.player_name,
-                      )
+                      isMobile
+                        ? setTradeModalTarget({
+                            playerName: row.player_name,
+                            server: row.server,
+                          })
+                        : setSelectedPlayer((p) =>
+                            p === row.player_name ? null : row.player_name,
+                          )
                     }
                   >
-                    <td>
+                    <td className="mobile-hide">
                       <RankDeltaCell
                         delta={rankDeltas.get(rowKey(row)) ?? null}
                       />
@@ -525,9 +537,13 @@ export function StockPage() {
                       </div>
                     </td>
                     <td>
-                      <Sparkline prices={row.series.map((s) => s.price)} />
+                      <Sparkline
+                        prices={row.series.map((s) => s.price)}
+                        width={isMobile ? 46 : 90}
+                        height={isMobile ? 20 : 28}
+                      />
                     </td>
-                    <td>
+                    <td className="mobile-hide">
                       {delta ? (
                         <span
                           className={color ? '' : delta.cls}
@@ -539,7 +555,7 @@ export function StockPage() {
                         <span className="no-data">–</span>
                       )}
                     </td>
-                    <td>
+                    <td className="mobile-hide">
                       {growth !== null ? (
                         <span
                           className={
@@ -556,8 +572,8 @@ export function StockPage() {
                         <span className="no-data">–</span>
                       )}
                     </td>
-                    <td>{row.raidCount}</td>
-                    <td>
+                    <td className="mobile-hide">{row.raidCount}</td>
+                    <td className="mobile-hide">
                       <button
                         type="button"
                         className="icon-btn"
@@ -581,7 +597,7 @@ export function StockPage() {
         </div>
       </div>
 
-      <div className="card">
+      <div className="card mobile-hide">
         <div className="section-header-row">
           <h2 style={{ marginTop: 0, marginBottom: 0 }}>
             Warrior Stock Prices
@@ -609,7 +625,7 @@ export function StockPage() {
         />
       </div>
 
-      <div className="card">
+      <div className="card mobile-hide">
         <label className="censor-toggle">
           <input
             type="checkbox"

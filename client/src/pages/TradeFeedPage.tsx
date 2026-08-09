@@ -20,16 +20,16 @@ export function TradeFeedPage() {
   return (
     <MarketLayout>
       <div className="card">
-        <div className="table-scroll">
+        <div className="table-scroll table-compact">
           <table id="trade-feed-table">
             <thead>
               <tr>
-                <th>When</th>
+                <th className="mobile-hide">When</th>
                 <th>Trader</th>
                 <th>Warrior</th>
                 <th>Side</th>
-                <th>Shares</th>
-                <th>Price</th>
+                <th className="mobile-hide">Shares</th>
+                <th className="mobile-hide">Price</th>
                 <th>Total</th>
               </tr>
             </thead>
@@ -46,7 +46,7 @@ export function TradeFeedPage() {
                   key={tx.id}
                   className={tx.isMine ? 'selected-row' : undefined}
                 >
-                  <td>{fmtDateTime(tx.createdAt)}</td>
+                  <td className="mobile-hide">{fmtDateTime(tx.createdAt)}</td>
                   <td>
                     {tx.username ?? (
                       <span className="anon-name">anonymous</span>
@@ -54,8 +54,8 @@ export function TradeFeedPage() {
                   </td>
                   <td className="warrior-name">{tx.playerName}</td>
                   <td>{tx.side}</td>
-                  <td>{tx.shares.toFixed(3)}</td>
-                  <td>{tx.price.toFixed(2)}</td>
+                  <td className="mobile-hide">{tx.shares.toFixed(3)}</td>
+                  <td className="mobile-hide">{tx.price.toFixed(2)}</td>
                   <td>{tx.total.toFixed(2)}</td>
                 </tr>
               ))}

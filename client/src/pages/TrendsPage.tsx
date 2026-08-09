@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Layout } from "../components/Layout";
+import { WarriorsLayout } from "../components/WarriorsLayout";
 import { StackCell } from "../components/StackCell";
 import { getCompareData, getZones, type CompareData, type CompareReport } from "../api";
 
@@ -88,7 +88,7 @@ export function TrendsPage() {
   );
 
   return (
-    <Layout title="Trends" subtitle="Look ma I'm trending (last 3 raids)">
+    <WarriorsLayout>
       <div className="card">
         <form onSubmit={(e) => e.preventDefault()}>
           <select value={zone} onChange={(e) => setZone(e.target.value)} disabled={!zones || zones.length === 0}>
@@ -131,14 +131,14 @@ export function TrendsPage() {
       </div>
 
       <div className="card">
-        <div className="table-scroll">
+        <div className="table-scroll table-compact">
           <table id="trends-table">
             <thead>
               <tr>
                 <th>Player</th>
                 <th>Damage</th>
                 {selectedAbilities.map((a, i) => (
-                  <th key={i}>{a.name}</th>
+                  <th key={i} className="mobile-hide">{a.name}</th>
                 ))}
               </tr>
             </thead>
@@ -162,7 +162,7 @@ export function TrendsPage() {
                         );
                         const values = reports.map((r) => (castsRow ? castsRow.values[r.code] ?? 0 : 0));
                         return (
-                          <td key={i} className="stack-cell">
+                          <td key={i} className="stack-cell mobile-hide">
                             <StackCell values={values} formatValue={fmtCount} formatDelta={absoluteDelta} />
                           </td>
                         );
@@ -174,6 +174,6 @@ export function TrendsPage() {
           </table>
         </div>
       </div>
-    </Layout>
+    </WarriorsLayout>
   );
 }

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getStockConfig, saveStockConfig, type StockAbilityConfig, type StockConfig } from "../../api";
+import { exponentialConvergence, fmtConvergenceDuration, reversionConvergence } from "../../convergence";
 import { slugifyHeading } from "./DocsTab";
 
 const STATUS_VISIBLE_MS = 3000;
@@ -11,6 +12,19 @@ type ScalarField = { key: ScalarKey; label: string; step: string; description: s
 
 function scalarsEqual(a: Record<ScalarKey, number>, b: Record<ScalarKey, number>): boolean {
   return (Object.keys(a) as ScalarKey[]).every((k) => a[k] === b[k]);
+}
+
+// "YY-MM-DD-HHMMSS", local time - precise enough that exporting twice in a
+// row (e.g. before/after a tweak, to compare) never collides on filename.
+function fmtExportTimestamp(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const yy = pad(date.getFullYear() % 100);
+  const mm = pad(date.getMonth() + 1);
+  const dd = pad(date.getDate());
+  const hh = pad(date.getHours());
+  const min = pad(date.getMinutes());
+  const ss = pad(date.getSeconds());
+  return `${yy}-${mm}-${dd}-${hh}${min}${ss}`;
 }
 
 function abilitiesEqual(a: StockAbilityConfig[], b: StockAbilityConfig[]): boolean {
@@ -79,6 +93,7 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ text: string; kind: "success" | "error" } | null>(null);
   const [statusFading, setStatusFading] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getStockConfig()
@@ -111,6 +126,18 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
     return !scalarsEqual(scalars, savedScalars) || !abilitiesEqual(abilities, savedAbilities);
   }, [scalars, abilities, savedScalars, savedAbilities]);
 
+  // Live off the draft `scalars` (not savedScalars) so this updates as the
+  // admin edits fields, before saving - the whole point is not having to
+  // save-and-reload (or simulate) to see what a setting change would do.
+  const convergence = useMemo(() => {
+    if (!scalars) return null;
+    return {
+      demandDecay: exponentialConvergence(scalars.demandAnchorDecayPct, scalars.driftIntervalMs),
+      marketGravity: exponentialConvergence(scalars.marketGravityStrength, scalars.driftIntervalMs),
+      driftReversion: reversionConvergence(scalars.driftReversionStrength, scalars.driftMaxPct, scalars.driftIntervalMs),
+    };
+  }, [scalars]);
+
   function updateAbility<K extends keyof StockAbilityConfig>(index: number, key: K, value: StockAbilityConfig[K]) {
     setAbilities((prev) => prev?.map((a, i) => (i === index ? { ...a, [key]: value } : a)) ?? null);
   }
@@ -121,6 +148,51 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
 
   function addAbility() {
     setAbilities((prev) => [...(prev ?? []), { id: 0, name: "", weight: 1, bucket: "all" }]);
+  }
+
+  // Exports whatever's currently in the form (including unsaved edits) -
+  // not just the last-saved config - since "back up what I'm looking at
+  // right now" is the more useful default, and it matches what Import
+  // hands back: the same { scalars..., abilities } shape round-trips
+  // losslessly.
+  function handleExport() {
+    if (!scalars || !abilities) return;
+    const json = JSON.stringify({ ...scalars, abilities }, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `stock-config-${fmtExportTimestamp(new Date())}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // Lands as an unsaved draft, same as hand-editing fields - merges onto
+  // the current scalars rather than replacing wholesale, so an older
+  // export missing newer keys (or a hand-edited partial file) doesn't blow
+  // away everything else, and only keys that are actually numbers get
+  // applied. Nothing is persisted until "Save changes" is clicked, which
+  // runs the same server-side validation as any manual edit.
+  async function handleImportFile(file: File) {
+    try {
+      const parsed = JSON.parse(await file.text()) as Record<string, unknown>;
+      if (!parsed || typeof parsed !== "object") throw new Error("File doesn't contain a JSON object");
+      const { abilities: importedAbilities, ...importedScalars } = parsed;
+      setScalars((prev) => {
+        if (!prev) return prev;
+        const next = { ...prev };
+        for (const [key, value] of Object.entries(importedScalars)) {
+          if (typeof value === "number" && key in next) next[key as ScalarKey] = value;
+        }
+        return next;
+      });
+      if (Array.isArray(importedAbilities)) {
+        setAbilities(importedAbilities.map((a) => ({ ...a })));
+      }
+      setStatus({ text: 'Imported as a draft - review below, then click "Save changes" to apply.', kind: "success" });
+    } catch (err) {
+      setStatus({ text: `Import failed: ${err instanceof Error ? err.message : String(err)}`, kind: "error" });
+    }
   }
 
   async function handleSave() {
@@ -184,6 +256,37 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
 
   return (
     <>
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Export / import config</h2>
+        <p className="subtitle" style={{ marginBottom: "1rem" }}>
+          Export downloads the entire config below (including any unsaved edits) as a JSON file. Import loads a file
+          back in as an unsaved draft - review it below and click "Save changes" to apply, same as editing fields by
+          hand.
+        </p>
+        <div className="card-footer">
+          {status && (
+            <span className={`status ${status.kind}${statusFading ? " fading" : ""}`}>{status.text}</span>
+          )}
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleImportFile(file);
+              e.target.value = "";
+            }}
+          />
+          <button type="button" onClick={() => importInputRef.current?.click()} disabled={!scalars || !abilities}>
+            Import config
+          </button>
+          <button type="button" onClick={handleExport} disabled={!scalars || !abilities}>
+            Export config
+          </button>
+        </div>
+      </div>
+
       {renderFieldGroup(
         "Raid scoring",
         "Applied when a raid report is ingested - scores the raid and updates the price.",
@@ -196,6 +299,56 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
         "Applied on a timer between raids - small routine nudges plus rare overnight swings.",
         "Timeline 2: An idle drift tick fires",
         DRIFT_FIELDS,
+      )}
+
+      {convergence && (
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>Convergence estimates</h2>
+          <p className="subtitle" style={{ marginBottom: "1rem" }}>
+            How long it takes a price gap to close under the idle-drift settings above, computed live from the
+            values in the fields - not simulated, exact math for the first two rows. Updates instantly as you edit a
+            field, before saving.
+          </p>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Mechanism</th>
+                  <th>Pulls toward</th>
+                  <th>Half-life</th>
+                  <th>~90% closed</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Demand anchor decay</td>
+                  <td>this warrior's own raid anchor</td>
+                  <td>{fmtConvergenceDuration(convergence.demandDecay.halfLifeMs)}</td>
+                  <td>{fmtConvergenceDuration(convergence.demandDecay.ninetyPctMs)}</td>
+                </tr>
+                <tr>
+                  <td>Market gravity</td>
+                  <td>the whole-market average</td>
+                  <td>{fmtConvergenceDuration(convergence.marketGravity.halfLifeMs)}</td>
+                  <td>{fmtConvergenceDuration(convergence.marketGravity.ninetyPctMs)}</td>
+                </tr>
+                <tr>
+                  <td>Drift reversion (from an example 20% gap)</td>
+                  <td>this warrior's trading anchor</td>
+                  <td>{fmtConvergenceDuration(convergence.driftReversion.halfLifeMs)}</td>
+                  <td>{fmtConvergenceDuration(convergence.driftReversion.ninetyPctMs)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p className="subtitle" style={{ marginBottom: 0, marginTop: "1rem" }}>
+            Demand anchor decay and market gravity are exact - they're never capped by "Drift max %". Drift reversion
+            is capped by it for any gap bigger than "Drift max %" / "Drift reversion strength", so it has no clean
+            percentage-based curve like the other two - the row above walks it tick-by-tick starting from a
+            representative 20% gap instead. None of these account for random noise or swing events, which add
+            variance around the trend but don't change it.
+          </p>
+        </div>
       )}
 
       {renderFieldGroup(

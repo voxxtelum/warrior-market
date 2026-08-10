@@ -20,7 +20,7 @@ Every warrior actually has **three** numbers tracked behind the scenes, and mixi
 - **Trading anchor** (`anchor_price`) — where idle drift tries to pull the current price back toward. Raids reset it *and* trades nudge it.
 - **Raid anchor** (`raid_anchor_price`) — the "fundamental" value. Only a raid result ever sets this one. Trades never touch it.
 
-Why two anchors instead of one? Because trading pressure and raid performance should behave differently over time. If a warrior gets bought up hard, that pressure should matter *for a while* — but it shouldn't be permanent the way an actual good raid night is. So every idle tick, the trading anchor quietly creeps back toward the raid anchor (see **Demand anchor decay** below). A raid result instantly snaps both anchors to the same new value, wiping out whatever gap trading had opened up.
+Why two anchors instead of one? Because trading pressure and raid performance should behave differently over time. If a warrior gets bought up hard, that pressure should matter *for a while* — but it shouldn't be permanent the way an actual good raid night is. So every idle tick, the trading anchor quietly creeps back toward the raid anchor (see **Demand anchor decay** below). A raid result resolves that pressure rather than erasing it: the raid's score is applied directly to whatever the current price already is, so both anchors land on the same new value — a warrior who got bought up ahead of a good raid keeps that gain *and* gets the raid's own boost on top of it, instead of having the demand-driven gap wiped out the instant the raid lands.
 
 ---
 
@@ -40,17 +40,22 @@ This is the only thing that "really" moves a price — everything else (drift, t
 
 Those two get blended into a **damage score**.
 
-**Step 5 — combine into one report score**, and update the price:
+**Step 5 — combine into one report score:**
 
 ```
 damage score  = (damage trend weight × trend score) + (damage peer weight × peer score)
 report score  = (damage weight × damage score) + (cast weight × cast score)
-new price     = old price × (1 + price sensitivity × report score)
 ```
 
 (Low-attendance warriors skip straight to `report score = 0` — no move this raid, but the raid still shows up in their history.)
 
-**Step 6 — freeze it.** The new price is permanently recorded, and both anchors (trading anchor and raid anchor) are reset to match it exactly, wiping out any lingering demand pressure from trading between raids.
+**Step 6 — apply it to the live price, and freeze it.** Unlike every other number on this page, `report score` isn't applied to some independent "true" price — it's applied directly to whatever the price is actually trading at right now, live demand and drift included:
+
+```
+new price = current live price × (1 + price sensitivity × report score)
+```
+
+That new price is permanently recorded, and *both* anchors (trading anchor and raid anchor) reset to match it. A raid always resolves the price forward from wherever it already was — it never corrects it back to some other value trading pressure never touched. This is the one moment `price sensitivity` and the current live price interact directly; every other timeline in this doc only ever moves the live price relative to itself.
 
 ### Config that affects this stage
 
@@ -152,6 +157,8 @@ This is the part that trips people up when tuning config, so it gets its own sec
 That second group is why changing a weight can *look* like it rewrote history: the moment you save new `damageWeight`/`castWeight`/etc. and reload the page, the Trend line, the "Change (last raid)" column, and "Growth/raid" for every warrior immediately reflect the new weights applied across their entire raid history — while the Price column, its small change figure, and the chart sitting right next to them don't move at all, because those are reading the frozen ledger instead.
 
 Don't mix the two groups together — e.g. comparing the frozen current price against the live-recomputed last-raid value produces a number that matches neither the chart nor the config. The small delta under the Price column and in the trade modal deliberately stay frozen-to-frozen (current price vs. the ledger's own last raid-sourced snapshot) for exactly this reason.
+
+Since a raid's `report score` now gets applied to the live (trading-affected) price rather than to an independent fundamentals value, the live group's **"Change (last raid)"** and **"Growth/raid"** can diverge more visibly from the frozen Price column's own raid-to-raid move than they used to. That's expected, not a bug: the live group answers "how did this warrior objectively perform, ignoring the market," while the frozen Price answers "what did the market actually pay" — the two are now genuinely different questions, not just different data sources for the same one.
 
 ## Where to tune all of this
 

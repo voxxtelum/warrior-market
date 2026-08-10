@@ -76,12 +76,16 @@ interface LeaderboardRow {
   // `price` below, which is purely raid-performance-derived and only moves
   // on raid ingest - kept separate for the "since last raid" metrics.
   currentPrice: number;
-  // Frozen ledger value for the most recent raid (price_snapshots, source =
-  // 'raid') - the correct baseline for comparing against currentPrice, since
-  // both come from the same frozen ledger. Distinct from `price` below,
-  // which is computeStock()'s live-recomputed value for that same raid and
-  // can drift far from the ledger once scoring config has changed since.
-  lastRaidPrice: number | null;
+  // Baseline for the "since last raid" figure shown against currentPrice -
+  // both come from the same frozen ledger (price_snapshots), unlike `price`
+  // below (computeStock()'s live-recomputed value, which can drift far from
+  // the ledger once scoring config has changed since). Usually the most
+  // recent raid's frozen price, EXCEPT right when that raid just landed and
+  // no drift tick has happened since - in that instant currentPrice IS that
+  // raid's price, so this instead falls back to the price immediately
+  // before the raid (see sinceRaidBasePriceByPlayer), so the delta reflects
+  // what the raid itself changed rather than reading a false 0.
+  sinceRaidBasePrice: number | null;
   price: number;
   raidCount: number;
   prevPrice: number | null;
@@ -92,7 +96,7 @@ interface LeaderboardRow {
 function buildLeaderboard(
   playersStock: PlayerStock[],
   currentPriceByPlayer: Map<string, number>,
-  lastRaidPriceByPlayer: Map<string, number>,
+  sinceRaidBasePriceByPlayer: Map<string, number>,
 ): LeaderboardRow[] {
   return playersStock
     .filter((p) => p.series.length > 0)
@@ -104,7 +108,7 @@ function buildLeaderboard(
         player_name: p.player_name,
         server: p.server,
         currentPrice: currentPriceByPlayer.get(key) ?? last.price,
-        lastRaidPrice: lastRaidPriceByPlayer.get(key) ?? null,
+        sinceRaidBasePrice: sinceRaidBasePriceByPlayer.get(key) ?? null,
         price: last.price,
         raidCount: p.series.length,
         prevPrice: prev ? prev.price : null,
@@ -116,6 +120,26 @@ function buildLeaderboard(
 
 function changeValue(row: LeaderboardRow): number | null {
   return row.prevPrice !== null ? row.price - row.prevPrice : null;
+}
+
+// See sinceRaidBasePriceByPlayer's comment for why this isn't simply "the
+// most recent raid entry's price."
+function sinceRaidBasePrice(series: PlayerPriceHistory['series']): number | null {
+  const last = series[series.length - 1];
+  if (!last) return null;
+  if (last.source === 'raid') {
+    if (last.delta !== null) return last.price - last.delta;
+    // Bulk-rebuilt raid row (report delete / market reset) has no stored
+    // delta - fall back to the raid before it, if any.
+    for (let i = series.length - 2; i >= 0; i--) {
+      if (series[i].source === 'raid') return series[i].price;
+    }
+    return null;
+  }
+  for (let i = series.length - 1; i >= 0; i--) {
+    if (series[i].source === 'raid') return series[i].price;
+  }
+  return null;
 }
 
 // Geometric-mean per-raid price growth, derived purely from the player's own
@@ -272,18 +296,20 @@ export function StockPage() {
     return map;
   }, [priceHistory]);
 
-  // The frozen ledger's most recent raid-sourced snapshot per player -
-  // series is chronological, so the last entry with source 'raid' is it.
-  const lastRaidPriceByPlayer = useMemo(() => {
+  // Baseline for the "since last raid" figure per player - normally the
+  // frozen ledger's most recent raid-sourced snapshot, EXCEPT when that raid
+  // is also the ledger's newest entry overall (i.e. it just landed and no
+  // drift tick has run since), where using its own price as the baseline
+  // would always compare a value against itself and read a false 0. In that
+  // case, reconstruct the price from right before the raid via its stored
+  // `delta` instead, so the figure shows what the raid actually changed.
+  const sinceRaidBasePriceByPlayer = useMemo(() => {
     const map = new Map<string, number>();
     if (priceHistory) {
       for (const p of priceHistory) {
-        for (let i = p.series.length - 1; i >= 0; i--) {
-          if (p.series[i].source === 'raid') {
-            map.set(`${p.player_name}::${p.server}`, p.series[i].price);
-            break;
-          }
-        }
+        const key = `${p.player_name}::${p.server}`;
+        const base = sinceRaidBasePrice(p.series);
+        if (base !== null) map.set(key, base);
       }
     }
     return map;
@@ -292,9 +318,9 @@ export function StockPage() {
   const leaderboard = useMemo(
     () =>
       playersStock
-        ? buildLeaderboard(playersStock, currentPriceByPlayer, lastRaidPriceByPlayer)
+        ? buildLeaderboard(playersStock, currentPriceByPlayer, sinceRaidBasePriceByPlayer)
         : [],
-    [playersStock, currentPriceByPlayer, lastRaidPriceByPlayer],
+    [playersStock, currentPriceByPlayer, sinceRaidBasePriceByPlayer],
   );
 
   const rankDeltas = useMemo(() => buildRankDeltas(leaderboard), [leaderboard]);
@@ -492,15 +518,15 @@ export function StockPage() {
                     ? priceDelta(row.prevPrice, row.price)
                     : null;
                 // Same "Change" shown in the trade modal - the live tradable
-                // price against the frozen ledger's last raid snapshot, as
+                // price against row.sinceRaidBasePrice (frozen ledger), as
                 // opposed to `delta` above which compares the last two raid
-                // snapshots only. Deliberately uses row.lastRaidPrice (frozen
-                // ledger), not row.price (computeStock()'s live-recomputed
-                // value) - mixing a frozen number with a live-recomputed one
-                // produces a delta that doesn't match what's on the chart.
+                // snapshots only. Deliberately uses the frozen ledger, not
+                // row.price (computeStock()'s live-recomputed value) - mixing
+                // a frozen number with a live-recomputed one produces a
+                // delta that doesn't match what's on the chart.
                 const liveDelta =
-                  row.lastRaidPrice !== null
-                    ? priceDelta(row.lastRaidPrice, row.currentPrice)
+                  row.sinceRaidBasePrice !== null
+                    ? priceDelta(row.sinceRaidBasePrice, row.currentPrice)
                     : null;
                 const pct =
                   row.prevPrice !== null

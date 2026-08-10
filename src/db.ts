@@ -1353,20 +1353,25 @@ export interface WarriorVolumeEntry {
   totalInvested: number;
 }
 
-// Per-warrior trade volume for the admin Characters tab - only includes
-// warriors with at least one trade (same as the old Market Stats "Volume by
-// warrior" table it replaces). totalShares is today's outstanding position
-// (sum of current holdings), separate from volume (all-time traded coin).
-// totalInvested mirrors getWarriorHolders' totalInvested (sum of per-holder
-// marketValue), which collapses to totalShares * latest price since every
-// holder of a warrior shares the same latest price.
+// Per-warrior trade volume, for the admin Characters tab and the Price
+// History filter dropdown - includes EVERY warrior, not just ones that have
+// been traded (starts from `warriors`, left-joining transactions, rather
+// than the other way around - an untraded warrior still needs to show up
+// with zero volume, both in the Characters roster and as a filterable
+// option in Price History, which has raid/drift entries for warriors no
+// one has ever bought or sold). totalShares is today's outstanding
+// position (sum of current holdings), separate from volume (all-time
+// traded coin). totalInvested mirrors getWarriorHolders' totalInvested (sum
+// of per-holder marketValue), which collapses to totalShares * latest
+// price since every holder of a warrior shares the same latest price.
 export function getWarriorVolumeOverview(): WarriorVolumeEntry[] {
   const rows = db
     .prepare(
-      `SELECT w.id AS warrior_id, w.player_name, w.server, SUM(t.total) AS volume, COUNT(*) AS tradeCount
-       FROM transactions t
-       JOIN warriors w ON w.id = t.warrior_id
-       GROUP BY t.warrior_id
+      `SELECT w.id AS warrior_id, w.player_name, w.server,
+              COALESCE(SUM(t.total), 0) AS volume, COUNT(t.id) AS tradeCount
+       FROM warriors w
+       LEFT JOIN transactions t ON t.warrior_id = w.id
+       GROUP BY w.id
        ORDER BY volume DESC`,
     )
     .all() as unknown as {

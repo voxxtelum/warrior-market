@@ -370,6 +370,7 @@ export function computeStock(): PlayerStock[] {
 // manual/low-volume, so the recompute cost is negligible, and it keeps this
 // in lockstep with whatever computeStock() actually does.
 export function snapshotPricesForReport(reportCode: string, createdAt: number = Date.now()) {
+  const stockConfig = loadStockConfig();
   const allStock = computeStock();
   for (const playerStock of allStock) {
     const point = playerStock.series.find((s) => s.report_code === reportCode);
@@ -380,13 +381,25 @@ export function snapshotPricesForReport(reportCode: string, createdAt: number = 
     // current latest row for this warrior really is the row immediately
     // before this one.
     const previousPrice = getLatestPrice(warriorId);
-    const delta = previousPrice !== null ? point.price - previousPrice : null;
-    insertPriceSnapshot(warriorId, point.price, delta, "raid", reportCode, createdAt);
-    // Raid results still fully override accumulated demand/drift - a new
-    // result resets both the trading anchor and the fundamental raid
-    // anchor (see setRaidAnchorPrice/drift.ts) to the same value.
-    setAnchorPrice(warriorId, point.price);
-    setRaidAnchorPrice(warriorId, point.price);
+    // Apply this raid's score to the LIVE price (wherever demand/drift left
+    // it), not to computeStock()'s own independent fundamentals series - a
+    // raid resolves the bet players made on the live price, rather than
+    // correcting it to a value trading pressure never touched. Falls back
+    // to point.price (computeStock()'s own first-ever value, which is just
+    // startingPrice compounded once) only when there's no live price yet -
+    // i.e. this warrior's very first price ever.
+    const newPrice =
+      previousPrice !== null
+        ? previousPrice * (1 + stockConfig.priceSensitivity * point.report_score)
+        : point.price;
+    const delta = previousPrice !== null ? newPrice - previousPrice : null;
+    insertPriceSnapshot(warriorId, newPrice, delta, "raid", reportCode, createdAt);
+    // Both anchors now converge to the same freshly-resolved price - there's
+    // no more "true target vs. blended" distinction. Demand/drift can pull
+    // anchor_price away from raid_anchor_price again between raids exactly
+    // as before; decay keeps pulling it back toward THIS raid's price.
+    setAnchorPrice(warriorId, newPrice);
+    setRaidAnchorPrice(warriorId, newPrice);
   }
 }
 
@@ -396,6 +409,19 @@ export function snapshotPricesForReport(reportCode: string, createdAt: number = 
 // chart's chronological order is preserved. Used both for the one-time
 // historical backfill below and whenever raid history changes after the
 // fact (a report gets deleted, or the market is reset).
+//
+// Known, deliberate limitation: unlike snapshotPricesForReport (which
+// compounds a raid's score onto the live price), this always writes
+// computeStock()'s pure fundamentals value. That's exactly correct after a
+// market reset (resetMarketState wipes trading history alongside this
+// rebuild, so there's no live price to preserve), but after a single report
+// delete it isn't - trading history survives, and faithfully replaying
+// "what the live price would have been at each historical raid, accounting
+// for every interleaved trade/drift tick" is a sequential-replay problem,
+// not this function's simple bulk recompute. Not worth solving for a rare,
+// deliberate admin action - just be aware a report delete can leave a small
+// discontinuity between the rebuilt raid history and the live price that
+// was already there.
 export function rebuildRaidPriceSnapshots(): void {
   const allStock = computeStock();
   const entries: { warriorId: number; price: number; reportCode: string; createdAt: number }[] = [];

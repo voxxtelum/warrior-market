@@ -262,6 +262,7 @@ export async function setPlayerHidden(playerName: string, server: string, hidden
 export interface PriceSnapshotPoint {
   created_at: number;
   price: number;
+  delta: number | null;
   source: "raid" | "drift" | "swing" | "trade";
   report_code: string | null;
 }

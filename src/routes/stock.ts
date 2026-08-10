@@ -22,7 +22,11 @@ stockRouter.get("/history", (_req, res) => {
   const rows = getAllPriceSnapshots();
   const byPlayer = new Map<
     string,
-    { player_name: string; server: string; series: { created_at: number; price: number; source: string; report_code: string | null }[] }
+    {
+      player_name: string;
+      server: string;
+      series: { created_at: number; price: number; delta: number | null; source: string; report_code: string | null }[];
+    }
   >();
   for (const row of rows) {
     const key = `${row.player_name}::${row.server}`;
@@ -32,6 +36,7 @@ stockRouter.get("/history", (_req, res) => {
     byPlayer.get(key)!.series.push({
       created_at: row.created_at,
       price: row.price,
+      delta: row.delta,
       source: row.source,
       report_code: row.report_code,
     });

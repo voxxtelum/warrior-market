@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { ChartBarIcon } from './icons/ChartBarIcon';
 import { FireIcon } from './icons/FireIcon';
-import { QuestionMarkCircleIcon } from './icons/QuestionMarkCircleIcon';
+import { HelpCircleIcon } from './icons/HelpCircleIcon';
 import { Cog6ToothIcon } from './icons/Cog6ToothIcon';
 import { Bars3Icon } from './icons/Bars3Icon';
 import { useAuth } from '../authContext';
@@ -37,7 +37,7 @@ function NavItems({ onNavigate }: { onNavigate: () => void }) {
         Warriors
       </NavLink>
       <NavLink to="/faq" className={navLinkClass} onClick={onNavigate}>
-        <QuestionMarkCircleIcon className="icon-btn-icon" />
+        <HelpCircleIcon className="icon-btn-icon" />
         FAQ
       </NavLink>
       {user?.isAdmin && (

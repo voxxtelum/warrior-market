@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { MainNav } from "./MainNav";
 import { NotificationBanner } from "./NotificationBanner";
+import { GlobalFooter } from "./GlobalFooter";
 
 interface LayoutProps {
   title: string;
@@ -28,6 +29,8 @@ export function Layout({ title, subtitle, icon, children }: LayoutProps) {
       <NotificationBanner />
 
       {children}
+
+      <GlobalFooter />
     </>
   );
 }

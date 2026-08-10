@@ -11,6 +11,7 @@ import { WalletPage } from "./pages/WalletPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
 import { TradeFeedPage } from "./pages/TradeFeedPage";
 import { FaqPage } from "./pages/FaqPage";
+import { DocumentationPage } from "./pages/DocumentationPage";
 import { WarriorsBreakdownPage } from "./pages/WarriorsBreakdownPage";
 
 function App() {
@@ -31,6 +32,7 @@ function App() {
       <Route path="/trends" element={<Navigate to="/warriors/trends" replace />} />
       <Route path="/overview" element={<Navigate to="/warriors/raids" replace />} />
       <Route path="/faq" element={<FaqPage />} />
+      <Route path="/documentation" element={<DocumentationPage />} />
       <Route path="/admin" element={<AdminReportsPage />} />
       <Route path="/admin/manage-app" element={<AdminManageAppPage />} />
       <Route path="/admin/price-history" element={<AdminPriceHistoryPage />} />

@@ -333,6 +333,27 @@ nav.nav-dropdown a.active {
   margin-top: 1rem;
 }
 
+.global-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-bottom: 0;
+}
+.global-footer-links {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+.global-footer-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
 form {
   display: flex;
   gap: 0.5rem;
@@ -1132,29 +1153,6 @@ ul.player-toggle-list input[type='checkbox'] {
 .player-server {
   color: var(--muted);
   font-size: 0.85rem;
-}
-
-.censor-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-.censor-toggle input[type='checkbox'] {
-  width: 1.1rem;
-  height: 1.1rem;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-.censor-box {
-  display: inline-block;
-  width: 100px;
-  height: 0.9em;
-  background: var(--color-black);
-  border-radius: 1.5px;
-  vertical-align: middle;
 }
 
 #overview-table td,

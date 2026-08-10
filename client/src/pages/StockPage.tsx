@@ -249,7 +249,6 @@ export function StockPage() {
     null,
   );
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
-  const [censored, setCensored] = useState(false);
   const [selectedRange, setSelectedRange] = useState<RangeKey>('All');
   const [sortKey, setSortKey] = useState<SortKey>('price');
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
@@ -415,7 +414,7 @@ export function StockPage() {
         const color = paletteColor(colorIndex);
         return [
           {
-            label: censored ? '████████' : row.player_name,
+            label: row.player_name,
             data: series.map((s) => ({ x: s.created_at, y: s.price })),
             // Drift ticks make points ~6x denser than the old one-per-raid
             // series - Chart.js's default curve interpolation would overshoot
@@ -430,7 +429,7 @@ export function StockPage() {
           },
         ];
       });
-    }, [priceHistory, leaderboard, selectedPlayer, censored, selectedRange]);
+    }, [priceHistory, leaderboard, selectedPlayer, selectedRange]);
 
   return (
     <MarketLayout>
@@ -573,24 +572,20 @@ export function StockPage() {
                       />
                     </td>
                     <td>
-                      {censored ? (
-                        <span className="censor-box"></span>
-                      ) : (
-                        <span className="player-name-cell">
-                          {row.avatar && (
-                            <img
-                              className="user-avatar player-name-avatar"
-                              src={row.avatar}
-                              alt=""
-                              width={20}
-                              height={20}
-                            />
-                          )}
-                          <span className="warrior-name">
-                            {row.player_name}
-                          </span>
+                      <span className="player-name-cell">
+                        {row.avatar && (
+                          <img
+                            className="user-avatar player-name-avatar"
+                            src={row.avatar}
+                            alt=""
+                            width={20}
+                            height={20}
+                          />
+                        )}
+                        <span className="warrior-name">
+                          {row.player_name}
                         </span>
-                      )}
+                      </span>
                     </td>
                     <td>
                       <div className="price-cell">
@@ -687,17 +682,6 @@ export function StockPage() {
           xTickFormatter={fmtDate}
           xTooltipFormatter={fmtDateTime}
         />
-      </div>
-
-      <div className="card mobile-hide">
-        <label className="censor-toggle">
-          <input
-            type="checkbox"
-            checked={censored}
-            onChange={(e) => setCensored(e.target.checked)}
-          />
-          Censor player names
-        </label>
       </div>
 
       {tradeModalTarget && (

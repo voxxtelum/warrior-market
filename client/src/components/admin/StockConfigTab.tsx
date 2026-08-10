@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getStockConfig, saveStockConfig, type StockAbilityConfig, type StockConfig } from "../../api";
 import { exponentialConvergence, fmtConvergenceDuration, reversionConvergence } from "../../convergence";
-import { slugifyHeading } from "./DocsTab";
+import { slugifyHeading } from "../../docsMarkdown";
 
 const STATUS_VISIBLE_MS = 3000;
 const STATUS_FADE_MS = 1000;

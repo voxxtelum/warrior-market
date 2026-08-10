@@ -1,31 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Marked } from "marked";
 import { getStocksDoc } from "../../api";
-
-// Slug used both here (to tag each rendered heading with an id) and by
-// StockConfigTab (to build links that land on a specific section) - keep
-// the two in sync if this changes.
-export function slugifyHeading(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-// A scoped Marked instance (rather than the shared default export FaqPage
-// uses) so this heading-id override doesn't leak into other markdown
-// rendered elsewhere in the app.
-const docsMarked = new Marked();
-docsMarked.use({
-  renderer: {
-    heading(token) {
-      const html = this.parser.parseInline(token.tokens);
-      const id = slugifyHeading(token.text);
-      return `<h${token.depth} id="${id}">${html}</h${token.depth}>\n`;
-    },
-  },
-});
+import { docsMarked } from "../../docsMarkdown";
 
 export function DocsTab({ scrollToAnchor }: { scrollToAnchor: string | null }) {
   const [html, setHtml] = useState<string | null>(null);

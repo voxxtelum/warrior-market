@@ -1085,6 +1085,13 @@ tbody tr:hover {
   color: var(--muted);
 }
 
+.net-worth-delta {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
 .price-cell {
   display: flex;
   flex-direction: column;
@@ -1394,6 +1401,14 @@ ul.player-toggle-list input[type='checkbox'] {
   font-size: 1.4rem;
   font-weight: 400;
 }
+.wallet-summary-item .value-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+.wallet-summary-item .value-row .value {
+  font-size: 1.5rem;
+}
 .wallet-summary-item .label {
   color: var(--muted);
   font-size: 0.7rem;
@@ -1493,8 +1508,12 @@ ul.player-toggle-list input[type='checkbox'] {
     gap: 1.25rem;
   }
   .wallet-summary-item .value,
-  .wallet-summary-item > .value {
+  .wallet-summary-item > .value,
+  .wallet-summary-item .value-row .value {
     font-size: 1.1rem;
+  }
+  .wallet-summary-item .value-row {
+    gap: 0.3rem;
   }
   .wallet-summary-item .label {
     font-size: 0.62rem;

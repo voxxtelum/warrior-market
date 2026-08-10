@@ -5,6 +5,7 @@ import {
   getRaidAnchorPrice,
   insertPriceSnapshot,
   listWarriorsWithRaidSnapshot,
+  refreshPortfolioSnapshots,
   setAnchorPrice,
   setLastDriftAt,
 } from "./db";
@@ -31,6 +32,14 @@ export function runDriftTick() {
   const config = loadStockConfig();
   const warriors = listWarriorsWithRaidSnapshot();
   const now = Date.now();
+
+  // Must run before this tick's price updates below, using prices as they
+  // stood at the end of the *previous* tick - so the delta a user sees
+  // between now and the next tick reflects what this tick actually changes.
+  // Refreshing after the updates (as this used to do) would always read
+  // back a delta of 0, since prices only change during a tick and the
+  // snapshot would be re-synced to the same values in the same call.
+  refreshPortfolioSnapshots();
 
   // Snapshot today's cross-sectional average up front, before any of this
   // tick's updates are applied, so market gravity doesn't become

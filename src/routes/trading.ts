@@ -6,6 +6,7 @@ import {
   getLeaderboard,
   getMarketSummary,
   getOrCreateWallet,
+  getPortfolioSnapshotNetWorth,
   getUserTradeCount,
   getWarriorId,
   listHoldingsWithContext,
@@ -54,10 +55,13 @@ tradingRouter.get("/wallet", requireAuth, (req, res) => {
     marketValue: h.latest_price !== null ? h.shares * h.latest_price : null,
   }));
   const holdingsValue = holdings.reduce((sum, h) => sum + (h.marketValue ?? 0), 0);
+  const netWorth = wallet.balance + holdingsValue;
+  const snapshotNetWorth = getPortfolioSnapshotNetWorth(req.user!.discord_id);
   res.json({
     balance: wallet.balance,
     holdings,
-    netWorth: wallet.balance + holdingsValue,
+    netWorth,
+    netWorthDelta: snapshotNetWorth !== null ? netWorth - snapshotNetWorth : 0,
     tradeCount: getUserTradeCount(req.user!.discord_id),
     // Exposed here (rather than /api/stock/config, which is admin-only) so
     // the trade modal can show a live fee preview for any logged-in trader.

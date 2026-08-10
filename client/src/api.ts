@@ -291,6 +291,7 @@ export interface WalletData {
   balance: number;
   holdings: HoldingView[];
   netWorth: number;
+  netWorthDelta: number;
   tradeCount: number;
   tradeFeePct: number;
 }
@@ -513,6 +514,7 @@ export interface AdminUserDetail {
   balance: number;
   holdings: AdminUserHolding[];
   netWorth: number;
+  netWorthDelta: number;
   tradeCount: number;
   transactions: AdminUserTransaction[];
 }

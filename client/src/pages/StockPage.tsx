@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ChartDataset } from 'chart.js/auto';
 import { MarketLayout } from '../components/MarketLayout';
 import { LineChart } from '../components/LineChart';
+import { NetWorthDeltaBadge } from '../components/NetWorthDeltaBadge';
 import { Sparkline } from '../components/Sparkline';
 import { TradeModal } from '../components/TradeModal';
 import { ArrowsRightLeftIcon } from '../components/icons/ArrowsRightLeftIcon';
@@ -424,8 +425,11 @@ export function StockPage() {
                 <span className="label">Holdings</span>
               </div>
               <div className="wallet-summary-item">
-                <span className="value">
-                  {wallet ? fmtCoin(wallet.netWorth) : '–'}
+                <span className="value-row">
+                  <span className="value">
+                    {wallet ? fmtCoin(wallet.netWorth) : '–'}
+                  </span>
+                  {wallet && <NetWorthDeltaBadge delta={wallet.netWorthDelta} />}
                 </span>
                 <span className="label">Portfolio</span>
               </div>

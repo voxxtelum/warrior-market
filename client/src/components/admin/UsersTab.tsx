@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../authContext';
 import { AddRemoveCoinsCard } from '../AddRemoveCoinsCard';
 import { HoldingsTable } from '../HoldingsTable';
+import { NetWorthDeltaBadge } from '../NetWorthDeltaBadge';
 import { Pagination } from '../Pagination';
 import { PortfolioBreakdownCard } from '../PortfolioBreakdownCard';
 import { SidePill } from '../SidePill';
@@ -407,8 +408,11 @@ export function UsersTab() {
             </span>
           </div>
           <div className="wallet-summary-item">
-            <span className="value">
-              {userDetail ? fmtCoin(userDetail.netWorth) : '–'}
+            <span className="value-row">
+              <span className="value">
+                {userDetail ? fmtCoin(userDetail.netWorth) : '–'}
+              </span>
+              {userDetail && <NetWorthDeltaBadge delta={userDetail.netWorthDelta} />}
             </span>
             <span className="label">Portfolio</span>
           </div>

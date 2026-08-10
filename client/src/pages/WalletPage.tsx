@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { HoldingsTable } from '../components/HoldingsTable';
 import { MarketLayout } from '../components/MarketLayout';
+import { NetWorthDeltaBadge } from '../components/NetWorthDeltaBadge';
 import { Pagination } from '../components/Pagination';
 import { PortfolioBreakdownCard } from '../components/PortfolioBreakdownCard';
 import { SidePill } from '../components/SidePill';
@@ -99,8 +100,11 @@ export function WalletPage() {
             </span>
           </div>
           <div className="wallet-summary-item">
-            <span className="value">
-              {wallet ? fmtCoin(wallet.netWorth) : '–'}
+            <span className="value-row">
+              <span className="value">
+                {wallet ? fmtCoin(wallet.netWorth) : '–'}
+              </span>
+              {wallet && <NetWorthDeltaBadge delta={wallet.netWorthDelta} />}
             </span>
             <span className="label">Portfolio</span>
           </div>

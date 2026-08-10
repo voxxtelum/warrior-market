@@ -144,6 +144,16 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
 
+  -- One row per user, overwritten in place on every hourly drift tick (see
+  -- refreshPortfolioSnapshots()) - this is not a history log, just "net
+  -- worth as of the last refresh," used to compute a "since last hour"
+  -- delta. Seeded at STARTING_BALANCE when a wallet is created.
+  CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+    user_id TEXT PRIMARY KEY REFERENCES users(discord_id),
+    net_worth REAL NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS holdings (
     user_id TEXT NOT NULL,
     warrior_id INTEGER NOT NULL,
@@ -1223,6 +1233,9 @@ export function getOrCreateWallet(userId: string): WalletRow {
   db.prepare(
     `INSERT INTO wallets (user_id, balance, created_at) VALUES (?, ?, ?)`,
   ).run(userId, STARTING_BALANCE, now);
+  db.prepare(
+    `INSERT INTO portfolio_snapshots (user_id, net_worth, created_at) VALUES (?, ?, ?)`,
+  ).run(userId, STARTING_BALANCE, now);
   return { user_id: userId, balance: STARTING_BALANCE, created_at: now };
 }
 
@@ -1733,6 +1746,42 @@ export function getLeaderboard(): LeaderboardEntry[] {
     .sort((a, b) => b.netWorth - a.netWorth);
 }
 
+// Overwrites every existing portfolio_snapshots row with each user's
+// current net worth (reusing getLeaderboard()'s already-batched
+// computation) - called once per drift tick, *before* that tick's price
+// updates are applied (see runDriftTick), so the row holds "net worth as of
+// the previous tick" for the whole interval until the next tick refreshes
+// it again. Table stays exactly one row per user; this is not a history
+// log, see the table's own comment.
+export function refreshPortfolioSnapshots(): void {
+  const leaderboard = getLeaderboard();
+  const now = Date.now();
+  const stmt = db.prepare(
+    `INSERT INTO portfolio_snapshots (user_id, net_worth, created_at) VALUES (?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET net_worth = excluded.net_worth, created_at = excluded.created_at`,
+  );
+  db.exec('BEGIN');
+  try {
+    for (const entry of leaderboard) {
+      stmt.run(entry.user_id, entry.netWorth, now);
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+// Net worth as of the last hourly refresh, for computing a "since last
+// hour" delta against a live-computed net worth. Null only if the user has
+// no wallet yet (getOrCreateWallet() seeds this alongside the wallet).
+export function getPortfolioSnapshotNetWorth(userId: string): number | null {
+  const row = db
+    .prepare(`SELECT net_worth FROM portfolio_snapshots WHERE user_id = ?`)
+    .get(userId) as unknown as { net_worth: number } | undefined;
+  return row ? row.net_worth : null;
+}
+
 export interface AdminWalletOverviewEntry {
   userId: string;
   username: string;
@@ -1955,6 +2004,7 @@ export function resetMarketState(): void {
     db.prepare(`DELETE FROM holdings`).run();
     db.prepare(`DELETE FROM notifications`).run();
     db.prepare(`UPDATE wallets SET balance = ?`).run(STARTING_BALANCE);
+    db.prepare(`UPDATE portfolio_snapshots SET net_worth = ?`).run(STARTING_BALANCE);
     db.prepare(`DELETE FROM price_snapshots`).run();
     db.exec('COMMIT');
   } catch (err) {

@@ -8,6 +8,7 @@ import {
   getLinkedWarrior,
   getAdminPriceHistory,
   getOrCreateWallet,
+  getPortfolioSnapshotNetWorth,
   getUserById,
   getUserTradeCount,
   getWarriorById,
@@ -88,6 +89,8 @@ adminMarketRouter.get("/users/:userId", (req, res) => {
   }));
 
   const linked = getLinkedWarrior(userId);
+  const netWorth = wallet.balance + holdingsValue;
+  const snapshotNetWorth = getPortfolioSnapshotNetWorth(userId);
 
   res.json({
     userId,
@@ -101,7 +104,8 @@ adminMarketRouter.get("/users/:userId", (req, res) => {
     lastLoginAt: targetUser.last_login_at,
     balance: wallet.balance,
     holdings,
-    netWorth: wallet.balance + holdingsValue,
+    netWorth,
+    netWorthDelta: snapshotNetWorth !== null ? netWorth - snapshotNetWorth : 0,
     tradeCount: getUserTradeCount(userId),
     transactions,
   });

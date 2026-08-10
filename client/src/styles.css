@@ -774,7 +774,7 @@ tbody tr:hover {
 }
 
 #trade-feed-table th:nth-child(3) {
-  text-align: center;
+  text-align: left;
 }
 #trade-feed-table td:nth-child(3) {
   text-align: left;

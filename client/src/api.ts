@@ -559,6 +559,7 @@ export interface WarriorVolumeRow {
   totalShares: number;
   holderCount: number;
   totalInvested: number;
+  hidden: boolean;
 }
 
 export async function getWarriorVolumeOverview(): Promise<WarriorVolumeRow[]> {

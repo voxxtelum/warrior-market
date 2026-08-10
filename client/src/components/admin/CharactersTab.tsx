@@ -91,14 +91,16 @@ export function CharactersTab() {
 
   const sortedRows = useMemo(() => {
     if (!rows) return [];
-    return [...rows].sort((a, b) => {
-      const av = sortValue(a, sortKey);
-      const bv = sortValue(b, sortKey);
-      if (typeof av === 'string' || typeof bv === 'string') {
-        return sortDir * String(av).localeCompare(String(bv));
-      }
-      return sortDir * (av - bv);
-    });
+    return rows
+      .filter((r) => !r.hidden)
+      .sort((a, b) => {
+        const av = sortValue(a, sortKey);
+        const bv = sortValue(b, sortKey);
+        if (typeof av === 'string' || typeof bv === 'string') {
+          return sortDir * String(av).localeCompare(String(bv));
+        }
+        return sortDir * (av - bv);
+      });
   }, [rows, sortKey, sortDir]);
 
   function toggleDetail(warriorId: number, mode: 'trades' | 'shares') {

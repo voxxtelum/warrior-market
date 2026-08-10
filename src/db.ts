@@ -1351,6 +1351,7 @@ export interface WarriorVolumeEntry {
   totalShares: number;
   holderCount: number;
   totalInvested: number;
+  hidden: boolean;
 }
 
 // Per-warrior trade volume, for the admin Characters tab and the Price
@@ -1364,11 +1365,19 @@ export interface WarriorVolumeEntry {
 // traded coin). totalInvested mirrors getWarriorHolders' totalInvested (sum
 // of per-holder marketValue), which collapses to totalShares * latest
 // price since every holder of a warrior shares the same latest price.
+// `hidden` reports each warrior's Players-tab visibility so callers can
+// decide whether to filter it out - the Characters roster only wants
+// enabled warriors, while Price History intentionally shows hidden ones too
+// (see getAdminPriceHistory).
 export function getWarriorVolumeOverview(): WarriorVolumeEntry[] {
   const rows = db
     .prepare(
       `SELECT w.id AS warrior_id, w.player_name, w.server,
-              COALESCE(SUM(t.total), 0) AS volume, COUNT(t.id) AS tradeCount
+              COALESCE(SUM(t.total), 0) AS volume, COUNT(t.id) AS tradeCount,
+              EXISTS(
+                SELECT 1 FROM hidden_players hp
+                WHERE hp.player_name = w.player_name AND hp.server = w.server
+              ) AS hidden
        FROM warriors w
        LEFT JOIN transactions t ON t.warrior_id = w.id
        GROUP BY w.id
@@ -1380,6 +1389,7 @@ export function getWarriorVolumeOverview(): WarriorVolumeEntry[] {
     server: string;
     volume: number;
     tradeCount: number;
+    hidden: number;
   }[];
 
   const sharesByWarrior = new Map<number, number>();
@@ -1407,6 +1417,7 @@ export function getWarriorVolumeOverview(): WarriorVolumeEntry[] {
       totalShares,
       holderCount: holdersByWarrior.get(r.warrior_id) ?? 0,
       totalInvested: price !== null ? totalShares * price : 0,
+      hidden: !!r.hidden,
     };
   });
 }

@@ -161,20 +161,27 @@ function rowKey(row: LeaderboardRow): string {
 }
 
 // Positions gained (positive) or lost (negative) vs. each player's own
-// previous-raid price rank - null when there's no previous raid to rank
-// against yet (e.g. a player's first appearance on the board).
+// pre-raid board rank - null when there's no baseline to rank against yet
+// (e.g. a player's first appearance on the board). Ranked on currentPrice /
+// sinceRaidBasePrice (the same frozen-ledger family the Price column itself
+// sorts by, not the live-recomputed `price`/`prevPrice` pair used for the
+// raid-only "Change" and "Growth/raid" columns) so this always agrees with
+// a player's actual neighbors in the default Price-sorted view - otherwise
+// two players can show opposite-signed deltas of the same magnitude while
+// sitting right next to each other, because trading/drift moved currentPrice
+// independently of pure raid performance since their last raid.
 function buildRankDeltas(
   leaderboard: LeaderboardRow[],
 ): Map<string, number | null> {
   const currentRank = new Map<string, number>();
   [...leaderboard]
-    .sort((a, b) => b.price - a.price)
+    .sort((a, b) => b.currentPrice - a.currentPrice)
     .forEach((row, i) => currentRank.set(rowKey(row), i + 1));
 
   const previousRank = new Map<string, number>();
   leaderboard
-    .filter((row) => row.prevPrice !== null)
-    .sort((a, b) => (b.prevPrice as number) - (a.prevPrice as number))
+    .filter((row) => row.sinceRaidBasePrice !== null)
+    .sort((a, b) => (b.sinceRaidBasePrice as number) - (a.sinceRaidBasePrice as number))
     .forEach((row, i) => previousRank.set(rowKey(row), i + 1));
 
   const deltas = new Map<string, number | null>();

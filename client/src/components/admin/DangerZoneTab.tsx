@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ConfirmModal } from '../ConfirmModal';
+import { PlayersTab } from './PlayersTab';
 import { resetMarket } from '../../api';
 
 export function DangerZoneTab() {
@@ -14,6 +15,8 @@ export function DangerZoneTab() {
 
   return (
     <>
+      <PlayersTab />
+
       <div className="card danger-card">
         <h2 style={{ marginTop: 0 }}>Global reset</h2>
         <p className="subtitle">

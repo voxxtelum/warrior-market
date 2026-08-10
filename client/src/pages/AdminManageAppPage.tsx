@@ -2,17 +2,15 @@ import { useState } from 'react';
 import { AdminLayout } from '../components/AdminLayout';
 import { UsersTab } from '../components/admin/UsersTab';
 import { CharactersTab } from '../components/admin/CharactersTab';
-import { PlayersTab } from '../components/admin/PlayersTab';
 import { StockConfigTab } from '../components/admin/StockConfigTab';
 import { DocsTab } from '../components/admin/DocsTab';
 import { DangerZoneTab } from '../components/admin/DangerZoneTab';
 
-type View = 'users' | 'characters' | 'players' | 'stock-config' | 'docs' | 'danger';
+type View = 'users' | 'characters' | 'stock-config' | 'docs' | 'danger';
 
 const TABS: { key: View; label: string }[] = [
   { key: 'users', label: 'Users' },
   { key: 'characters', label: 'Characters' },
-  { key: 'players', label: 'Players' },
   { key: 'stock-config', label: 'Stock Config' },
   { key: 'docs', label: 'Docs' },
   { key: 'danger', label: 'Danger Zone' },
@@ -46,7 +44,6 @@ export function AdminManageAppPage() {
 
       {view === 'users' && <UsersTab />}
       {view === 'characters' && <CharactersTab />}
-      {view === 'players' && <PlayersTab />}
       {view === 'stock-config' && <StockConfigTab onNavigateToDocs={navigateToDocs} />}
       {view === 'docs' && <DocsTab scrollToAnchor={docsAnchor} />}
       {view === 'danger' && <DangerZoneTab />}

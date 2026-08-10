@@ -13,10 +13,11 @@ import { fmtCoin, fmtDateTime, fmtRelativeTime } from '../../format';
 
 const TRADES_PAGE_SIZE = 10;
 
-type SortKey = 'character' | 'volume' | 'trades' | 'shares';
+type SortKey = 'character' | 'invested' | 'volume' | 'trades' | 'shares' | 'holders';
 
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'character', label: 'Character' },
+  { key: 'invested', label: 'Total Invested' },
   { key: 'volume', label: 'Volume' },
   { key: 'trades', label: 'Trades' },
 ];
@@ -25,12 +26,16 @@ function sortValue(row: WarriorVolumeRow, key: SortKey): string | number {
   switch (key) {
     case 'character':
       return `${row.playerName}-${row.server}`.toLowerCase();
+    case 'invested':
+      return row.totalInvested;
     case 'volume':
       return row.volume;
     case 'trades':
       return row.tradeCount;
     case 'shares':
       return row.totalShares;
+    case 'holders':
+      return row.holderCount;
   }
 }
 
@@ -120,7 +125,9 @@ export function CharactersTab() {
                 {COLUMNS.map((col) => (
                   <th
                     key={col.key}
-                    className={col.key === 'volume' ? 'sortable text-right' : 'sortable'}
+                    className={
+                      col.key === 'volume' || col.key === 'invested' ? 'sortable text-right' : 'sortable'
+                    }
                     onClick={() => handleSort(col.key)}
                   >
                     {col.label}
@@ -131,13 +138,16 @@ export function CharactersTab() {
                 <th className="sortable" onClick={() => handleSort('shares')}>
                   Shares{arrowFor('shares')}
                 </th>
+                <th className="sortable" onClick={() => handleSort('holders')}>
+                  Holders{arrowFor('holders')}
+                </th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {rows?.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="no-data">
+                  <td colSpan={8} className="no-data">
                     No trades yet.
                   </td>
                 </tr>
@@ -150,6 +160,7 @@ export function CharactersTab() {
                   <td className="warrior-name">
                     {row.playerName}-{row.server}
                   </td>
+                  <td className="text-right">{fmtCoin(row.totalInvested)}</td>
                   <td className="text-right">{fmtCoin(row.volume)}</td>
                   <td>{row.tradeCount}</td>
                   <td>
@@ -162,6 +173,7 @@ export function CharactersTab() {
                     </button>
                   </td>
                   <td>{row.totalShares.toFixed(3)}</td>
+                  <td>{row.holderCount}</td>
                   <td>
                     <button
                       type="button"
@@ -206,7 +218,6 @@ export function CharactersTab() {
                 <table>
                   <thead>
                     <tr>
-                      <th></th>
                       <th>Username</th>
                       <th className="mobile-hide">Shares</th>
                       <th>Market value</th>
@@ -216,7 +227,7 @@ export function CharactersTab() {
                   <tbody>
                     {holders.holders.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="no-data">
+                        <td colSpan={4} className="no-data">
                           No current holders.
                         </td>
                       </tr>
@@ -224,13 +235,21 @@ export function CharactersTab() {
                     {holders.holders.map((h) => (
                       <tr key={h.userId}>
                         <td>
-                          {h.avatar ? (
-                            <img className="user-avatar" src={h.avatar} alt="" width={28} height={28} />
-                          ) : (
-                            <span className="user-avatar user-avatar-placeholder" />
-                          )}
+                          <span className="player-name-cell">
+                            {h.avatar ? (
+                              <img
+                                className="user-avatar player-name-avatar"
+                                src={h.avatar}
+                                alt=""
+                                width={20}
+                                height={20}
+                              />
+                            ) : (
+                              <span className="user-avatar user-avatar-placeholder player-name-avatar" />
+                            )}
+                            {h.username}
+                          </span>
                         </td>
-                        <td>{h.username}</td>
                         <td className="mobile-hide">{h.shares.toFixed(3)}</td>
                         <td>
                           {h.marketValue !== null ? (

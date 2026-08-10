@@ -1,10 +1,28 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getStockConfig, saveStockConfig, type StockAbilityConfig, type StockConfig } from "../../api";
 import { slugifyHeading } from "./DocsTab";
+
+const STATUS_VISIBLE_MS = 3000;
+const STATUS_FADE_MS = 1000;
 
 type ScalarKey = Exclude<keyof StockConfig, "abilities">;
 
 type ScalarField = { key: ScalarKey; label: string; step: string; description: string };
+
+function scalarsEqual(a: Record<ScalarKey, number>, b: Record<ScalarKey, number>): boolean {
+  return (Object.keys(a) as ScalarKey[]).every((k) => a[k] === b[k]);
+}
+
+function abilitiesEqual(a: StockAbilityConfig[], b: StockAbilityConfig[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every(
+    (ability, i) =>
+      ability.id === b[i].id &&
+      ability.name === b[i].name &&
+      ability.weight === b[i].weight &&
+      ability.bucket === b[i].bucket,
+  );
+}
 
 // Grouped by which timeline in STOCKS.md each setting affects, rather than
 // one flat list - a report ingest, a drift tick, and a trade each read a
@@ -56,8 +74,11 @@ const BUCKETS = ["all", "dps", "tank"];
 export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor: string) => void }) {
   const [scalars, setScalars] = useState<Record<ScalarKey, number> | null>(null);
   const [abilities, setAbilities] = useState<StockAbilityConfig[] | null>(null);
+  const [savedScalars, setSavedScalars] = useState<Record<ScalarKey, number> | null>(null);
+  const [savedAbilities, setSavedAbilities] = useState<StockAbilityConfig[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ text: string; kind: "success" | "error" } | null>(null);
+  const [statusFading, setStatusFading] = useState(false);
 
   useEffect(() => {
     getStockConfig()
@@ -65,9 +86,30 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
         const { abilities: loadedAbilities, ...loadedScalars } = config;
         setScalars(loadedScalars);
         setAbilities(loadedAbilities.map((a) => ({ ...a })));
+        setSavedScalars(loadedScalars);
+        setSavedAbilities(loadedAbilities.map((a) => ({ ...a })));
       })
       .catch(() => {});
   }, []);
+
+  // Status text auto-dismisses instead of lingering until the next save:
+  // shown plainly for STATUS_VISIBLE_MS, then fades out (via the "fading"
+  // class/CSS transition) over STATUS_FADE_MS before being cleared.
+  useEffect(() => {
+    if (!status) return;
+    setStatusFading(false);
+    const fadeTimer = setTimeout(() => setStatusFading(true), STATUS_VISIBLE_MS);
+    const clearTimer = setTimeout(() => setStatus(null), STATUS_VISIBLE_MS + STATUS_FADE_MS);
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(clearTimer);
+    };
+  }, [status]);
+
+  const dirty = useMemo(() => {
+    if (!scalars || !abilities || !savedScalars || !savedAbilities) return false;
+    return !scalarsEqual(scalars, savedScalars) || !abilitiesEqual(abilities, savedAbilities);
+  }, [scalars, abilities, savedScalars, savedAbilities]);
 
   function updateAbility<K extends keyof StockAbilityConfig>(index: number, key: K, value: StockAbilityConfig[K]) {
     setAbilities((prev) => prev?.map((a, i) => (i === index ? { ...a, [key]: value } : a)) ?? null);
@@ -87,6 +129,8 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
     setStatus(null);
     try {
       await saveStockConfig({ ...scalars, abilities });
+      setSavedScalars(scalars);
+      setSavedAbilities(abilities.map((a) => ({ ...a })));
       setStatus({ text: "Saved. Changes apply immediately, no restart needed.", kind: "success" });
     } catch (err) {
       setStatus({ text: err instanceof Error ? err.message : String(err), kind: "error" });
@@ -127,8 +171,10 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
             ))}
         </div>
         <div className="card-footer">
-          {status && <span className={`status ${status.kind}`}>{status.text}</span>}
-          <button type="button" className="btn-affirm" onClick={handleSave} disabled={saving}>
+          {status && (
+            <span className={`status ${status.kind}${statusFading ? " fading" : ""}`}>{status.text}</span>
+          )}
+          <button type="button" className="btn-affirm" onClick={handleSave} disabled={saving || !dirty}>
             Save changes
           </button>
         </div>
@@ -221,8 +267,10 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
             Add ability
           </button>
           <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
-            {status && <span className={`status ${status.kind}`}>{status.text}</span>}
-            <button type="button" className="btn-affirm" onClick={handleSave} disabled={saving}>
+            {status && (
+              <span className={`status ${status.kind}${statusFading ? " fading" : ""}`}>{status.text}</span>
+            )}
+            <button type="button" className="btn-affirm" onClick={handleSave} disabled={saving || !dirty}>
               Save changes
             </button>
           </div>

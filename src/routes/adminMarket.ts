@@ -9,6 +9,7 @@ import {
   getAdminPriceHistory,
   getOrCreateWallet,
   getUserById,
+  getUserTradeCount,
   getWarriorById,
   getWarriorHolders,
   getWarriorTrades,
@@ -101,6 +102,7 @@ adminMarketRouter.get("/users/:userId", (req, res) => {
     balance: wallet.balance,
     holdings,
     netWorth: wallet.balance + holdingsValue,
+    tradeCount: getUserTradeCount(userId),
     transactions,
   });
 });

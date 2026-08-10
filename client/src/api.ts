@@ -291,6 +291,7 @@ export interface WalletData {
   balance: number;
   holdings: HoldingView[];
   netWorth: number;
+  tradeCount: number;
   tradeFeePct: number;
 }
 
@@ -512,6 +513,7 @@ export interface AdminUserDetail {
   balance: number;
   holdings: AdminUserHolding[];
   netWorth: number;
+  tradeCount: number;
   transactions: AdminUserTransaction[];
 }
 
@@ -552,6 +554,8 @@ export interface WarriorVolumeRow {
   volume: number;
   tradeCount: number;
   totalShares: number;
+  holderCount: number;
+  totalInvested: number;
 }
 
 export async function getWarriorVolumeOverview(): Promise<WarriorVolumeRow[]> {

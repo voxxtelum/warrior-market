@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
+import { HoldingsTable } from '../components/HoldingsTable';
 import { MarketLayout } from '../components/MarketLayout';
 import { Pagination } from '../components/Pagination';
 import { PortfolioBreakdownCard } from '../components/PortfolioBreakdownCard';
 import { SidePill } from '../components/SidePill';
 import { TradeModal } from '../components/TradeModal';
-import { ArrowsRightLeftIcon } from '../components/icons/ArrowsRightLeftIcon';
 import { useAuth } from '../authContext';
 import {
   getMyTransactions,
@@ -12,15 +12,13 @@ import {
   type TransactionView,
   type WalletData,
 } from '../api';
-import { fmtCoin, fmtDateTime, fmtRelativeTime, priceDelta } from '../format';
-import { useIsMobile } from '../hooks/useIsMobile';
+import { fmtCoin, fmtDateTime, fmtRelativeTime } from '../format';
 import { computePortfolioConcentration } from '../portfolio';
 
 const PAGE_SIZE = 25;
 
 export function WalletPage() {
   const { user, loading } = useAuth();
-  const isMobile = useIsMobile();
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [transactions, setTransactions] = useState<TransactionView[] | null>(
     null,
@@ -75,6 +73,10 @@ export function WalletPage() {
             <span className="label">Balance</span>
           </div>
           <div className="wallet-summary-item">
+            <span className="value">{wallet ? wallet.tradeCount : '–'}</span>
+            <span className="label">Trades</span>
+          </div>
+          <div className="wallet-summary-item">
             <span className="value">{wallet ? concentration.count : '–'}</span>
             <span className="label">Holdings</span>
           </div>
@@ -112,111 +114,14 @@ export function WalletPage() {
 
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Holdings</h2>
-        <div className="table-scroll table-compact">
-          <table id="holdings-table">
-            <thead>
-              <tr>
-                <th>Warrior</th>
-                <th>Price</th>
-                <th className="mobile-hide">Shares</th>
-                <th className="mobile-hide">Cost basis</th>
-                <th className="mobile-hide">Value</th>
-                <th>P&amp;L</th>
-                <th className="mobile-hide"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {wallet?.holdings.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="no-data">
-                    No holdings yet - trade a warrior from the Stocks page.
-                  </td>
-                </tr>
-              )}
-              {wallet?.holdings.map((h) => {
-                const pnl =
-                  h.marketValue !== null
-                    ? h.marketValue - h.costBasisTotal
-                    : null;
-                const change =
-                  h.latestPrice !== null && h.lastRaidPrice !== null
-                    ? priceDelta(h.lastRaidPrice, h.latestPrice)
-                    : null;
-                return (
-                  <tr
-                    key={`${h.playerName}::${h.server}`}
-                    style={isMobile ? { cursor: 'pointer' } : undefined}
-                    onClick={
-                      isMobile
-                        ? () =>
-                            setTradeModalTarget({
-                              playerName: h.playerName,
-                              server: h.server,
-                            })
-                        : undefined
-                    }
-                  >
-                    <td className="warrior-name">{h.playerName}</td>
-                    <td>
-                      {h.latestPrice !== null ? (
-                        <div className="price-cell">
-                          <span>{fmtCoin(h.latestPrice)}</span>
-                          <span className={`price-cell-change ${change ? change.cls : 'no-data'}`}>
-                            {change ? change.text : '–'}
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="no-data">–</span>
-                      )}
-                    </td>
-                    <td className="mobile-hide">{h.shares.toFixed(3)}</td>
-                    <td className="mobile-hide">{fmtCoin(h.costBasisTotal)}</td>
-                    <td className="mobile-hide">
-                      {h.marketValue !== null ? (
-                        fmtCoin(h.marketValue)
-                      ) : (
-                        <span className="no-data">–</span>
-                      )}
-                    </td>
-                    <td>
-                      {pnl !== null ? (
-                        <span
-                          className={
-                            pnl > 0
-                              ? 'delta-pos'
-                              : pnl < 0
-                                ? 'delta-neg'
-                                : 'delta-neutral'
-                          }
-                        >
-                          {pnl >= 0 ? '+' : ''}
-                          {fmtCoin(pnl)}
-                        </span>
-                      ) : (
-                        <span className="no-data">–</span>
-                      )}
-                    </td>
-                    <td className="mobile-hide">
-                      <button
-                        type="button"
-                        className="icon-btn"
-                        onClick={() =>
-                          setTradeModalTarget({
-                            playerName: h.playerName,
-                            server: h.server,
-                          })
-                        }
-                      >
-                        <ArrowsRightLeftIcon className="icon-btn-icon" />
-                        Trade
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <HoldingsTable
+          holdings={wallet?.holdings ?? []}
+          holdingsValue={concentration.holdingsValue}
+          showPriceDelta
+          onTrade={setTradeModalTarget}
+          tableId="holdings-table"
+          emptyMessage="No holdings yet - trade a warrior from the Stocks page."
+        />
       </div>
 
       <div className="card">

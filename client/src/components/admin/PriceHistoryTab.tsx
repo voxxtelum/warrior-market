@@ -100,7 +100,7 @@ export function PriceHistoryTab() {
           <option value="">All characters</option>
           {warriors?.map((w) => (
             <option key={w.warriorId} value={w.warriorId}>
-              {w.playerName} ({w.server})
+              {w.playerName}-{w.server}
             </option>
           ))}
         </select>
@@ -133,8 +133,8 @@ export function PriceHistoryTab() {
               return (
                 <tr key={entry.id}>
                   <td>{fmtDateTime(entry.createdAt)}</td>
-                  <td>
-                    {entry.playerName} ({entry.server})
+                  <td className="warrior-name">
+                    {entry.playerName}-{entry.server}
                   </td>
                   <td>{fmtPrice(entry.price)}</td>
                   <td className={delta?.cls}>{delta ? delta.text : <span className="no-data">–</span>}</td>

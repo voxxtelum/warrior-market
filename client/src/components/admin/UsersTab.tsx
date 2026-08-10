@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../authContext';
 import { AddRemoveCoinsCard } from '../AddRemoveCoinsCard';
+import { HoldingsTable } from '../HoldingsTable';
 import { Pagination } from '../Pagination';
 import { PortfolioBreakdownCard } from '../PortfolioBreakdownCard';
 import { SidePill } from '../SidePill';
@@ -375,6 +376,12 @@ export function UsersTab() {
           </div>
           <div className="wallet-summary-item">
             <span className="value">
+              {userDetail ? userDetail.tradeCount : '–'}
+            </span>
+            <span className="label">Trades</span>
+          </div>
+          <div className="wallet-summary-item">
+            <span className="value">
               {userDetail ? userConcentration.count : '–'}
             </span>
             <span className="label">Holdings</span>
@@ -425,57 +432,11 @@ export function UsersTab() {
 
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Holdings</h2>
-        <div className="table-scroll table-compact">
-          <table>
-            <thead>
-              <tr>
-                <th>Warrior</th>
-                <th>Price</th>
-                <th className="mobile-hide">Shares</th>
-                <th className="mobile-hide">Cost basis</th>
-                <th className="mobile-hide">Value</th>
-                <th>P&amp;L</th>
-              </tr>
-            </thead>
-            <tbody>
-              {userDetail?.holdings.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="no-data">
-                    No holdings.
-                  </td>
-                </tr>
-              )}
-              {userDetail?.holdings.map((h) => {
-                const pnl =
-                  h.marketValue !== null
-                    ? h.marketValue - h.costBasisTotal
-                    : null;
-                return (
-                  <tr key={`${h.playerName}::${h.server}`}>
-                    <td className="warrior-name">{h.playerName}</td>
-                    <td>
-                      {h.latestPrice !== null ? (
-                        fmtCoin(h.latestPrice)
-                      ) : (
-                        <span className="no-data">–</span>
-                      )}
-                    </td>
-                    <td className="mobile-hide">{h.shares.toFixed(3)}</td>
-                    <td className="mobile-hide">{fmtCoin(h.costBasisTotal)}</td>
-                    <td className="mobile-hide">
-                      {h.marketValue !== null ? (
-                        fmtCoin(h.marketValue)
-                      ) : (
-                        <span className="no-data">–</span>
-                      )}
-                    </td>
-                    <td>{pnlCell(pnl)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <HoldingsTable
+          holdings={userDetail?.holdings ?? []}
+          holdingsValue={userConcentration.holdingsValue}
+          emptyMessage="No holdings."
+        />
       </div>
 
       <div className="card">

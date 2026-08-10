@@ -1336,12 +1336,17 @@ export interface WarriorVolumeEntry {
   volume: number;
   tradeCount: number;
   totalShares: number;
+  holderCount: number;
+  totalInvested: number;
 }
 
 // Per-warrior trade volume for the admin Characters tab - only includes
 // warriors with at least one trade (same as the old Market Stats "Volume by
 // warrior" table it replaces). totalShares is today's outstanding position
 // (sum of current holdings), separate from volume (all-time traded coin).
+// totalInvested mirrors getWarriorHolders' totalInvested (sum of per-holder
+// marketValue), which collapses to totalShares * latest price since every
+// holder of a warrior shares the same latest price.
 export function getWarriorVolumeOverview(): WarriorVolumeEntry[] {
   const rows = db
     .prepare(
@@ -1360,21 +1365,32 @@ export function getWarriorVolumeOverview(): WarriorVolumeEntry[] {
   }[];
 
   const sharesByWarrior = new Map<number, number>();
+  const holdersByWarrior = new Map<number, number>();
   const shareRows = db
     .prepare(
-      `SELECT warrior_id, SUM(shares) AS totalShares FROM holdings WHERE shares > 0 GROUP BY warrior_id`,
+      `SELECT warrior_id, SUM(shares) AS totalShares, COUNT(*) AS holderCount
+       FROM holdings WHERE shares > 0 GROUP BY warrior_id`,
     )
-    .all() as unknown as { warrior_id: number; totalShares: number }[];
-  for (const r of shareRows) sharesByWarrior.set(r.warrior_id, r.totalShares);
+    .all() as unknown as { warrior_id: number; totalShares: number; holderCount: number }[];
+  for (const r of shareRows) {
+    sharesByWarrior.set(r.warrior_id, r.totalShares);
+    holdersByWarrior.set(r.warrior_id, r.holderCount);
+  }
 
-  return rows.map((r) => ({
-    warriorId: r.warrior_id,
-    playerName: r.player_name,
-    server: r.server,
-    volume: r.volume,
-    tradeCount: r.tradeCount,
-    totalShares: sharesByWarrior.get(r.warrior_id) ?? 0,
-  }));
+  return rows.map((r) => {
+    const totalShares = sharesByWarrior.get(r.warrior_id) ?? 0;
+    const price = totalShares > 0 ? getLatestPrice(r.warrior_id) : null;
+    return {
+      warriorId: r.warrior_id,
+      playerName: r.player_name,
+      server: r.server,
+      volume: r.volume,
+      tradeCount: r.tradeCount,
+      totalShares,
+      holderCount: holdersByWarrior.get(r.warrior_id) ?? 0,
+      totalInvested: price !== null ? totalShares * price : 0,
+    };
+  });
 }
 
 export interface WarriorTradeEntry {
@@ -1637,6 +1653,16 @@ export function listTransactions(
        LIMIT ?`,
     )
     .all(...params) as unknown as TransactionWithContext[];
+}
+
+// True all-time trade count for one user, independent of listTransactions'
+// display limit (200/500 depending on caller) - used by the wallet-summary
+// "Trades" stat, which would otherwise silently cap out for active traders.
+export function getUserTradeCount(userId: string): number {
+  const row = db
+    .prepare(`SELECT COUNT(*) AS count FROM transactions WHERE user_id = ?`)
+    .get(userId) as unknown as { count: number };
+  return row.count;
 }
 
 export interface LeaderboardEntry {

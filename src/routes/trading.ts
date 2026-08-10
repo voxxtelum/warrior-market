@@ -6,6 +6,7 @@ import {
   getLeaderboard,
   getMarketSummary,
   getOrCreateWallet,
+  getUserTradeCount,
   getWarriorId,
   listHoldingsWithContext,
   listTransactions,
@@ -57,6 +58,7 @@ tradingRouter.get("/wallet", requireAuth, (req, res) => {
     balance: wallet.balance,
     holdings,
     netWorth: wallet.balance + holdingsValue,
+    tradeCount: getUserTradeCount(req.user!.discord_id),
     // Exposed here (rather than /api/stock/config, which is admin-only) so
     // the trade modal can show a live fee preview for any logged-in trader.
     tradeFeePct: loadStockConfig().tradeFeePct,

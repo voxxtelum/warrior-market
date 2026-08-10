@@ -221,7 +221,7 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
         <h2 style={{ marginTop: 0 }}>{title}</h2>
         <p className="subtitle" style={{ marginBottom: "1rem" }}>
           {intro} See{" "}
-          <button type="button" className="docs-link-button" onClick={() => onNavigateToDocs(slugifyHeading(docsHeading))}>
+          <button type="button" className="text-link text-link-accent" onClick={() => onNavigateToDocs(slugifyHeading(docsHeading))}>
             "{docsHeading}"
           </button>{" "}
           in the docs.

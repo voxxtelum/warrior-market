@@ -131,10 +131,12 @@ db.exec(`
     warrior_id INTEGER NOT NULL,
     report_code TEXT,
     price REAL NOT NULL,
-    source TEXT NOT NULL CHECK (source IN ('raid', 'drift', 'swing')),
+    delta REAL,
+    source TEXT NOT NULL CHECK (source IN ('raid', 'drift', 'swing', 'trade')),
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_price_snapshots_warrior ON price_snapshots (warrior_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_price_snapshots_source_created ON price_snapshots (source, created_at DESC);
 
   CREATE TABLE IF NOT EXISTS wallets (
     user_id TEXT PRIMARY KEY REFERENCES users(discord_id),
@@ -217,31 +219,62 @@ if (!warriorsHasRaidAnchorPrice) {
 }
 
 // price_snapshots.source has a CHECK constraint, which SQLite can't widen
-// via ALTER TABLE - installs that predate the 'swing' source need the table
-// rebuilt. Guarded by inspecting the stored constraint text so this only
-// ever runs once; the CREATE TABLE above already includes 'swing' for fresh
-// installs, so this is a no-op there.
+// via ALTER TABLE - installs that predate the 'swing' and/or 'trade' sources
+// (and the 'delta' column) need the table rebuilt. Guarded by inspecting the
+// stored constraint text so this only ever runs once; the CREATE TABLE above
+// already includes the final shape for fresh installs, so this is a no-op
+// there. Checking for 'trade' alone covers both a pre-'swing' install and a
+// post-'swing'-but-pre-'trade' install in a single pass.
 const priceSnapshotsSql = (
   db
     .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'price_snapshots'`)
     .get() as unknown as { sql: string } | undefined
 )?.sql;
-if (priceSnapshotsSql && !priceSnapshotsSql.includes("'swing'")) {
-  db.exec(`
-    CREATE TABLE price_snapshots_new (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      warrior_id INTEGER NOT NULL,
-      report_code TEXT,
-      price REAL NOT NULL,
-      source TEXT NOT NULL CHECK (source IN ('raid', 'drift', 'swing')),
-      created_at INTEGER NOT NULL
-    );
-    INSERT INTO price_snapshots_new (id, warrior_id, report_code, price, source, created_at)
-      SELECT id, warrior_id, report_code, price, source, created_at FROM price_snapshots;
-    DROP TABLE price_snapshots;
-    ALTER TABLE price_snapshots_new RENAME TO price_snapshots;
-    CREATE INDEX IF NOT EXISTS idx_price_snapshots_warrior ON price_snapshots (warrior_id, created_at DESC);
-  `);
+if (priceSnapshotsSql && !priceSnapshotsSql.includes("'trade'")) {
+  db.exec('BEGIN');
+  try {
+    db.exec(`
+      CREATE TABLE price_snapshots_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        warrior_id INTEGER NOT NULL,
+        report_code TEXT,
+        price REAL NOT NULL,
+        delta REAL,
+        source TEXT NOT NULL CHECK (source IN ('raid', 'drift', 'swing', 'trade')),
+        created_at INTEGER NOT NULL
+      );
+      INSERT INTO price_snapshots_new (id, warrior_id, report_code, price, source, created_at)
+        SELECT id, warrior_id, report_code, price, source, created_at FROM price_snapshots;
+      DROP TABLE price_snapshots;
+      ALTER TABLE price_snapshots_new RENAME TO price_snapshots;
+      CREATE INDEX IF NOT EXISTS idx_price_snapshots_warrior ON price_snapshots (warrior_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_price_snapshots_source_created ON price_snapshots (source, created_at DESC);
+    `);
+
+    // One-time backfill of the new delta column: price minus the same
+    // warrior's immediately preceding row, NULL for each warrior's first
+    // row. Rides along on the rebuild above at no extra migration cost -
+    // never re-runs after this, guarded by the same 'trade' check.
+    const rows = db
+      .prepare(
+        `SELECT id, warrior_id, price FROM price_snapshots ORDER BY warrior_id, created_at ASC, id ASC`,
+      )
+      .all() as unknown as { id: number; warrior_id: number; price: number }[];
+    const updateDelta = db.prepare(`UPDATE price_snapshots SET delta = ? WHERE id = ?`);
+    let prevWarriorId: number | null = null;
+    let prevPrice: number | null = null;
+    for (const row of rows) {
+      const delta = row.warrior_id === prevWarriorId ? row.price - (prevPrice as number) : null;
+      updateDelta.run(delta, row.id);
+      prevWarriorId = row.warrior_id;
+      prevPrice = row.price;
+    }
+
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
 }
 
 // One-time backfill: identities that already existed before this feature
@@ -920,20 +953,29 @@ export interface PriceSnapshotRow {
   warrior_id: number;
   report_code: string | null;
   price: number;
-  source: 'raid' | 'drift' | 'swing';
+  delta: number | null;
+  source: 'raid' | 'drift' | 'swing' | 'trade';
   created_at: number;
 }
 
+// delta is the caller's responsibility, not computed here off getLatestPrice()
+// - the bulk historical rebuild path (replaceRaidPriceSnapshots) inserts rows
+// out of real-time order interleaved with existing drift/trade rows, so
+// "latest row right now" would not mean "the row immediately before this one"
+// there. Real-time callers (executeTrade, runDriftTick,
+// snapshotPricesForReport) each already have the correct "price before" on
+// hand and pass an accurate delta directly.
 export function insertPriceSnapshot(
   warriorId: number,
   price: number,
-  source: 'raid' | 'drift' | 'swing',
+  delta: number | null,
+  source: 'raid' | 'drift' | 'swing' | 'trade',
   reportCode: string | null,
   createdAt: number,
 ) {
   db.prepare(
-    `INSERT INTO price_snapshots (warrior_id, report_code, price, source, created_at) VALUES (?, ?, ?, ?, ?)`,
-  ).run(warriorId, reportCode, price, source, createdAt);
+    `INSERT INTO price_snapshots (warrior_id, report_code, price, delta, source, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(warriorId, reportCode, price, delta, source, createdAt);
 }
 
 export function getPriceSnapshotCount(): number {
@@ -961,9 +1003,14 @@ export function replaceRaidPriceSnapshots(
   try {
     db.prepare(`DELETE FROM price_snapshots WHERE source = 'raid'`).run();
     for (const e of entries) {
+      // delta: null - this is a bulk historical replay of a warrior's raid
+      // series interleaved with existing drift/trade rows that keep their
+      // own real timestamps, so there's no single well-defined "row right
+      // before this one" the way there is for a live insert.
       insertPriceSnapshot(
         e.warriorId,
         e.price,
+        null,
         'raid',
         e.reportCode,
         e.createdAt,
@@ -1080,6 +1127,83 @@ export function getAllPriceSnapshots(): (PriceSnapshotRow & {
     player_name: string;
     server: string;
   })[];
+}
+
+export interface PriceHistoryFilters {
+  sources: ('raid' | 'drift' | 'swing' | 'trade')[];
+  warriorId?: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PriceHistoryEntry {
+  id: number;
+  playerName: string;
+  server: string;
+  price: number;
+  delta: number | null;
+  source: 'raid' | 'drift' | 'swing' | 'trade';
+  createdAt: number;
+}
+
+// Admin-only price history, unlike getAllPriceSnapshots() above: not
+// filtered to hide currently-hidden warriors (an admin diagnosing history
+// wants to see everything), cross-warrior rather than one chart's worth,
+// and genuinely paginated in SQL rather than fetched whole - price_snapshots
+// grows unboundedly (hourly drift ticks, forever, across every warrior), so
+// unlike this codebase's other admin tables it can't be fetched in full and
+// paginated client-side.
+export function getAdminPriceHistory(filters: PriceHistoryFilters): {
+  entries: PriceHistoryEntry[];
+  total: number;
+} {
+  const { sources, warriorId, limit, offset } = filters;
+  if (sources.length === 0) return { entries: [], total: 0 };
+
+  const placeholders = sources.map(() => '?').join(', ');
+  const warriorClause = warriorId !== undefined ? 'AND ps.warrior_id = ?' : '';
+  const whereParams: (string | number)[] =
+    warriorId !== undefined ? [...sources, warriorId] : [...sources];
+
+  const total = (
+    db
+      .prepare(
+        `SELECT COUNT(*) AS c FROM price_snapshots ps WHERE ps.source IN (${placeholders}) ${warriorClause}`,
+      )
+      .get(...whereParams) as unknown as { c: number }
+  ).c;
+
+  const rows = db
+    .prepare(
+      `SELECT ps.id, ps.price, ps.delta, ps.source, ps.created_at, w.player_name, w.server
+       FROM price_snapshots ps
+       JOIN warriors w ON w.id = ps.warrior_id
+       WHERE ps.source IN (${placeholders}) ${warriorClause}
+       ORDER BY ps.created_at DESC, ps.id DESC
+       LIMIT ? OFFSET ?`,
+    )
+    .all(...whereParams, limit, offset) as unknown as {
+    id: number;
+    price: number;
+    delta: number | null;
+    source: PriceHistoryEntry['source'];
+    created_at: number;
+    player_name: string;
+    server: string;
+  }[];
+
+  return {
+    entries: rows.map((r) => ({
+      id: r.id,
+      playerName: r.player_name,
+      server: r.server,
+      price: r.price,
+      delta: r.delta,
+      source: r.source,
+      createdAt: r.created_at,
+    })),
+    total,
+  };
 }
 
 const STARTING_BALANCE = 1000;
@@ -1435,7 +1559,7 @@ export function executeTrade(
       )
       .run(userId, warriorId, side, shares, price, total, now);
 
-    insertPriceSnapshot(warriorId, priceAfter, 'drift', null, now);
+    insertPriceSnapshot(warriorId, priceAfter, priceAfter - price, 'trade', null, now);
     setAnchorPrice(warriorId, priceAfter);
 
     db.exec('COMMIT');

@@ -262,7 +262,7 @@ export async function setPlayerHidden(playerName: string, server: string, hidden
 export interface PriceSnapshotPoint {
   created_at: number;
   price: number;
-  source: "raid" | "drift";
+  source: "raid" | "drift" | "swing" | "trade";
   report_code: string | null;
 }
 
@@ -574,6 +574,42 @@ export interface WarriorTradeRow {
 export async function getWarriorTrades(warriorId: number): Promise<WarriorTradeRow[]> {
   const res = await fetch(`/api/admin/market/warriors/${warriorId}/trades`);
   if (!res.ok) throw new Error("Failed to load warrior trades");
+  return res.json();
+}
+
+export type PriceHistorySource = "raid" | "drift" | "swing" | "trade";
+
+export interface PriceHistoryEntry {
+  id: number;
+  playerName: string;
+  server: string;
+  price: number;
+  delta: number | null;
+  source: PriceHistorySource;
+  createdAt: number;
+}
+
+export interface PriceHistoryResponse {
+  entries: PriceHistoryEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export async function getAdminPriceHistory(params: {
+  sources: PriceHistorySource[];
+  warriorId?: number;
+  page: number;
+  pageSize: number;
+}): Promise<PriceHistoryResponse> {
+  const query = new URLSearchParams({
+    sources: params.sources.join(","),
+    page: String(params.page),
+    pageSize: String(params.pageSize),
+  });
+  if (params.warriorId !== undefined) query.set("warriorId", String(params.warriorId));
+  const res = await fetch(`/api/admin/market/price-history?${query.toString()}`);
+  if (!res.ok) throw new Error("Failed to load price history");
   return res.json();
 }
 

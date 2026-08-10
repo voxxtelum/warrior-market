@@ -889,6 +889,31 @@ tbody tr:hover {
 .side-pill-cell {
   text-align: center;
 }
+.source-pill {
+  display: inline-block;
+  flex-shrink: 0;
+  padding: 0.1rem 0.5rem;
+  border-radius: 2px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: rgba(var(--accent-green-rgb), 0.15);
+  color: var(--accent-green);
+}
+.source-pill.swing {
+  background: rgba(191, 174, 72, 0.15);
+  color: var(--accent-gold);
+}
+.source-pill.trade {
+  background: rgba(var(--accent-rgb), 0.15);
+  color: var(--accent);
+}
+.source-pill.drift {
+  background: rgba(154, 154, 165, 0.15);
+  color: var(--muted);
+}
 .activity-teaser-name {
   flex: 1;
   min-width: 0;

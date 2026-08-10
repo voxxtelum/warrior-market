@@ -74,7 +74,7 @@ export function runDriftTick() {
     }
 
     const newPrice = currentPrice * (1 + totalPct);
-    insertPriceSnapshot(warrior.id, newPrice, source, null, now);
+    insertPriceSnapshot(warrior.id, newPrice, newPrice - currentPrice, source, null, now);
   }
 
   setLastDriftAt(now);

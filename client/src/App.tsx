@@ -5,6 +5,7 @@ import { TrendsPage } from "./pages/TrendsPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { AdminReportsPage } from "./pages/AdminReportsPage";
 import { AdminManageAppPage } from "./pages/AdminManageAppPage";
+import { AdminPriceHistoryPage } from "./pages/AdminPriceHistoryPage";
 import { AdminAuditLogPage } from "./pages/AdminAuditLogPage";
 import { WalletPage } from "./pages/WalletPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
@@ -32,6 +33,7 @@ function App() {
       <Route path="/faq" element={<FaqPage />} />
       <Route path="/admin" element={<AdminReportsPage />} />
       <Route path="/admin/manage-app" element={<AdminManageAppPage />} />
+      <Route path="/admin/price-history" element={<AdminPriceHistoryPage />} />
       <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
     </Routes>
   );

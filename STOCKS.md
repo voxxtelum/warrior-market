@@ -158,3 +158,9 @@ Don't mix the two groups together — e.g. comparing the frozen current price ag
 All of the settings above live on the admin **Stock Config** page and apply immediately — no restart needed, no redeploy needed. Every drift tick and every trade always uses whatever the config currently says, and so does the live-recomputed group above.
 
 Once a raid's price has been frozen into a warrior's history, it stays exactly as recorded — changing a config value afterward doesn't rewrite anything in the ledger. The only things that ever recompute a warrior's *entire* price history from scratch and overwrite the frozen ledger with it are deliberate, explicit admin actions: deleting a report, or using "Reset Market." Neither of those happens automatically, and both require confirmation.
+
+## Admin Price History
+
+Every row ever written to the `price_snapshots` ledger — raid, drift, swing, and trade alike — is browsable on the admin **Price History** page, across every warrior, newest first. Each row shows the resulting price and the exact delta from the row before it for that warrior. Drift is excluded by default (it's by far the largest and least interesting slice, given it ticks hourly forever); toggle it on, or narrow to one character, as needed.
+
+One caveat: a fix shipped alongside this tab corrected trade-caused rows to record `source: 'trade'` instead of `'drift'` (they were previously indistinguishable from routine idle ticks) and started storing each row's delta directly. Both apply going forward only — historical rows from before the fix still say `'drift'` even where a trade actually caused the move, and couldn't be reliably reclassified after the fact (there's no stored link back to the trade that caused them). Deltas on historical rows *were* backfilled, since those only need the ledger's own price history to compute.

@@ -6,6 +6,7 @@ import {
   getAdminWalletOverview,
   getLatestPrice,
   getLinkedWarrior,
+  getAdminPriceHistory,
   getOrCreateWallet,
   getUserById,
   getWarriorById,
@@ -154,6 +155,44 @@ adminMarketRouter.get("/warriors/:warriorId/trades", (req, res) => {
     return;
   }
   res.json(getWarriorTrades(warriorId));
+});
+
+const PRICE_HISTORY_SOURCES = ["raid", "drift", "swing", "trade"] as const;
+type PriceHistorySource = (typeof PRICE_HISTORY_SOURCES)[number];
+
+// Cross-warrior price_snapshots feed for the admin Price History tab.
+// Genuinely paginated in SQL (see getAdminPriceHistory's own comment) - drift
+// excluded by default via the `sources` param, since it's overwhelmingly the
+// largest and least interesting slice of this ever-growing table.
+adminMarketRouter.get("/price-history", (req, res) => {
+  const sourcesParam = typeof req.query.sources === "string" ? req.query.sources : "raid,swing,trade";
+  const sources = sourcesParam
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s): s is PriceHistorySource => (PRICE_HISTORY_SOURCES as readonly string[]).includes(s));
+
+  let warriorId: number | undefined;
+  if (typeof req.query.warriorId === "string" && req.query.warriorId.trim() !== "") {
+    const parsed = Number(req.query.warriorId);
+    if (!Number.isInteger(parsed)) {
+      res.status(400).json({ error: "Invalid warriorId" });
+      return;
+    }
+    warriorId = parsed;
+  }
+
+  const pageParam = typeof req.query.page === "string" ? Number(req.query.page) : 0;
+  const page = Number.isInteger(pageParam) && pageParam >= 0 ? pageParam : 0;
+  const pageSizeParam = typeof req.query.pageSize === "string" ? Number(req.query.pageSize) : 50;
+  const pageSize = Number.isInteger(pageSizeParam) && pageSizeParam > 0 && pageSizeParam <= 200 ? pageSizeParam : 50;
+
+  const { entries, total } = getAdminPriceHistory({
+    sources,
+    warriorId,
+    limit: pageSize,
+    offset: page * pageSize,
+  });
+  res.json({ entries, total, page, pageSize });
 });
 
 adminMarketRouter.post("/reset", (req, res) => {

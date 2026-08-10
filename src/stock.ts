@@ -2,6 +2,7 @@ import {
   getAllCasts,
   getAllDamage,
   getAllDamageTaken,
+  getLatestPrice,
   getOrCreateWarriorId,
   getPriceSnapshotCount,
   getStockConfigRaw,
@@ -374,7 +375,13 @@ export function snapshotPricesForReport(reportCode: string, createdAt: number = 
     const point = playerStock.series.find((s) => s.report_code === reportCode);
     if (!point) continue;
     const warriorId = getOrCreateWarriorId(playerStock.player_name, playerStock.server);
-    insertPriceSnapshot(warriorId, point.price, "raid", reportCode, createdAt);
+    // This is a real-time, one-report-at-a-time insert (unlike the bulk
+    // historical replay in replaceRaidPriceSnapshots), so the ledger's
+    // current latest row for this warrior really is the row immediately
+    // before this one.
+    const previousPrice = getLatestPrice(warriorId);
+    const delta = previousPrice !== null ? point.price - previousPrice : null;
+    insertPriceSnapshot(warriorId, point.price, delta, "raid", reportCode, createdAt);
     // Raid results still fully override accumulated demand/drift - a new
     // result resets both the trading anchor and the fundamental raid
     // anchor (see setRaidAnchorPrice/drift.ts) to the same value.

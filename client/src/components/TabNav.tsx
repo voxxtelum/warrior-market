@@ -5,6 +5,7 @@ export interface TabNavLink {
   to: string;
   label: string;
   end?: boolean;
+  badge?: string;
 }
 
 export function TabNav({ links }: { links: TabNavLink[] }) {
@@ -23,6 +24,7 @@ export function TabNav({ links }: { links: TabNavLink[] }) {
             className={({ isActive }) => (isActive ? "active" : undefined)}
           >
             {link.label}
+            {link.badge && <span className="tab-nav-badge">{link.badge}</span>}
           </NavLink>
         ))}
       </nav>
@@ -35,6 +37,7 @@ export function TabNav({ links }: { links: TabNavLink[] }) {
           {links.map((link) => (
             <option key={link.to} value={link.to}>
               {link.label}
+              {link.badge ? ` (${link.badge})` : ""}
             </option>
           ))}
         </select>

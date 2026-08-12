@@ -197,6 +197,79 @@ db.exec(`
     reason TEXT,
     created_at INTEGER NOT NULL
   );
+
+  -- Funds never own real warrior shares - pool_value/shares_outstanding are
+  -- a synthetic mutual-fund-style ledger, moved only by trades (mint/redeem
+  -- at NAV) and the periodic valuation tick (fundValuation.ts), which sums
+  -- constituent price changes weighted by fund_constituents.stock_count and
+  -- applies gain_multiplier/loss_multiplier. risk is a plain 1-5 int with
+  -- all label/color logic client-side (see funds.md REVISIONS) - kept off a
+  -- CHECK constraint deliberately, see the price_snapshots.source rebuild
+  -- below for why widening a CHECK later is expensive in this codebase.
+  -- Soft-deleted only (deleted_at), never hard DELETE, so fund_transactions/
+  -- fund_value_snapshots history survives a deletion.
+  CREATE TABLE IF NOT EXISTS funds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    risk INTEGER NOT NULL,
+    fee_pct REAL NOT NULL,
+    tax_pct REAL NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    gain_multiplier REAL NOT NULL DEFAULT 1,
+    loss_multiplier REAL NOT NULL DEFAULT 1,
+    seed_nav REAL NOT NULL DEFAULT 100,
+    pool_value REAL NOT NULL DEFAULT 0,
+    shares_outstanding REAL NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    deleted_at INTEGER
+  );
+
+  -- last_snapshot_price is the constituent warrior's price as of the last
+  -- valuation tick (seeded at add-time so a newly added constituent's first
+  -- tick contributes zero change, not a garbage jump from whenever the fund
+  -- itself was created).
+  CREATE TABLE IF NOT EXISTS fund_constituents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fund_id INTEGER NOT NULL REFERENCES funds(id),
+    warrior_id INTEGER NOT NULL REFERENCES warriors(id),
+    stock_count REAL NOT NULL,
+    last_snapshot_price REAL,
+    UNIQUE (fund_id, warrior_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_fund_constituents_fund ON fund_constituents (fund_id);
+
+  CREATE TABLE IF NOT EXISTS fund_value_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fund_id INTEGER NOT NULL,
+    nav REAL NOT NULL,
+    pool_value REAL NOT NULL,
+    shares_outstanding REAL NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_fund_value_snapshots_fund ON fund_value_snapshots (fund_id, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS fund_holdings (
+    user_id TEXT NOT NULL,
+    fund_id INTEGER NOT NULL,
+    shares REAL NOT NULL,
+    cost_basis_total REAL NOT NULL,
+    PRIMARY KEY (user_id, fund_id)
+  );
+
+  CREATE TABLE IF NOT EXISTS fund_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id TEXT NOT NULL,
+    fund_id INTEGER NOT NULL,
+    side TEXT NOT NULL CHECK (side IN ('buy', 'sell', 'liquidation')),
+    shares REAL NOT NULL,
+    nav REAL NOT NULL,
+    total REAL NOT NULL,
+    fee REAL NOT NULL DEFAULT 0,
+    tax REAL NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_fund_transactions_user ON fund_transactions (user_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_fund_transactions_fund ON fund_transactions (fund_id, created_at DESC);
 `);
 
 // Idle drift reverts toward this, and demand-driven trade impact updates it -
@@ -226,6 +299,29 @@ const warriorsHasRaidAnchorPrice = (
 ).some((c) => c.name === 'raid_anchor_price');
 if (!warriorsHasRaidAnchorPrice) {
   db.exec(`ALTER TABLE warriors ADD COLUMN raid_anchor_price REAL`);
+}
+
+// Additive columns for the Funds feature (see funds.md) - notifications
+// gains a nullable fund_id (parallels the existing warrior_id) so a fund's
+// wallet-credit notifications can be traced back to it, and scheduler_state
+// gains its own last-tick timestamp for the fund valuation scheduler
+// (fundValuation.ts), independent of drift's last_drift_at.
+const notificationsHasFundId = (
+  db.prepare(`PRAGMA table_info(notifications)`).all() as unknown as {
+    name: string;
+  }[]
+).some((c) => c.name === 'fund_id');
+if (!notificationsHasFundId) {
+  db.exec(`ALTER TABLE notifications ADD COLUMN fund_id INTEGER`);
+}
+
+const schedulerStateHasLastFundValuationAt = (
+  db.prepare(`PRAGMA table_info(scheduler_state)`).all() as unknown as {
+    name: string;
+  }[]
+).some((c) => c.name === 'last_fund_valuation_at');
+if (!schedulerStateHasLastFundValuationAt) {
+  db.exec(`ALTER TABLE scheduler_state ADD COLUMN last_fund_valuation_at INTEGER`);
 }
 
 // price_snapshots.source has a CHECK constraint, which SQLite can't widen
@@ -344,6 +440,7 @@ const DEFAULT_STOCK_CONFIG = {
   damagePeerWeight: 0.5,
   damageTrendZClamp: 4,
   driftIntervalMs: 60 * 60 * 1000,
+  fundValuationIntervalMs: 60 * 60 * 1000,
   driftMaxPct: 0.005,
   driftReversionStrength: 0.3,
   demandMaxPctPerTrade: 0.015,
@@ -765,6 +862,21 @@ export function setPlayerHidden(
       .run(playerName, server);
     if (result.changes > 0) {
       liquidateWarriorHoldings(playerName, server);
+      // Fund holders are NOT liquidated/notified here - only this
+      // warrior's own direct market holders are (above). A fund just
+      // silently drops the hidden warrior and rebalances its remaining
+      // constituents, same proportional formula as a manual admin
+      // removal (see removeFundConstituent) - a locked decision from
+      // planning, not an oversight.
+      const warriorId = getWarriorId(playerName, server);
+      if (warriorId !== null) {
+        const affectedFunds = db
+          .prepare(`SELECT DISTINCT fund_id FROM fund_constituents WHERE warrior_id = ?`)
+          .all(warriorId) as unknown as { fund_id: number }[];
+        for (const { fund_id } of affectedFunds) {
+          removeFundConstituent(fund_id, warriorId);
+        }
+      }
     }
   } else {
     db.prepare(
@@ -807,15 +919,9 @@ function liquidateWarriorHoldings(
         `INSERT INTO transactions (user_id, warrior_id, side, shares, price, total, created_at)
          VALUES (?, ?, 'liquidation', ?, ?, ?, ?)`,
       ).run(holding.user_id, warriorId, holding.shares, price, refund, now);
-      db.prepare(
-        `INSERT INTO notifications (user_id, message, warrior_id, amount, created_at) VALUES (?, ?, ?, ?, ?)`,
-      ).run(
-        holding.user_id,
-        `${playerName} ${reason} - your holding was liquidated and ${refund.toFixed(2)} coins refunded.`,
+      createWalletNotification(holding.user_id, refund, `${playerName} ${reason} and your holding was liquidated`, {
         warriorId,
-        refund,
-        now,
-      );
+      });
     }
     db.exec('COMMIT');
   } catch (err) {
@@ -1742,17 +1848,19 @@ export function getLeaderboard(): LeaderboardEntry[] {
       (holdingsValueByUser.get(h.user_id) ?? 0) + h.shares * price,
     );
   }
+  const fundHoldingsValueByUser = getFundHoldingsValueByUser();
 
   return wallets
     .map((w) => {
       const holdingsValue = holdingsValueByUser.get(w.user_id) ?? 0;
+      const fundHoldingsValue = fundHoldingsValueByUser.get(w.user_id) ?? 0;
       return {
         user_id: w.user_id,
         username: w.username,
         avatar: w.avatar,
         balance: w.balance,
         holdingsValue,
-        netWorth: w.balance + holdingsValue,
+        netWorth: w.balance + holdingsValue + fundHoldingsValue,
         linkedWarrior:
           w.linked_player_name !== null
             ? { playerName: w.linked_player_name, server: w.linked_server! }
@@ -1881,10 +1989,13 @@ export function getAdminWalletOverview(): AdminWalletOverviewEntry[] {
     tradeCountByUser.set(r.user_id, r.tradeCount);
   }
 
+  const fundHoldingsValueByUser = getFundHoldingsValueByUser();
+
   return users
     .map((u) => {
       const balance = walletByUser.get(u.discord_id) ?? STARTING_BALANCE;
       const holdingsValue = holdingsValueByUser.get(u.discord_id) ?? 0;
+      const fundHoldingsValue = fundHoldingsValueByUser.get(u.discord_id) ?? 0;
       return {
         userId: u.discord_id,
         username: u.username,
@@ -1901,7 +2012,7 @@ export function getAdminWalletOverview(): AdminWalletOverviewEntry[] {
         lastLoginAt: u.last_login_at,
         balance,
         holdingsValue,
-        netWorth: balance + holdingsValue,
+        netWorth: balance + holdingsValue + fundHoldingsValue,
         turnover: turnoverByUser.get(u.discord_id) ?? 0,
         tradeCount: tradeCountByUser.get(u.discord_id) ?? 0,
       };
@@ -1940,13 +2051,10 @@ export function adjustWalletBalance(
       `INSERT INTO admin_wallet_adjustments (admin_discord_id, target_user_id, delta, balance_after, reason, created_at)
        VALUES (?, ?, ?, ?, ?, ?)`,
     ).run(adminDiscordId, targetUserId, delta, newBalance, reason, now);
-    db.prepare(
-      `INSERT INTO notifications (user_id, message, warrior_id, amount, created_at) VALUES (?, ?, NULL, ?, ?)`,
-    ).run(
+    createWalletNotification(
       targetUserId,
-      `An admin adjusted your balance by ${delta >= 0 ? '+' : ''}${delta.toFixed(2)} coins.`,
       delta,
-      now,
+      reason && reason.trim() !== '' ? reason : 'Manual adjustment by an admin',
     );
     db.exec('COMMIT');
   } catch (err) {
@@ -1958,6 +2066,52 @@ export function adjustWalletBalance(
     balance: newBalance,
     created_at: wallet.created_at,
   };
+}
+
+// Bulk variant of adjustWalletBalance, for the Danger Zone's "global
+// add/remove coins" tool (funds.md - most users start at 0 balance, and
+// funds need to be affordable without forcing everyone to liquidate their
+// stock positions first). Applies to EVERY registered user, including ones
+// who've never traded and so have no wallets row yet (getOrCreateWallet
+// lazily materializes it, same as the single-user path). Locked decision:
+// if removal would take a user below 0, clamp that user to 0 and continue -
+// never skip them, never abort the whole batch over one low balance. The
+// audited/notified delta is the actual applied delta (post-clamp), not the
+// raw requested one, so the audit trail and notification never claim a
+// removal that didn't fully happen.
+export function adjustAllWalletBalances(
+  delta: number,
+  adminDiscordId: string,
+  reason: string | null,
+): void {
+  if (!Number.isFinite(delta) || delta === 0) {
+    throw new AdminActionError('Amount must be a non-zero number');
+  }
+  const userIds = (
+    db.prepare(`SELECT discord_id FROM users`).all() as unknown as { discord_id: string }[]
+  ).map((r) => r.discord_id);
+  const now = Date.now();
+  const finalReason = reason && reason.trim() !== '' ? reason : 'Global balance adjustment by an admin';
+
+  db.exec('BEGIN');
+  try {
+    for (const userId of userIds) {
+      const wallet = getOrCreateWallet(userId);
+      const newBalance = Math.max(0, wallet.balance + delta);
+      const appliedDelta = newBalance - wallet.balance;
+      if (appliedDelta === 0) continue;
+      db.prepare(`UPDATE wallets SET balance = ? WHERE user_id = ?`).run(newBalance, userId);
+      db.prepare(
+        `INSERT INTO admin_wallet_adjustments (admin_discord_id, target_user_id, delta, balance_after, reason, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      ).run(adminDiscordId, userId, appliedDelta, newBalance, reason, now);
+      createWalletNotification(userId, appliedDelta, finalReason);
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
 }
 
 export interface AdminWalletAdjustmentView {
@@ -2176,4 +2330,741 @@ export function getSessionUser(sessionId: string): UserRow | null {
 
 export function deleteSession(sessionId: string) {
   db.prepare(`DELETE FROM sessions WHERE session_id = ?`).run(sessionId);
+}
+
+// ---------------------------------------------------------------------------
+// Funds (see funds.md) - a fund is a synthetic basket of existing warriors.
+// It never owns real warrior shares: pool_value/shares_outstanding is a
+// mutual-fund-style ledger moved only by trades (executeFundTrade, mint/
+// redeem at NAV) and the periodic valuation tick (fundValuation.ts), which
+// sums constituent price changes weighted by stock_count and applies
+// gain_multiplier/loss_multiplier. NAV is never stored directly - always
+// derived via getCurrentFundNav so there is exactly one divide-by-zero guard
+// (shares_outstanding === 0 falls back to seed_nav) rather than one per call
+// site.
+// ---------------------------------------------------------------------------
+
+export class FundError extends Error {}
+
+export interface FundRow {
+  id: number;
+  name: string;
+  risk: number;
+  fee_pct: number;
+  tax_pct: number;
+  description: string;
+  gain_multiplier: number;
+  loss_multiplier: number;
+  seed_nav: number;
+  pool_value: number;
+  shares_outstanding: number;
+  created_at: number;
+  deleted_at: number | null;
+}
+
+export interface FundConstituentRow {
+  id: number;
+  fund_id: number;
+  warrior_id: number;
+  stock_count: number;
+  last_snapshot_price: number | null;
+}
+
+export interface FundConstituentInput {
+  playerName: string;
+  server: string;
+  stockCount: number;
+}
+
+export function getCurrentFundNav(fund: FundRow): number {
+  return fund.shares_outstanding > 0
+    ? fund.pool_value / fund.shares_outstanding
+    : fund.seed_nav;
+}
+
+export function getActiveFunds(): FundRow[] {
+  return db
+    .prepare(`SELECT * FROM funds WHERE deleted_at IS NULL ORDER BY name ASC`)
+    .all() as unknown as FundRow[];
+}
+
+export function getAllFundsIncludingDeleted(): FundRow[] {
+  return db
+    .prepare(`SELECT * FROM funds ORDER BY name ASC`)
+    .all() as unknown as FundRow[];
+}
+
+export function getFundById(id: number): FundRow | null {
+  return (
+    (db.prepare(`SELECT * FROM funds WHERE id = ?`).get(id) as unknown as FundRow) ?? null
+  );
+}
+
+export function getFundByName(name: string): FundRow | null {
+  return (
+    (db
+      .prepare(`SELECT * FROM funds WHERE name = ?`)
+      .get(name) as unknown as FundRow) ?? null
+  );
+}
+
+export function getFundConstituents(
+  fundId: number,
+): (FundConstituentRow & { player_name: string; server: string })[] {
+  return db
+    .prepare(
+      `SELECT fc.*, w.player_name, w.server
+       FROM fund_constituents fc
+       JOIN warriors w ON w.id = fc.warrior_id
+       WHERE fc.fund_id = ?
+       ORDER BY fc.stock_count DESC`,
+    )
+    .all(fundId) as unknown as (FundConstituentRow & {
+    player_name: string;
+    server: string;
+  })[];
+}
+
+export interface FundValueSnapshotRow {
+  id: number;
+  fund_id: number;
+  nav: number;
+  pool_value: number;
+  shares_outstanding: number;
+  created_at: number;
+}
+
+// "Latest snapshot at or before this timestamp" - used for N-days-ago
+// deltas (e.g. the public funds list's "Last 7 Days" figure). Returns null
+// if the fund has no snapshot that old yet (younger than N days, or the
+// valuation scheduler hasn't ticked yet) - callers treat that as "no
+// visible change" rather than guessing.
+export function getFundNavAt(fundId: number, atOrBefore: number): number | null {
+  const row = db
+    .prepare(
+      `SELECT nav FROM fund_value_snapshots WHERE fund_id = ? AND created_at <= ? ORDER BY created_at DESC, id DESC LIMIT 1`,
+    )
+    .get(fundId, atOrBefore) as unknown as { nav: number } | undefined;
+  return row ? row.nav : null;
+}
+
+export function getFundValueSnapshotsSince(fundId: number, sinceMs: number): FundValueSnapshotRow[] {
+  return db
+    .prepare(
+      `SELECT * FROM fund_value_snapshots WHERE fund_id = ? AND created_at >= ? ORDER BY created_at ASC, id ASC`,
+    )
+    .all(fundId, sinceMs) as unknown as FundValueSnapshotRow[];
+}
+
+const FUND_NAME_PATTERN = /^[A-Z]{1,6}$/;
+
+function validateFundScalars(data: {
+  name: string;
+  risk: number;
+  feePct: number;
+  taxPct: number;
+  gainMultiplier: number;
+  lossMultiplier: number;
+}): string {
+  const name = data.name.toUpperCase();
+  if (!FUND_NAME_PATTERN.test(name)) {
+    throw new FundError('Name must be 1-6 letters (a-z)');
+  }
+  if (!Number.isInteger(data.risk) || data.risk < 1 || data.risk > 5) {
+    throw new FundError('Risk must be a whole number from 1 to 5');
+  }
+  if (!Number.isFinite(data.feePct) || data.feePct < 0) {
+    throw new FundError('Fee must be a non-negative number');
+  }
+  if (!Number.isFinite(data.taxPct) || data.taxPct < 0) {
+    throw new FundError('Tax must be a non-negative number');
+  }
+  if (!Number.isFinite(data.gainMultiplier) || data.gainMultiplier < 0) {
+    throw new FundError('Gain multiplier must be a non-negative number');
+  }
+  if (!Number.isFinite(data.lossMultiplier) || data.lossMultiplier < 0) {
+    throw new FundError('Loss multiplier must be a non-negative number');
+  }
+  return name;
+}
+
+// Resolves each (playerName, server) constituent to a warrior_id - unmatched
+// names (e.g. an imported fund referencing a warrior that doesn't exist on
+// this DB) are skipped rather than aborting the whole create, since a fund
+// export/import is keyed by identity, not the non-portable warrior_id
+// primary key (see funds.md's export/import ask). Duplicate warriors in the
+// input are rejected outright rather than silently collapsed, since that's
+// almost certainly a client-side bug, not a legitimate case.
+function resolveConstituentInputs(
+  inputs: FundConstituentInput[],
+): { resolved: { warriorId: number; stockCount: number }[]; skipped: FundConstituentInput[] } {
+  const resolved: { warriorId: number; stockCount: number }[] = [];
+  const skipped: FundConstituentInput[] = [];
+  const seen = new Set<number>();
+  for (const c of inputs) {
+    if (!Number.isFinite(c.stockCount) || c.stockCount <= 0) {
+      throw new FundError(`Stock count for ${c.playerName} must be a positive number`);
+    }
+    const warriorId = getWarriorId(c.playerName, c.server);
+    if (warriorId === null) {
+      skipped.push(c);
+      continue;
+    }
+    if (seen.has(warriorId)) {
+      throw new FundError(`${c.playerName} is listed more than once`);
+    }
+    seen.add(warriorId);
+    resolved.push({ warriorId, stockCount: c.stockCount });
+  }
+  return { resolved, skipped };
+}
+
+// Creates a fund and its initial constituent basket in one transaction.
+// pool_value/shares_outstanding always start at 0 - a fund has no NAV
+// movement of its own until someone actually buys in (see
+// getCurrentFundNav's seed_nav fallback).
+export function createFund(data: {
+  name: string;
+  risk: number;
+  feePct: number;
+  taxPct: number;
+  description: string;
+  gainMultiplier: number;
+  lossMultiplier: number;
+  seedNav?: number;
+  constituents: FundConstituentInput[];
+}): { fund: FundRow; skippedConstituents: FundConstituentInput[] } {
+  const name = validateFundScalars(data);
+  if (getFundByName(name)) {
+    throw new FundError(`A fund named ${name} already exists`);
+  }
+  const { resolved, skipped } = resolveConstituentInputs(data.constituents);
+
+  const now = Date.now();
+  db.exec('BEGIN');
+  try {
+    const result = db
+      .prepare(
+        `INSERT INTO funds (name, risk, fee_pct, tax_pct, description, gain_multiplier, loss_multiplier, seed_nav, pool_value, shares_outstanding, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)`,
+      )
+      .run(
+        name,
+        data.risk,
+        data.feePct,
+        data.taxPct,
+        data.description,
+        data.gainMultiplier,
+        data.lossMultiplier,
+        data.seedNav ?? 100,
+        now,
+      );
+    const fundId = Number(result.lastInsertRowid);
+    const insertConstituent = db.prepare(
+      `INSERT INTO fund_constituents (fund_id, warrior_id, stock_count, last_snapshot_price) VALUES (?, ?, ?, ?)`,
+    );
+    for (const c of resolved) {
+      insertConstituent.run(fundId, c.warriorId, c.stockCount, getLatestPrice(c.warriorId));
+    }
+    db.exec('COMMIT');
+    return { fund: getFundById(fundId)!, skippedConstituents: skipped };
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+// Scalar fields only - constituents are excluded here and go through
+// addFundConstituent/removeFundConstituent/updateFundConstituentWeight
+// instead, since adding/removing carries rebalance side effects a bulk
+// scalar update shouldn't also trigger.
+export function updateFund(
+  id: number,
+  data: {
+    name: string;
+    risk: number;
+    feePct: number;
+    taxPct: number;
+    description: string;
+    gainMultiplier: number;
+    lossMultiplier: number;
+  },
+): FundRow {
+  const fund = getFundById(id);
+  if (!fund || fund.deleted_at !== null) throw new FundError('Unknown fund');
+  const name = validateFundScalars(data);
+  const nameTaken = db
+    .prepare(`SELECT id FROM funds WHERE name = ? AND id != ?`)
+    .get(name, id);
+  if (nameTaken) throw new FundError(`A fund named ${name} already exists`);
+
+  db.prepare(
+    `UPDATE funds SET name = ?, risk = ?, fee_pct = ?, tax_pct = ?, description = ?, gain_multiplier = ?, loss_multiplier = ? WHERE id = ?`,
+  ).run(
+    name,
+    data.risk,
+    data.feePct,
+    data.taxPct,
+    data.description,
+    data.gainMultiplier,
+    data.lossMultiplier,
+    id,
+  );
+  return getFundById(id)!;
+}
+
+// Proportional reweight: removes one constituent and rescales the survivors
+// so their stock_counts still sum to the same total as before the removal
+// (the ratio between survivors is preserved). A no-op if the warrior isn't
+// actually a constituent, so callers like the hidden-warrior cascade (which
+// walks every active fund regardless of membership) can call this
+// unconditionally. Also the template for the hidden-constituent cascade in
+// setPlayerHidden below - same formula, same function.
+export function removeFundConstituent(fundId: number, warriorId: number): void {
+  const constituents = db
+    .prepare(`SELECT * FROM fund_constituents WHERE fund_id = ?`)
+    .all(fundId) as unknown as FundConstituentRow[];
+  const removed = constituents.find((c) => c.warrior_id === warriorId);
+  if (!removed) return;
+
+  const totalBefore = constituents.reduce((sum, c) => sum + c.stock_count, 0);
+  const remainingBefore = totalBefore - removed.stock_count;
+
+  db.exec('BEGIN');
+  try {
+    if (remainingBefore > 0) {
+      const factor = totalBefore / remainingBefore;
+      const updateStockCount = db.prepare(
+        `UPDATE fund_constituents SET stock_count = ? WHERE id = ?`,
+      );
+      for (const c of constituents) {
+        if (c.id === removed.id) continue;
+        updateStockCount.run(c.stock_count * factor, c.id);
+      }
+    }
+    db.prepare(`DELETE FROM fund_constituents WHERE id = ?`).run(removed.id);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+// Inverse of removeFundConstituent: adds a new constituent and rescales the
+// existing ones down to make room, so the total stays constant. Seeds
+// last_snapshot_price at the warrior's current price so this constituent's
+// first valuation tick contributes zero change, not a garbage jump from
+// whenever the fund itself was created.
+export function addFundConstituent(
+  fundId: number,
+  warriorId: number,
+  stockCount: number,
+): void {
+  if (!Number.isFinite(stockCount) || stockCount <= 0) {
+    throw new FundError('Stock count must be a positive number');
+  }
+  const existing = db
+    .prepare(`SELECT 1 FROM fund_constituents WHERE fund_id = ? AND warrior_id = ?`)
+    .get(fundId, warriorId);
+  if (existing) throw new FundError('This warrior is already a constituent of this fund');
+
+  const constituents = db
+    .prepare(`SELECT * FROM fund_constituents WHERE fund_id = ?`)
+    .all(fundId) as unknown as FundConstituentRow[];
+  const totalBefore = constituents.reduce((sum, c) => sum + c.stock_count, 0);
+  if (totalBefore > 0 && stockCount >= totalBefore) {
+    throw new FundError('New weight must be smaller than the current total weight');
+  }
+
+  db.exec('BEGIN');
+  try {
+    if (totalBefore > 0) {
+      const factor = (totalBefore - stockCount) / totalBefore;
+      const updateStockCount = db.prepare(
+        `UPDATE fund_constituents SET stock_count = ? WHERE id = ?`,
+      );
+      for (const c of constituents) {
+        updateStockCount.run(c.stock_count * factor, c.id);
+      }
+    }
+    db.prepare(
+      `INSERT INTO fund_constituents (fund_id, warrior_id, stock_count, last_snapshot_price) VALUES (?, ?, ?, ?)`,
+    ).run(fundId, warriorId, stockCount, getLatestPrice(warriorId));
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+// Direct weight override with no rebalance - a deliberate admin edit, unlike
+// add/remove which carry rebalance side effects.
+export function updateFundConstituentWeight(
+  fundId: number,
+  warriorId: number,
+  stockCount: number,
+): void {
+  if (!Number.isFinite(stockCount) || stockCount <= 0) {
+    throw new FundError('Stock count must be a positive number');
+  }
+  const result = db
+    .prepare(`UPDATE fund_constituents SET stock_count = ? WHERE fund_id = ? AND warrior_id = ?`)
+    .run(stockCount, fundId, warriorId);
+  if (result.changes === 0) {
+    throw new FundError('This warrior is not a constituent of this fund');
+  }
+}
+
+export interface FundHoldingRow {
+  user_id: string;
+  fund_id: number;
+  shares: number;
+  cost_basis_total: number;
+}
+
+export interface FundTransactionRow {
+  id: number;
+  user_id: string;
+  fund_id: number;
+  side: 'buy' | 'sell' | 'liquidation';
+  shares: number;
+  nav: number;
+  total: number;
+  fee: number;
+  tax: number;
+  created_at: number;
+}
+
+export function getFundHolding(userId: string, fundId: number): FundHoldingRow | null {
+  return (
+    (db
+      .prepare(`SELECT * FROM fund_holdings WHERE user_id = ? AND fund_id = ?`)
+      .get(userId, fundId) as unknown as FundHoldingRow | undefined) ?? null
+  );
+}
+
+export interface FundPositionView {
+  fundId: number;
+  name: string;
+  risk: number;
+  shares: number;
+  costBasisTotal: number;
+  nav: number;
+  marketValue: number;
+}
+
+export function listFundHoldingsWithContext(userId: string): FundPositionView[] {
+  const rows = db
+    .prepare(
+      `SELECT fh.*, f.name, f.risk, f.pool_value, f.shares_outstanding, f.seed_nav
+       FROM fund_holdings fh
+       JOIN funds f ON f.id = fh.fund_id
+       WHERE fh.user_id = ? AND fh.shares > 0`,
+    )
+    .all(userId) as unknown as (FundHoldingRow & {
+    name: string;
+    risk: number;
+    pool_value: number;
+    shares_outstanding: number;
+    seed_nav: number;
+  })[];
+  return rows.map((r) => {
+    const nav = r.shares_outstanding > 0 ? r.pool_value / r.shares_outstanding : r.seed_nav;
+    return {
+      fundId: r.fund_id,
+      name: r.name,
+      risk: r.risk,
+      shares: r.shares,
+      costBasisTotal: r.cost_basis_total,
+      nav,
+      marketValue: r.shares * nav,
+    };
+  });
+}
+
+// Current market value of one user's fund positions - NOT folded into the
+// warrior-holdings-only `holdings`/`holdingsValue` used elsewhere, but
+// callers computing net worth (wallet summary, leaderboard, admin overview)
+// must add this in too, or a fund purchase would visibly *shrink* a user's
+// displayed net worth by exactly the fee (the fund value itself would
+// otherwise be invisible).
+export function getUserFundHoldingsValue(userId: string): number {
+  const rows = db
+    .prepare(
+      `SELECT fh.shares, f.pool_value, f.shares_outstanding, f.seed_nav
+       FROM fund_holdings fh JOIN funds f ON f.id = fh.fund_id
+       WHERE fh.user_id = ? AND fh.shares > 0`,
+    )
+    .all(userId) as unknown as {
+    shares: number;
+    pool_value: number;
+    shares_outstanding: number;
+    seed_nav: number;
+  }[];
+  return rows.reduce((sum, r) => {
+    const nav = r.shares_outstanding > 0 ? r.pool_value / r.shares_outstanding : r.seed_nav;
+    return sum + r.shares * nav;
+  }, 0);
+}
+
+// Batched equivalent of getUserFundHoldingsValue for every user with a fund
+// position at once, for getLeaderboard()/getAdminWalletOverview() - avoids
+// an N+1 query per user the way the warrior-holdings side already avoids it
+// via a single latestPrices batch lookup.
+function getFundHoldingsValueByUser(): Map<string, number> {
+  const rows = db
+    .prepare(
+      `SELECT fh.user_id, fh.shares, f.pool_value, f.shares_outstanding, f.seed_nav
+       FROM fund_holdings fh JOIN funds f ON f.id = fh.fund_id
+       WHERE fh.shares > 0`,
+    )
+    .all() as unknown as {
+    user_id: string;
+    shares: number;
+    pool_value: number;
+    shares_outstanding: number;
+    seed_nav: number;
+  }[];
+  const result = new Map<string, number>();
+  for (const r of rows) {
+    const nav = r.shares_outstanding > 0 ? r.pool_value / r.shares_outstanding : r.seed_nav;
+    result.set(r.user_id, (result.get(r.user_id) ?? 0) + r.shares * nav);
+  }
+  return result;
+}
+
+// Batched "current price of every warrior" lookup for the fund valuation
+// tick - avoids one getLatestPrice() query per constituent per fund, same
+// MAX(id) GROUP BY pattern getLeaderboard() already uses.
+export function getAllLatestWarriorPrices(): Map<number, number> {
+  const rows = db
+    .prepare(
+      `SELECT warrior_id, price FROM price_snapshots WHERE id IN (SELECT MAX(id) FROM price_snapshots GROUP BY warrior_id)`,
+    )
+    .all() as unknown as { warrior_id: number; price: number }[];
+  return new Map(rows.map((r) => [r.warrior_id, r.price]));
+}
+
+export function getLastFundValuationAt(): number | null {
+  const row = db
+    .prepare(`SELECT last_fund_valuation_at FROM scheduler_state WHERE id = 1`)
+    .get() as unknown as { last_fund_valuation_at: number | null } | undefined;
+  return row ? row.last_fund_valuation_at : null;
+}
+
+export function setLastFundValuationAt(ts: number): void {
+  db.prepare(
+    `INSERT INTO scheduler_state (id, last_drift_at, last_fund_valuation_at) VALUES (1, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET last_fund_valuation_at = excluded.last_fund_valuation_at`,
+  ).run(ts, ts);
+}
+
+// Atomically applies one fund's valuation-tick result - updates pool_value
+// and writes a matching fund_value_snapshots row (skipped via
+// newPoolValue=null when the fund has no shares outstanding yet, since an
+// untraded fund has no pool to move and NAV just reads seed_nav), and
+// advances every given constituent's last_snapshot_price baseline for next
+// tick. Called once per active fund from fundValuation.ts's
+// runFundValuationTick(), which does the read-only rawChange computation
+// beforehand - kept here (rather than in fundValuation.ts, unlike
+// drift.ts's runDriftTick) because it's the one piece of this tick that
+// needs BEGIN/COMMIT atomicity across two related tables.
+export function recordFundValuationTick(
+  fund: FundRow,
+  newPoolValue: number | null,
+  priceUpdates: { constituentId: number; price: number }[],
+  now: number,
+): void {
+  db.exec('BEGIN');
+  try {
+    if (newPoolValue !== null) {
+      db.prepare(`UPDATE funds SET pool_value = ? WHERE id = ?`).run(newPoolValue, fund.id);
+      db.prepare(
+        `INSERT INTO fund_value_snapshots (fund_id, nav, pool_value, shares_outstanding, created_at) VALUES (?, ?, ?, ?, ?)`,
+      ).run(
+        fund.id,
+        newPoolValue / fund.shares_outstanding,
+        newPoolValue,
+        fund.shares_outstanding,
+        now,
+      );
+    }
+    const updateStmt = db.prepare(`UPDATE fund_constituents SET last_snapshot_price = ? WHERE id = ?`);
+    for (const u of priceUpdates) updateStmt.run(u.price, u.constituentId);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+export class FundTradeError extends Error {}
+
+// Buy/sell fund shares at the current NAV, minted/redeemed mutual-fund
+// style - NAV itself never moves here (only the periodic valuation tick
+// moves it, see fundValuation.ts); trading only changes pool_value/
+// shares_outstanding (supply), never touches warrior-market liquidity.
+// Buy: fee_pct on top, added to cost basis excluded (mirrors executeTrade's
+// `total` convention). Sell: avg-cost basis, tax_pct on the GAIN portion
+// only (zero tax on a loss), same average-cost approach pnl.ts already uses
+// for warrior trades. Same synchronous-transaction discipline as
+// executeTrade - every read happens before BEGIN, nothing yields mid-trade.
+export function executeFundTrade(
+  userId: string,
+  fundId: number,
+  side: 'buy' | 'sell',
+  coinAmount: number,
+): FundTransactionRow {
+  if (!Number.isFinite(coinAmount) || coinAmount <= 0) {
+    throw new FundTradeError('Amount must be a positive number');
+  }
+  const fund = getFundById(fundId);
+  if (!fund || fund.deleted_at !== null) throw new FundTradeError('Unknown fund');
+
+  const nav = getCurrentFundNav(fund);
+  const wallet = getOrCreateWallet(userId);
+  const holding = getFundHolding(userId, fundId);
+
+  let shares = coinAmount / nav;
+  let total = coinAmount;
+  let fee = 0;
+  let tax = 0;
+
+  if (side === 'buy') {
+    fee = coinAmount * fund.fee_pct;
+    // Cent-rounded comparison, same rationale as executeTrade - a client
+    // "use 100% of balance" amount can differ from wallet.balance by a
+    // sub-cent float rounding error while still displaying as the same
+    // cent value.
+    if (Math.round((coinAmount + fee) * 100) > Math.round(wallet.balance * 100)) {
+      throw new FundTradeError('Insufficient balance');
+    }
+  } else {
+    if (!holding || holding.shares <= 0) {
+      throw new FundTradeError("You don't hold any shares of this fund");
+    }
+    const fullSellValue = holding.shares * nav;
+    if (shares > holding.shares || Math.round(coinAmount * 100) >= Math.round(fullSellValue * 100)) {
+      shares = holding.shares;
+      total = shares * nav;
+    }
+    const avgCost = holding.cost_basis_total / holding.shares;
+    const gain = total - avgCost * shares;
+    tax = Math.max(0, gain) * fund.tax_pct;
+  }
+
+  const now = Date.now();
+  db.exec('BEGIN');
+  try {
+    if (side === 'buy') {
+      const newShares = (holding?.shares ?? 0) + shares;
+      const newCostBasis = (holding?.cost_basis_total ?? 0) + total;
+      db.prepare(
+        `INSERT INTO fund_holdings (user_id, fund_id, shares, cost_basis_total) VALUES (?, ?, ?, ?)
+         ON CONFLICT(user_id, fund_id) DO UPDATE SET shares = excluded.shares, cost_basis_total = excluded.cost_basis_total`,
+      ).run(userId, fundId, newShares, newCostBasis);
+      db.prepare(`UPDATE wallets SET balance = balance - ? WHERE user_id = ?`).run(total + fee, userId);
+      db.prepare(
+        `UPDATE funds SET pool_value = pool_value + ?, shares_outstanding = shares_outstanding + ? WHERE id = ?`,
+      ).run(total, shares, fundId);
+    } else {
+      const avgCost = holding!.cost_basis_total / holding!.shares;
+      const remainingShares = holding!.shares - shares;
+      if (remainingShares <= 0) {
+        db.prepare(`DELETE FROM fund_holdings WHERE user_id = ? AND fund_id = ?`).run(userId, fundId);
+      } else {
+        db.prepare(
+          `UPDATE fund_holdings SET shares = ?, cost_basis_total = ? WHERE user_id = ? AND fund_id = ?`,
+        ).run(remainingShares, holding!.cost_basis_total - avgCost * shares, userId, fundId);
+      }
+      db.prepare(`UPDATE wallets SET balance = balance + ? WHERE user_id = ?`).run(total - tax, userId);
+      db.prepare(
+        `UPDATE funds SET pool_value = pool_value - ?, shares_outstanding = shares_outstanding - ? WHERE id = ?`,
+      ).run(total, shares, fundId);
+    }
+
+    const result = db
+      .prepare(
+        `INSERT INTO fund_transactions (user_id, fund_id, side, shares, nav, total, fee, tax, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(userId, fundId, side, shares, nav, total, fee, tax, now);
+
+    db.exec('COMMIT');
+    return {
+      id: Number(result.lastInsertRowid),
+      user_id: userId,
+      fund_id: fundId,
+      side,
+      shares,
+      nav,
+      total,
+      fee,
+      tax,
+      created_at: now,
+    };
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+// Shared by every wallet-credit/debit notification (see funds.md's
+// "Notification System" ask) - centralizes the
+// "{coins} coins were (added to|removed from) your wallet. Reason: {reason}"
+// format string in one place. Module-private: every call site lives in this
+// file (liquidateWarriorHoldings, adjustWalletBalance, deleteFund, and the
+// bulk adjustAllWalletBalances below).
+function createWalletNotification(
+  userId: string,
+  delta: number,
+  reason: string,
+  opts?: { warriorId?: number | null; fundId?: number | null },
+): void {
+  const verb = delta >= 0 ? 'added to' : 'removed from';
+  const message = `${Math.abs(delta).toFixed(2)} coins were ${verb} your wallet. Reason: ${reason}`;
+  db.prepare(
+    `INSERT INTO notifications (user_id, message, warrior_id, fund_id, amount, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(userId, message, opts?.warriorId ?? null, opts?.fundId ?? null, delta, Date.now());
+}
+
+// Soft-deletes a fund and refunds every holder at the fund's current NAV,
+// penalty-free (no tax), mirroring liquidateWarriorHoldings' shape. History
+// (fund_transactions, fund_value_snapshots) survives - only funds.deleted_at
+// is set, never a hard DELETE, so a holder's past trades still resolve.
+export function deleteFund(fundId: number, reason?: string): void {
+  const fund = getFundById(fundId);
+  if (!fund || fund.deleted_at !== null) throw new FundError('Unknown fund');
+
+  const holders = db
+    .prepare(`SELECT * FROM fund_holdings WHERE fund_id = ? AND shares > 0`)
+    .all(fundId) as unknown as FundHoldingRow[];
+  const nav = getCurrentFundNav(fund);
+  const now = Date.now();
+  const finalReason = reason && reason.trim() !== '' ? reason : `${fund.name} fund was deleted by an admin`;
+
+  db.exec('BEGIN');
+  try {
+    db.prepare(`UPDATE funds SET deleted_at = ? WHERE id = ?`).run(now, fundId);
+    for (const holding of holders) {
+      const value = holding.shares * nav;
+      db.prepare(`DELETE FROM fund_holdings WHERE user_id = ? AND fund_id = ?`).run(
+        holding.user_id,
+        fundId,
+      );
+      db.prepare(`UPDATE wallets SET balance = balance + ? WHERE user_id = ?`).run(
+        value,
+        holding.user_id,
+      );
+      db.prepare(
+        `INSERT INTO fund_transactions (user_id, fund_id, side, shares, nav, total, fee, tax, created_at)
+         VALUES (?, ?, 'liquidation', ?, ?, ?, 0, 0, ?)`,
+      ).run(holding.user_id, fundId, holding.shares, nav, value, now);
+      createWalletNotification(holding.user_id, value, finalReason, { fundId });
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
 }

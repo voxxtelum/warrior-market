@@ -65,6 +65,7 @@ const RAID_SCORING_FIELDS: ScalarField[] = [
 // Timeline 2: an idle drift tick fires (see STOCKS.md "An idle drift tick fires").
 const DRIFT_FIELDS: ScalarField[] = [
   { key: "driftIntervalMs", label: "Drift interval (ms)", step: "60000", description: "How often idle price drift ticks between raids - takes effect on the next tick, no restart needed" },
+  { key: "fundValuationIntervalMs", label: "Fund valuation interval (ms)", step: "60000", description: "How often fund NAVs recompute from their constituent warriors - takes effect on the next tick, no restart needed" },
   { key: "driftMaxPct", label: "Drift max %", step: "0.001", description: "Largest fraction a single normal drift tick can move a price, in either direction" },
   { key: "driftReversionStrength", label: "Drift reversion strength", step: "0.05", description: "How strongly drift pulls a price back toward its trading anchor (0 = no pull, 1 = fully anchored)" },
   { key: "demandAnchorDecayPct", label: "Demand anchor decay %", step: "0.01", description: "Fraction of the gap between a warrior's trading anchor and their raid anchor that closes every drift tick - how fast a demand-driven pump fades without sustained buying" },

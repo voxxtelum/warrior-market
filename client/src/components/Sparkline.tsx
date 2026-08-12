@@ -8,6 +8,7 @@ interface SparklineProps {
   prices: number[];
   width?: number;
   height?: number;
+  animate?: boolean;
 }
 
 // A tiny inline-SVG area chart of a player's full price history. The
@@ -16,18 +17,26 @@ interface SparklineProps {
 // crosses that baseline - built with two clip-path rects rather than a
 // single trend color, so a price that dips below its starting point and
 // recovers shows both colors like a real ticker sparkline.
-export function Sparkline({ prices, width = 90, height = 28 }: SparklineProps) {
+//
+// `animate` (used by the Fund card) wraps the SVG in a container that
+// reveals right-to-left on mount via a CSS clip-path transition (see
+// `.sparkline-grow` in styles.css) - a stroke-dasharray "draw" animation
+// was considered instead, but that draws *along the path* (left-to-right
+// here), which doesn't match "grow from the right" the way a reveal wipe
+// does.
+export function Sparkline({ prices, width = 90, height = 28, animate = false }: SparklineProps) {
   const rawId = useId();
   const id = rawId.replace(/:/g, "");
 
   if (prices.length === 0) return null;
 
   if (prices.length === 1) {
-    return (
+    const dot = (
       <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
         <circle cx={width / 2} cy={height / 2} r={2} fill={SPARK_POS} />
       </svg>
     );
+    return animate ? <span className="sparkline-grow">{dot}</span> : dot;
   }
 
   const min = Math.min(...prices);
@@ -48,7 +57,7 @@ export function Sparkline({ prices, width = 90, height = 28 }: SparklineProps) {
   const clipAboveId = `${id}-above`;
   const clipBelowId = `${id}-below`;
 
-  return (
+  const svg = (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
       <clipPath id={clipAboveId}>
         <rect x={0} y={0} width={width} height={baselineY.toFixed(1)} />
@@ -78,4 +87,5 @@ export function Sparkline({ prices, width = 90, height = 28 }: SparklineProps) {
       />
     </svg>
   );
+  return animate ? <span className="sparkline-grow">{svg}</span> : svg;
 }

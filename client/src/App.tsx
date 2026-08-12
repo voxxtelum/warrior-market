@@ -1,10 +1,12 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { StockPage } from "./pages/StockPage";
+import { FundsPage } from "./pages/FundsPage";
 import { ComparePage } from "./pages/ComparePage";
 import { TrendsPage } from "./pages/TrendsPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { AdminReportsPage } from "./pages/AdminReportsPage";
 import { AdminManageAppPage } from "./pages/AdminManageAppPage";
+import { AdminManageFundsPage } from "./pages/AdminManageFundsPage";
 import { AdminPriceHistoryPage } from "./pages/AdminPriceHistoryPage";
 import { AdminAuditLogPage } from "./pages/AdminAuditLogPage";
 import { WalletPage } from "./pages/WalletPage";
@@ -20,6 +22,7 @@ function App() {
       <Route path="/" element={<Navigate to="/market/stocks" replace />} />
       <Route path="/market" element={<Navigate to="/market/stocks" replace />} />
       <Route path="/market/stocks" element={<StockPage />} />
+      <Route path="/market/funds" element={<FundsPage />} />
       <Route path="/market/leaderboard" element={<LeaderboardPage />} />
       <Route path="/market/feed" element={<TradeFeedPage />} />
       <Route path="/market/wallet" element={<WalletPage />} />
@@ -35,6 +38,7 @@ function App() {
       <Route path="/documentation" element={<DocumentationPage />} />
       <Route path="/admin" element={<AdminReportsPage />} />
       <Route path="/admin/manage-app" element={<AdminManageAppPage />} />
+      <Route path="/admin/manage-funds" element={<AdminManageFundsPage />} />
       <Route path="/admin/price-history" element={<AdminPriceHistoryPage />} />
       <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
     </Routes>

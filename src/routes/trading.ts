@@ -7,6 +7,7 @@ import {
   getMarketSummary,
   getOrCreateWallet,
   getPortfolioSnapshotNetWorth,
+  getUserFundHoldingsValue,
   getUserTradeCount,
   getWarriorId,
   listHoldingsWithContext,
@@ -55,11 +56,13 @@ tradingRouter.get("/wallet", requireAuth, (req, res) => {
     marketValue: h.latest_price !== null ? h.shares * h.latest_price : null,
   }));
   const holdingsValue = holdings.reduce((sum, h) => sum + (h.marketValue ?? 0), 0);
-  const netWorth = wallet.balance + holdingsValue;
+  const fundHoldingsValue = getUserFundHoldingsValue(req.user!.discord_id);
+  const netWorth = wallet.balance + holdingsValue + fundHoldingsValue;
   const snapshotNetWorth = getPortfolioSnapshotNetWorth(req.user!.discord_id);
   res.json({
     balance: wallet.balance,
     holdings,
+    fundHoldingsValue,
     netWorth,
     netWorthDelta: snapshotNetWorth !== null ? netWorth - snapshotNetWorth : 0,
     tradeCount: getUserTradeCount(req.user!.discord_id),

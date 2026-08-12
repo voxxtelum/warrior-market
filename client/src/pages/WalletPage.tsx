@@ -4,12 +4,15 @@ import { MarketLayout } from '../components/MarketLayout';
 import { NetWorthDeltaBadge } from '../components/NetWorthDeltaBadge';
 import { Pagination } from '../components/Pagination';
 import { PortfolioBreakdownCard } from '../components/PortfolioBreakdownCard';
+import { RiskBar } from '../components/RiskBar';
 import { SidePill } from '../components/SidePill';
 import { TradeModal } from '../components/TradeModal';
 import { useAuth } from '../authContext';
 import {
+  getFundPositions,
   getMyTransactions,
   getWallet,
+  type FundPositionView,
   type TransactionView,
   type WalletData,
 } from '../api';
@@ -24,6 +27,7 @@ export function WalletPage() {
   const [transactions, setTransactions] = useState<TransactionView[] | null>(
     null,
   );
+  const [fundPositions, setFundPositions] = useState<FundPositionView[] | null>(null);
   const [page, setPage] = useState(0);
   const [tradeModalTarget, setTradeModalTarget] = useState<{
     playerName: string;
@@ -32,9 +36,10 @@ export function WalletPage() {
 
   const load = () => {
     if (!user) return;
-    Promise.all([getWallet(), getMyTransactions()]).then(([w, tx]) => {
+    Promise.all([getWallet(), getMyTransactions(), getFundPositions()]).then(([w, tx, positions]) => {
       setWallet(w);
       setTransactions(tx);
+      setFundPositions(positions);
     });
   };
 
@@ -126,6 +131,43 @@ export function WalletPage() {
           tableId="holdings-table"
           emptyMessage="No holdings yet - trade a warrior from the Stocks page."
         />
+      </div>
+
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Funds</h2>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Fund</th>
+                <th>Risk</th>
+                <th className="mobile-hide">Shares</th>
+                <th>NAV</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fundPositions?.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="no-data">
+                    No fund holdings yet - visit the Funds tab to invest.
+                  </td>
+                </tr>
+              )}
+              {fundPositions?.map((p) => (
+                <tr key={p.fundId}>
+                  <td>{p.name}</td>
+                  <td>
+                    <RiskBar risk={p.risk} showLabel={false} />
+                  </td>
+                  <td className="mobile-hide">{p.shares.toFixed(3)}</td>
+                  <td>{fmtCoin(p.nav)}</td>
+                  <td>{fmtCoin(p.marketValue)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="card">

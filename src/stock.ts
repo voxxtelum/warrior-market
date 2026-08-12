@@ -38,6 +38,7 @@ export interface StockConfig {
   damagePeerWeight: number;
   damageTrendZClamp: number;
   driftIntervalMs: number;
+  fundValuationIntervalMs: number;
   driftMaxPct: number;
   driftReversionStrength: number;
   demandMaxPctPerTrade: number;
@@ -72,6 +73,7 @@ export function loadStockConfig(): StockConfig {
     damagePeerWeight: parsed.damagePeerWeight ?? 0.5,
     damageTrendZClamp: parsed.damageTrendZClamp ?? 4,
     driftIntervalMs: parsed.driftIntervalMs ?? 60 * 60 * 1000,
+    fundValuationIntervalMs: parsed.fundValuationIntervalMs ?? 60 * 60 * 1000,
     driftMaxPct: parsed.driftMaxPct ?? 0.005,
     driftReversionStrength: parsed.driftReversionStrength ?? 0.3,
     demandMaxPctPerTrade: parsed.demandMaxPctPerTrade ?? 0.015,

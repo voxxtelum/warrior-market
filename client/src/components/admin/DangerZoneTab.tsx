@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ConfirmModal } from '../ConfirmModal';
+import { GlobalAddRemoveCoinsCard } from './GlobalAddRemoveCoinsCard';
 import { PlayersTab } from './PlayersTab';
 import { resetMarket } from '../../api';
 
@@ -15,6 +16,7 @@ export function DangerZoneTab() {
 
   return (
     <>
+      <GlobalAddRemoveCoinsCard />
       <PlayersTab />
 
       <div className="card danger-card">

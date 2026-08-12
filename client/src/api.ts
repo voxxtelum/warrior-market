@@ -207,6 +207,7 @@ export interface StockConfig {
   damagePeerWeight: number;
   damageTrendZClamp: number;
   driftIntervalMs: number;
+  fundValuationIntervalMs: number;
   driftMaxPct: number;
   driftReversionStrength: number;
   demandMaxPctPerTrade: number;
@@ -631,4 +632,256 @@ export async function resetMarket(confirmationPhrase: string): Promise<void> {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || "Failed to reset market");
   }
+}
+
+export async function adjustAllWalletBalances(delta: number, reason?: string): Promise<void> {
+  const res = await fetch("/api/admin/market/wallet-adjust-all", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ delta, reason }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to adjust wallets");
+  }
+}
+
+// --- Funds ---------------------------------------------------------------
+
+export interface FundConstituentInput {
+  playerName: string;
+  server: string;
+  stockCount: number;
+}
+
+export interface FundConstituentView extends FundConstituentInput {
+  warriorId: number;
+}
+
+export interface FundView {
+  id: number;
+  name: string;
+  risk: number;
+  feePct: number;
+  taxPct: number;
+  description: string;
+  gainMultiplier: number;
+  lossMultiplier: number;
+  seedNav: number;
+  nav: number;
+  poolValue: number;
+  sharesOutstanding: number;
+  createdAt: number;
+  deletedAt: number | null;
+}
+
+export interface FundDetailView extends FundView {
+  constituents: FundConstituentView[];
+}
+
+export interface FundStatsView {
+  volatility: number;
+  yield7d: number;
+  yield30d: number;
+  sampleDays: number;
+}
+
+export interface CreateFundInput {
+  name: string;
+  risk: number;
+  feePct: number;
+  taxPct: number;
+  description: string;
+  gainMultiplier: number;
+  lossMultiplier: number;
+  constituents: FundConstituentInput[];
+}
+
+export async function getAdminFunds(): Promise<FundView[]> {
+  const res = await fetch("/api/admin/funds");
+  if (!res.ok) throw new Error("Failed to load funds");
+  return res.json();
+}
+
+export async function getAdminFund(id: number): Promise<FundDetailView> {
+  const res = await fetch(`/api/admin/funds/${id}`);
+  if (!res.ok) throw new Error("Failed to load fund");
+  return res.json();
+}
+
+export async function createFund(
+  input: CreateFundInput,
+): Promise<FundView & { skippedConstituents: FundConstituentInput[] }> {
+  const res = await fetch("/api/admin/funds", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to create fund");
+  }
+  return res.json();
+}
+
+export async function updateFund(
+  id: number,
+  input: Omit<CreateFundInput, "constituents">,
+): Promise<FundView> {
+  const res = await fetch(`/api/admin/funds/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to update fund");
+  }
+  return res.json();
+}
+
+export async function addFundConstituent(fundId: number, input: FundConstituentInput): Promise<void> {
+  const res = await fetch(`/api/admin/funds/${fundId}/constituents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to add constituent");
+  }
+}
+
+export async function removeFundConstituent(fundId: number, warriorId: number): Promise<void> {
+  const res = await fetch(`/api/admin/funds/${fundId}/constituents/${warriorId}`, { method: "DELETE" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to remove constituent");
+  }
+}
+
+export async function updateFundConstituent(
+  fundId: number,
+  warriorId: number,
+  stockCount: number,
+): Promise<void> {
+  const res = await fetch(`/api/admin/funds/${fundId}/constituents/${warriorId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stockCount }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to update constituent");
+  }
+}
+
+export async function deleteFund(id: number, reason?: string): Promise<void> {
+  const res = await fetch(`/api/admin/funds/${id}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to delete fund");
+  }
+}
+
+export async function getFundStats(id: number): Promise<FundStatsView | null> {
+  const res = await fetch(`/api/admin/funds/${id}/stats`);
+  if (!res.ok) throw new Error("Failed to load fund stats");
+  return res.json();
+}
+
+export interface PublicFundView {
+  id: number;
+  name: string;
+  risk: number;
+  feePct: number;
+  taxPct: number;
+  description: string;
+  nav: number;
+  last7DaysDelta: number;
+  allTimeDelta: number;
+  sparkline: number[];
+}
+
+export interface PublicFundConstituentView {
+  playerName: string;
+  server: string;
+  stockCount: number;
+  percentOfFund: number;
+  price: number | null;
+}
+
+export interface PublicFundDetailView extends PublicFundView {
+  constituents: PublicFundConstituentView[];
+}
+
+export async function getFunds(): Promise<PublicFundView[]> {
+  const res = await fetch("/api/funds");
+  if (!res.ok) throw new Error("Failed to load funds");
+  return res.json();
+}
+
+export async function getFund(id: number): Promise<PublicFundDetailView> {
+  const res = await fetch(`/api/funds/${id}`);
+  if (!res.ok) throw new Error("Failed to load fund");
+  return res.json();
+}
+
+export interface FundPositionView {
+  fundId: number;
+  name: string;
+  risk: number;
+  shares: number;
+  costBasisTotal: number;
+  nav: number;
+  marketValue: number;
+}
+
+export async function getFundPositions(): Promise<FundPositionView[]> {
+  const res = await fetch("/api/funds/positions");
+  if (!res.ok) throw new Error("Failed to load fund positions");
+  return res.json();
+}
+
+export interface FundTradeResult {
+  shares: number;
+  nav: number;
+  total: number;
+  fee: number;
+  tax: number;
+}
+
+export async function postFundTrade(
+  fundId: number,
+  side: "buy" | "sell",
+  amount: number,
+): Promise<FundTradeResult> {
+  const res = await fetch(`/api/funds/${fundId}/trade`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ side, amount }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Trade failed");
+  }
+  return res.json();
+}
+
+export async function estimateFundStats(
+  constituents: FundConstituentInput[],
+  gainMultiplier: number,
+  lossMultiplier: number,
+): Promise<FundStatsView | null> {
+  const res = await fetch("/api/admin/funds/stats/estimate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ constituents, gainMultiplier, lossMultiplier }),
+  });
+  if (!res.ok) throw new Error("Failed to estimate fund stats");
+  return res.json();
 }

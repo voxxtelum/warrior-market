@@ -34,6 +34,14 @@
   --success: #6bcf6b;
   --danger: #d64933;
 
+  /* Fund risk score (1-5), see riskScale.ts - fixed stops, not derived from
+     the other palette vars above (some happen to coincide, most don't). */
+  --risk-1: #10e585;
+  --risk-2: #40cb90;
+  --risk-3: #9a9aa5;
+  --risk-4: #c36357;
+  --risk-5: #d64933;
+
   --color-white: #ffffff;
   --color-black: #000000;
 }
@@ -951,6 +959,42 @@ tbody tr:hover {
   background: rgba(154, 154, 165, 0.15);
   color: var(--muted);
 }
+.risk-bar-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.risk-bar {
+  display: inline-flex;
+  gap: 2px;
+}
+.risk-segment {
+  width: 0.6rem;
+  height: 0.5rem;
+  border-radius: 1px;
+  background: var(--border);
+}
+[data-risk="1"] .risk-segment.filled {
+  background: var(--risk-1);
+}
+[data-risk="2"] .risk-segment.filled {
+  background: var(--risk-2);
+}
+[data-risk="3"] .risk-segment.filled {
+  background: var(--risk-3);
+}
+[data-risk="4"] .risk-segment.filled {
+  background: var(--risk-4);
+}
+[data-risk="5"] .risk-segment.filled {
+  background: var(--risk-5);
+}
+.risk-bar-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
 .activity-teaser-name {
   flex: 1;
   min-width: 0;
@@ -1627,6 +1671,150 @@ button.modal-close:hover {
 }
 .trade-status-area .status.success {
   border-color: var(--success);
+}
+
+/* --- Funds -------------------------------------------------------------- */
+
+.tab-nav-badge {
+  margin-left: 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--positive);
+  vertical-align: super;
+}
+
+.sparkline-grow {
+  display: inline-block;
+  clip-path: inset(0 0 0 0);
+  animation: sparkline-reveal 0.8s ease-out;
+}
+@keyframes sparkline-reveal {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.fund-card-top {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+.fund-card-identity {
+  flex-shrink: 0;
+}
+.fund-card-name {
+  margin: 0;
+  font-size: 1.4rem;
+}
+.fund-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.fund-card-fee {
+  white-space: nowrap;
+}
+.fund-card-sparkline {
+  flex: 1 1 auto;
+  min-width: 100px;
+  display: flex;
+  justify-content: center;
+}
+.fund-card-sparkline svg {
+  width: 100%;
+  max-width: 220px;
+  height: auto;
+}
+.fund-card-values {
+  display: flex;
+  gap: 1.5rem;
+  flex-shrink: 0;
+}
+.fund-card-value-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.fund-card-nav-value {
+  font-size: 1.3rem;
+  font-variant-numeric: tabular-nums;
+}
+.fund-card-delta-value {
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+.fund-card-value-label {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.fund-card-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.fund-card-description {
+  margin: 0;
+  color: var(--muted);
+  flex: 1 1 auto;
+}
+.fund-card-buy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+.fund-card-buy-icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+.fund-card-details-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  width: 100%;
+  margin-top: 0.75rem;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.fund-card-details-toggle:hover {
+  color: var(--fg);
+}
+.fund-card-chevron {
+  width: 1rem;
+  height: 1rem;
+}
+.fund-card-details {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s ease;
+}
+.fund-card-details.expanded {
+  grid-template-rows: 1fr;
+}
+.fund-card-details > div {
+  overflow: hidden;
+}
+.fund-constituents-table {
+  width: 100%;
+  margin-top: 0.75rem;
 }
 .trade-status-area .status.error {
   border-color: var(--negative);

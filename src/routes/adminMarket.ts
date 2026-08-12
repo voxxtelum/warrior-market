@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   AdminActionError,
+  adjustAllWalletBalances,
   adjustWalletBalance,
   getAdminWalletAdjustments,
   getAdminWalletOverview,
@@ -10,6 +11,7 @@ import {
   getOrCreateWallet,
   getPortfolioSnapshotNetWorth,
   getUserById,
+  getUserFundHoldingsValue,
   getUserTradeCount,
   getWarriorById,
   getWarriorHolders,
@@ -50,6 +52,24 @@ adminMarketRouter.post("/wallet-adjust", (req, res) => {
   }
 });
 
+adminMarketRouter.post("/wallet-adjust-all", (req, res) => {
+  const { delta, reason } = req.body ?? {};
+  if (typeof delta !== "number") {
+    res.status(400).json({ error: "Request body must include delta (number)" });
+    return;
+  }
+  try {
+    adjustAllWalletBalances(delta, req.user!.discord_id, typeof reason === "string" ? reason : null);
+    res.status(204).end();
+  } catch (err) {
+    if (err instanceof AdminActionError) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+});
+
 // Full portfolio detail for one user - same shape as the self-service
 // GET /api/trading/wallet + /transactions/mine, but admin can target any
 // userId. getOrCreateWallet lazily creates a wallet row here just like the
@@ -74,6 +94,7 @@ adminMarketRouter.get("/users/:userId", (req, res) => {
     marketValue: h.latest_price !== null ? h.shares * h.latest_price : null,
   }));
   const holdingsValue = holdings.reduce((sum, h) => sum + (h.marketValue ?? 0), 0);
+  const fundHoldingsValue = getUserFundHoldingsValue(userId);
 
   const pnlByTxId = computeRealizedPnlByUser(userId);
   const transactions = listTransactions({ userId, limit: 500 }).map((tx) => ({
@@ -89,7 +110,7 @@ adminMarketRouter.get("/users/:userId", (req, res) => {
   }));
 
   const linked = getLinkedWarrior(userId);
-  const netWorth = wallet.balance + holdingsValue;
+  const netWorth = wallet.balance + holdingsValue + fundHoldingsValue;
   const snapshotNetWorth = getPortfolioSnapshotNetWorth(userId);
 
   res.json({
@@ -104,6 +125,7 @@ adminMarketRouter.get("/users/:userId", (req, res) => {
     lastLoginAt: targetUser.last_login_at,
     balance: wallet.balance,
     holdings,
+    fundHoldingsValue,
     netWorth,
     netWorthDelta: snapshotNetWorth !== null ? netWorth - snapshotNetWorth : 0,
     tradeCount: getUserTradeCount(userId),

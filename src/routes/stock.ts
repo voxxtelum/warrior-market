@@ -65,6 +65,7 @@ const NUMERIC_FIELDS: (keyof StockConfig)[] = [
   "damagePeerWeight",
   "damageTrendZClamp",
   "driftIntervalMs",
+  "fundValuationIntervalMs",
   "driftMaxPct",
   "driftReversionStrength",
   "demandMaxPctPerTrade",

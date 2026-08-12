@@ -38,7 +38,7 @@ function serializeFundSummary(fund: FundRow) {
     taxPct: fund.tax_pct,
     description: fund.description,
     nav,
-    last7DaysDelta: navSevenDaysAgo !== null ? nav - navSevenDaysAgo : 0,
+    last7DaysDelta: nav - (navSevenDaysAgo ?? fund.seed_nav),
     allTimeDelta: nav - fund.seed_nav,
     sparkline,
   };

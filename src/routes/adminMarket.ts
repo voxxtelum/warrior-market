@@ -17,11 +17,12 @@ import {
   getWarriorHolders,
   getWarriorTrades,
   getWarriorVolumeOverview,
+  listFundTransactions,
   listHoldingsWithContext,
   listTransactions,
   resetMarketState,
 } from "../db";
-import { computeRealizedPnlByUser } from "../pnl";
+import { computeRealizedFundPnlByUser, computeRealizedPnlByUser } from "../pnl";
 import { rebuildRaidPriceSnapshots } from "../stock";
 
 export const adminMarketRouter = Router();
@@ -97,10 +98,11 @@ adminMarketRouter.get("/users/:userId", (req, res) => {
   const fundHoldingsValue = getUserFundHoldingsValue(userId);
 
   const pnlByTxId = computeRealizedPnlByUser(userId);
-  const transactions = listTransactions({ userId, limit: 500 }).map((tx) => ({
+  const fundPnlByTxId = computeRealizedFundPnlByUser(userId);
+  const characterTx = listTransactions({ userId, limit: 500 }).map((tx) => ({
     id: tx.id,
-    playerName: tx.player_name,
-    server: tx.server,
+    targetType: "character" as const,
+    targetName: tx.player_name,
     side: tx.side,
     shares: tx.shares,
     price: tx.price,
@@ -108,6 +110,20 @@ adminMarketRouter.get("/users/:userId", (req, res) => {
     createdAt: tx.created_at,
     realizedPnl: pnlByTxId.get(tx.id) ?? null,
   }));
+  const fundTx = listFundTransactions({ userId, limit: 500 }).map((tx) => ({
+    id: tx.id,
+    targetType: "fund" as const,
+    targetName: tx.fund_name,
+    side: tx.side,
+    shares: tx.shares,
+    price: tx.nav,
+    total: tx.total,
+    createdAt: tx.created_at,
+    realizedPnl: fundPnlByTxId.get(tx.id) ?? null,
+  }));
+  const transactions = [...characterTx, ...fundTx]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 500);
 
   const linked = getLinkedWarrior(userId);
   const netWorth = wallet.balance + holdingsValue + fundHoldingsValue;

@@ -13,7 +13,7 @@ import {
   getMyTransactions,
   getWallet,
   type FundPositionView,
-  type TransactionView,
+  type PersonalTransactionView,
   type WalletData,
 } from '../api';
 import { fmtCoin, fmtDateTime, fmtRelativeTime } from '../format';
@@ -24,7 +24,7 @@ const PAGE_SIZE = 25;
 export function WalletPage() {
   const { user, loading } = useAuth();
   const [wallet, setWallet] = useState<WalletData | null>(null);
-  const [transactions, setTransactions] = useState<TransactionView[] | null>(
+  const [transactions, setTransactions] = useState<PersonalTransactionView[] | null>(
     null,
   );
   const [fundPositions, setFundPositions] = useState<FundPositionView[] | null>(null);
@@ -177,7 +177,7 @@ export function WalletPage() {
             <thead>
               <tr>
                 <th className="mobile-hide">When</th>
-                <th>Warrior</th>
+                <th>Target</th>
                 <th className="side-pill-cell">Side</th>
                 <th className="mobile-hide">Shares</th>
                 <th className="mobile-hide">Price</th>
@@ -194,12 +194,12 @@ export function WalletPage() {
                 </tr>
               )}
               {pageTransactions?.map((tx) => (
-                <tr key={tx.id}>
+                <tr key={`${tx.targetType}-${tx.id}`}>
                   <td className="mobile-hide">
                     {fmtDateTime(tx.createdAt)}
                     <span className="time-ago">{fmtRelativeTime(tx.createdAt)}</span>
                   </td>
-                  <td className="warrior-name">{tx.playerName}</td>
+                  <td className="warrior-name">{tx.targetName}</td>
                   <td className="side-pill-cell">
                     <SidePill side={tx.side} />
                   </td>

@@ -989,9 +989,23 @@ tbody tr:hover {
 [data-risk="5"] .risk-segment.filled {
   background: var(--risk-5);
 }
+[data-risk="1"] .risk-bar-label {
+  color: var(--risk-1);
+}
+[data-risk="2"] .risk-bar-label {
+  color: var(--risk-2);
+}
+[data-risk="3"] .risk-bar-label {
+  color: var(--risk-3);
+}
+[data-risk="4"] .risk-bar-label {
+  color: var(--risk-4);
+}
+[data-risk="5"] .risk-bar-label {
+  color: var(--risk-5);
+}
 .risk-bar-label {
   font-size: 0.75rem;
-  color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }

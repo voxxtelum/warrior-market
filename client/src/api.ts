@@ -354,7 +354,22 @@ export interface TransactionView {
   realizedPnl: number | null;
 }
 
-export async function getMyTransactions(): Promise<TransactionView[]> {
+export interface PersonalTransactionView {
+  id: number;
+  targetType: "character" | "fund";
+  targetName: string;
+  side: "buy" | "sell" | "liquidation";
+  shares: number;
+  price: number;
+  total: number;
+  createdAt: number;
+  username: string | null;
+  avatar: string | null;
+  isMine: boolean;
+  realizedPnl: number | null;
+}
+
+export async function getMyTransactions(): Promise<PersonalTransactionView[]> {
   const res = await fetch("/api/trading/transactions/mine");
   return res.json();
 }
@@ -495,8 +510,8 @@ export interface AdminUserHolding {
 
 export interface AdminUserTransaction {
   id: number;
-  playerName: string;
-  server: string;
+  targetType: "character" | "fund";
+  targetName: string;
   side: "buy" | "sell" | "liquidation";
   shares: number;
   price: number;
@@ -561,6 +576,9 @@ export interface WarriorVolumeRow {
   holderCount: number;
   totalInvested: number;
   hidden: boolean;
+  price: number | null;
+  anchorPrice: number | null;
+  raidAnchorPrice: number | null;
 }
 
 export async function getWarriorVolumeOverview(): Promise<WarriorVolumeRow[]> {

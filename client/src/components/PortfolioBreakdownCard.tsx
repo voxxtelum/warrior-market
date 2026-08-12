@@ -10,7 +10,8 @@ export interface PortfolioBreakdownCardProps {
   }[];
   recentTransactions: {
     id: number;
-    playerName: string;
+    targetType: 'character' | 'fund';
+    targetName: string;
     side: 'buy' | 'sell' | 'liquidation';
     total: number;
     createdAt: number;
@@ -78,10 +79,10 @@ export function PortfolioBreakdownCard({
           ) : (
             <ul className="activity-teaser">
               {recent.map((tx) => (
-                <li key={tx.id} className="activity-teaser-item">
+                <li key={`${tx.targetType}-${tx.id}`} className="activity-teaser-item">
                   <SidePill side={tx.side} />
                   <span className="activity-teaser-name warrior-name">
-                    {tx.playerName}
+                    {tx.targetName}
                   </span>
                   <span className="activity-teaser-amount">
                     {fmtCoin(tx.total)}

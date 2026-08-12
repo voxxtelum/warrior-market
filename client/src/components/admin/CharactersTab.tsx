@@ -13,9 +13,21 @@ import { fmtCoin, fmtDateTime, fmtRelativeTime } from '../../format';
 
 const TRADES_PAGE_SIZE = 10;
 
-type SortKey = 'character' | 'invested' | 'volume' | 'trades' | 'shares' | 'holders';
+type SortKey =
+  | 'price'
+  | 'anchorPrice'
+  | 'raidAnchorPrice'
+  | 'character'
+  | 'invested'
+  | 'volume'
+  | 'trades'
+  | 'shares'
+  | 'holders';
 
 const COLUMNS: { key: SortKey; label: string }[] = [
+  { key: 'price', label: 'Price' },
+  { key: 'anchorPrice', label: 'Anchor Price' },
+  { key: 'raidAnchorPrice', label: 'Raid Anchor Price' },
   { key: 'character', label: 'Character' },
   { key: 'invested', label: 'Total Invested' },
   { key: 'volume', label: 'Volume' },
@@ -24,6 +36,12 @@ const COLUMNS: { key: SortKey; label: string }[] = [
 
 function sortValue(row: WarriorVolumeRow, key: SortKey): string | number {
   switch (key) {
+    case 'price':
+      return row.price ?? 0;
+    case 'anchorPrice':
+      return row.anchorPrice ?? 0;
+    case 'raidAnchorPrice':
+      return row.raidAnchorPrice ?? 0;
     case 'character':
       return `${row.playerName}-${row.server}`.toLowerCase();
     case 'invested':
@@ -128,7 +146,13 @@ export function CharactersTab() {
                   <th
                     key={col.key}
                     className={
-                      col.key === 'volume' || col.key === 'invested' ? 'sortable text-right' : 'sortable'
+                      col.key === 'volume' ||
+                      col.key === 'invested' ||
+                      col.key === 'price' ||
+                      col.key === 'anchorPrice' ||
+                      col.key === 'raidAnchorPrice'
+                        ? 'sortable text-right'
+                        : 'sortable'
                     }
                     onClick={() => handleSort(col.key)}
                   >
@@ -136,20 +160,18 @@ export function CharactersTab() {
                     {arrowFor(col.key)}
                   </th>
                 ))}
-                <th></th>
                 <th className="sortable" onClick={() => handleSort('shares')}>
                   Shares{arrowFor('shares')}
                 </th>
                 <th className="sortable" onClick={() => handleSort('holders')}>
                   Holders{arrowFor('holders')}
                 </th>
-                <th></th>
               </tr>
             </thead>
             <tbody>
               {rows?.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="no-data">
+                  <td colSpan={9} className="no-data">
                     No trades yet.
                   </td>
                 </tr>
@@ -159,30 +181,33 @@ export function CharactersTab() {
                   key={row.warriorId}
                   className={detail?.warriorId === row.warriorId ? 'selected-row' : undefined}
                 >
+                  <td className="text-right">{row.price !== null ? fmtCoin(row.price) : '–'}</td>
+                  <td className="text-right">{row.anchorPrice !== null ? fmtCoin(row.anchorPrice) : '–'}</td>
+                  <td className="text-right">
+                    {row.raidAnchorPrice !== null ? fmtCoin(row.raidAnchorPrice) : '–'}
+                  </td>
                   <td className="warrior-name">
                     {row.playerName}-{row.server}
                   </td>
                   <td className="text-right">{fmtCoin(row.totalInvested)}</td>
                   <td className="text-right">{fmtCoin(row.volume)}</td>
-                  <td>{row.tradeCount}</td>
                   <td>
                     <button
                       type="button"
                       className="text-link text-link-accent"
                       onClick={() => toggleDetail(row.warriorId, 'trades')}
                     >
-                      View Trades
+                      {row.tradeCount}
                     </button>
                   </td>
                   <td>{row.totalShares.toFixed(3)}</td>
-                  <td>{row.holderCount}</td>
                   <td>
                     <button
                       type="button"
                       className="text-link text-link-accent"
                       onClick={() => toggleDetail(row.warriorId, 'shares')}
                     >
-                      View Shares
+                      {row.holderCount}
                     </button>
                   </td>
                 </tr>

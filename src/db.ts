@@ -1458,6 +1458,9 @@ export interface WarriorVolumeEntry {
   holderCount: number;
   totalInvested: number;
   hidden: boolean;
+  price: number | null;
+  anchorPrice: number | null;
+  raidAnchorPrice: number | null;
 }
 
 // Per-warrior trade volume, for the admin Characters tab and the Price
@@ -1479,6 +1482,7 @@ export function getWarriorVolumeOverview(): WarriorVolumeEntry[] {
   const rows = db
     .prepare(
       `SELECT w.id AS warrior_id, w.player_name, w.server,
+              w.anchor_price, w.raid_anchor_price,
               COALESCE(SUM(t.total), 0) AS volume, COUNT(t.id) AS tradeCount,
               EXISTS(
                 SELECT 1 FROM hidden_players hp
@@ -1493,6 +1497,8 @@ export function getWarriorVolumeOverview(): WarriorVolumeEntry[] {
     warrior_id: number;
     player_name: string;
     server: string;
+    anchor_price: number | null;
+    raid_anchor_price: number | null;
     volume: number;
     tradeCount: number;
     hidden: number;
@@ -1513,7 +1519,7 @@ export function getWarriorVolumeOverview(): WarriorVolumeEntry[] {
 
   return rows.map((r) => {
     const totalShares = sharesByWarrior.get(r.warrior_id) ?? 0;
-    const price = totalShares > 0 ? getLatestPrice(r.warrior_id) : null;
+    const price = getLatestPrice(r.warrior_id);
     return {
       warriorId: r.warrior_id,
       playerName: r.player_name,
@@ -1524,6 +1530,9 @@ export function getWarriorVolumeOverview(): WarriorVolumeEntry[] {
       holderCount: holdersByWarrior.get(r.warrior_id) ?? 0,
       totalInvested: price !== null ? totalShares * price : 0,
       hidden: !!r.hidden,
+      price,
+      anchorPrice: r.anchor_price,
+      raidAnchorPrice: r.raid_anchor_price,
     };
   });
 }
@@ -2733,6 +2742,50 @@ export interface FundTransactionRow {
   fee: number;
   tax: number;
   created_at: number;
+}
+
+export interface FundTransactionWithContext extends FundTransactionRow {
+  fund_name: string;
+  username: string;
+  avatar: string | null;
+}
+
+export function listFundTransactions(
+  opts: { fundId?: number; userId?: string; limit?: number } = {},
+): FundTransactionWithContext[] {
+  const clauses: string[] = [];
+  const params: (string | number)[] = [];
+  if (opts.fundId !== undefined) {
+    clauses.push('ft.fund_id = ?');
+    params.push(opts.fundId);
+  }
+  if (opts.userId !== undefined) {
+    clauses.push('ft.user_id = ?');
+    params.push(opts.userId);
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  params.push(opts.limit ?? 100);
+
+  return db
+    .prepare(
+      `SELECT ft.*, f.name AS fund_name, u.username, u.avatar
+       FROM fund_transactions ft
+       JOIN funds f ON f.id = ft.fund_id
+       JOIN users u ON u.discord_id = ft.user_id
+       ${where}
+       ORDER BY ft.created_at DESC, ft.id DESC
+       LIMIT ?`,
+    )
+    .all(...params) as unknown as FundTransactionWithContext[];
+}
+
+export function listAllFundTransactionsForUser(userId: string): FundTransactionRow[] {
+  return db
+    .prepare(
+      `SELECT * FROM fund_transactions WHERE user_id = ?
+       ORDER BY fund_id ASC, created_at ASC, id ASC`,
+    )
+    .all(userId) as unknown as FundTransactionRow[];
 }
 
 export function getFundHolding(userId: string, fundId: number): FundHoldingRow | null {

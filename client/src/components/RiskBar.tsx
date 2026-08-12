@@ -6,7 +6,7 @@ import { riskLabel } from "../riskScale";
 // styles.css, not computed here).
 export function RiskBar({ risk, showLabel = true }: { risk: number; showLabel?: boolean }) {
   return (
-    <span className="risk-bar-wrap">
+    <span className="risk-bar-wrap" data-risk={risk}>
       <span className="risk-bar" data-risk={risk}>
         {[1, 2, 3, 4, 5].map((segment) => (
           <span key={segment} className={segment <= risk ? "risk-segment filled" : "risk-segment"} />

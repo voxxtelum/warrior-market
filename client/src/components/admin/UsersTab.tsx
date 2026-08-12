@@ -450,7 +450,7 @@ export function UsersTab() {
             <thead>
               <tr>
                 <th className="mobile-hide">When</th>
-                <th>Warrior</th>
+                <th>Target</th>
                 <th className="side-pill-cell">Side</th>
                 <th className="mobile-hide">Shares</th>
                 <th className="mobile-hide">Price</th>
@@ -467,12 +467,12 @@ export function UsersTab() {
                 </tr>
               )}
               {pageTransactions?.map((tx) => (
-                <tr key={tx.id}>
+                <tr key={`${tx.targetType}-${tx.id}`}>
                   <td className="mobile-hide">
                     {fmtDateTime(tx.createdAt)}
                     <span className="time-ago">{fmtRelativeTime(tx.createdAt)}</span>
                   </td>
-                  <td className="warrior-name">{tx.playerName}</td>
+                  <td className="warrior-name">{tx.targetName}</td>
                   <td className="side-pill-cell">
                     <SidePill side={tx.side} />
                   </td>

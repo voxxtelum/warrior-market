@@ -10,13 +10,14 @@ import {
   getUserFundHoldingsValue,
   getUserTradeCount,
   getWarriorId,
+  listFundTransactions,
   listHoldingsWithContext,
   listTransactions,
   TradeError,
   type TransactionWithContext,
 } from "../db";
 import { requireAuth } from "../middleware/auth";
-import { computeRealizedPnlByUser } from "../pnl";
+import { computeRealizedFundPnlByUser, computeRealizedPnlByUser } from "../pnl";
 import { loadStockConfig } from "../stock";
 
 export const tradingRouter = Router();
@@ -108,14 +109,32 @@ tradingRouter.post("/trade", requireAuth, (req, res) => {
 });
 
 tradingRouter.get("/transactions/mine", requireAuth, (req, res) => {
-  const rows = listTransactions({ userId: req.user!.discord_id, limit: 200 });
-  const pnlByTxId = computeRealizedPnlByUser(req.user!.discord_id);
-  res.json(
-    rows.map((tx) => ({
-      ...serializeTransaction(tx, req.user),
-      realizedPnl: pnlByTxId.get(tx.id) ?? null,
-    }))
-  );
+  const userId = req.user!.discord_id;
+  const pnlByTxId = computeRealizedPnlByUser(userId);
+  const fundPnlByTxId = computeRealizedFundPnlByUser(userId);
+
+  const characterTx = listTransactions({ userId, limit: 200 }).map((tx) => ({
+    ...serializeTransaction(tx, req.user),
+    targetType: "character" as const,
+    targetName: tx.player_name,
+    realizedPnl: pnlByTxId.get(tx.id) ?? null,
+  }));
+  const fundTx = listFundTransactions({ userId, limit: 200 }).map((tx) => ({
+    id: tx.id,
+    targetType: "fund" as const,
+    targetName: tx.fund_name,
+    side: tx.side,
+    shares: tx.shares,
+    price: tx.nav,
+    total: tx.total,
+    createdAt: tx.created_at,
+    username: tx.username,
+    avatar: tx.avatar,
+    isMine: true,
+    realizedPnl: fundPnlByTxId.get(tx.id) ?? null,
+  }));
+
+  res.json([...characterTx, ...fundTx].sort((a, b) => b.createdAt - a.createdAt).slice(0, 200));
 });
 
 // Public - identity is anonymized per serializeTransaction unless the

@@ -25,10 +25,10 @@ type SortKey =
   | 'holders';
 
 const COLUMNS: { key: SortKey; label: string }[] = [
+  { key: 'character', label: 'Character' },
   { key: 'price', label: 'Price' },
   { key: 'anchorPrice', label: 'Anchor Price' },
   { key: 'raidAnchorPrice', label: 'Raid Anchor Price' },
-  { key: 'character', label: 'Character' },
   { key: 'invested', label: 'Total Invested' },
   { key: 'volume', label: 'Volume' },
   { key: 'trades', label: 'Trades' },
@@ -181,13 +181,13 @@ export function CharactersTab() {
                   key={row.warriorId}
                   className={detail?.warriorId === row.warriorId ? 'selected-row' : undefined}
                 >
+                  <td className="warrior-name">
+                    {row.playerName}-{row.server}
+                  </td>
                   <td className="text-right">{row.price !== null ? fmtCoin(row.price) : '–'}</td>
                   <td className="text-right">{row.anchorPrice !== null ? fmtCoin(row.anchorPrice) : '–'}</td>
                   <td className="text-right">
                     {row.raidAnchorPrice !== null ? fmtCoin(row.raidAnchorPrice) : '–'}
-                  </td>
-                  <td className="warrior-name">
-                    {row.playerName}-{row.server}
                   </td>
                   <td className="text-right">{fmtCoin(row.totalInvested)}</td>
                   <td className="text-right">{fmtCoin(row.volume)}</td>

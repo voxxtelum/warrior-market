@@ -790,6 +790,10 @@ th.text-right,
 td.text-right {
   text-align: right;
 }
+th.text-left,
+td.text-left {
+  text-align: left;
+}
 thead th {
   color: var(--muted);
   font-weight: 600;

@@ -50,20 +50,21 @@ stockRouter.get("/config", requireAdmin, (_req, res) => {
 
 const NUMERIC_FIELDS: (keyof StockConfig)[] = [
   "tankTopN",
-  "tankMinUptimePct",
   "minBucketSize",
   "coldStartReports",
   "dpsEmaAlpha",
   "damageWeight",
   "castWeight",
-  "priceSensitivity",
+  "pricePerScorePointUp",
+  "pricePerScorePointDown",
   "startingPrice",
   "newPlayerGraceReports",
   "newPlayerPenaltyLeniency",
   "minAttendancePct",
   "damageTrendWeight",
   "damagePeerWeight",
-  "damageTrendZClamp",
+  "damageTrendZClampUp",
+  "damageTrendZClampDown",
   "driftIntervalMs",
   "fundValuationIntervalMs",
   "driftMaxPct",
@@ -95,6 +96,18 @@ function validateStockConfig(body: unknown): string | null {
       typeof (a as Record<string, unknown>).bucket !== "string"
     ) {
       return "Each ability needs a numeric id, string name, numeric weight, and string bucket";
+    }
+  }
+
+  if (!Array.isArray(cfg.tankTopNByZone)) return "'tankTopNByZone' must be an array";
+  for (const z of cfg.tankTopNByZone) {
+    if (
+      !z ||
+      typeof z !== "object" ||
+      typeof (z as Record<string, unknown>).zone !== "string" ||
+      typeof (z as Record<string, unknown>).topN !== "number"
+    ) {
+      return "Each tankTopNByZone entry needs a string zone and numeric topN";
     }
   }
 

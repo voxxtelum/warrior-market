@@ -207,23 +207,30 @@ export interface StockAbilityConfig {
   bucket: string;
 }
 
+export interface TankTopNZoneConfig {
+  zone: string;
+  topN: number;
+}
+
 export interface StockConfig {
   abilities: StockAbilityConfig[];
   tankTopN: number;
-  tankMinUptimePct: number;
+  tankTopNByZone: TankTopNZoneConfig[];
   minBucketSize: number;
   coldStartReports: number;
   dpsEmaAlpha: number;
   damageWeight: number;
   castWeight: number;
-  priceSensitivity: number;
+  pricePerScorePointUp: number;
+  pricePerScorePointDown: number;
   startingPrice: number;
   newPlayerGraceReports: number;
   newPlayerPenaltyLeniency: number;
   minAttendancePct: number;
   damageTrendWeight: number;
   damagePeerWeight: number;
-  damageTrendZClamp: number;
+  damageTrendZClampUp: number;
+  damageTrendZClampDown: number;
   driftIntervalMs: number;
   fundValuationIntervalMs: number;
   driftMaxPct: number;

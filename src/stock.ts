@@ -20,23 +20,30 @@ export interface StockAbilityConfig {
   bucket: string; // "all" | "dps" | "tank"
 }
 
+export interface TankTopNZoneConfig {
+  zone: string;
+  topN: number;
+}
+
 export interface StockConfig {
   abilities: StockAbilityConfig[];
   tankTopN: number;
-  tankMinUptimePct: number;
+  tankTopNByZone: TankTopNZoneConfig[];
   minBucketSize: number;
   coldStartReports: number;
   dpsEmaAlpha: number;
   damageWeight: number;
   castWeight: number;
-  priceSensitivity: number;
+  pricePerScorePointUp: number;
+  pricePerScorePointDown: number;
   startingPrice: number;
   newPlayerGraceReports: number;
   newPlayerPenaltyLeniency: number;
   minAttendancePct: number;
   damageTrendWeight: number;
   damagePeerWeight: number;
-  damageTrendZClamp: number;
+  damageTrendZClampUp: number;
+  damageTrendZClampDown: number;
   driftIntervalMs: number;
   fundValuationIntervalMs: number;
   driftMaxPct: number;
@@ -53,6 +60,12 @@ export interface StockConfig {
   swingCooldownGapPct: number;
 }
 
+// Absolute floor under any warrior's price. Purely a divide-by-zero/negative-
+// price safety net (executeTrade in db.ts computes coinAmount / price to get
+// shares) - not a tunable economic knob, hence hardcoded rather than a
+// stock_config field an admin could accidentally zero out.
+const MIN_PRICE = 1;
+
 // Reads the DB-stored config on every call (rather than caching once at
 // import time) so edits made on the admin page take effect on the next
 // request, with no server restart. db.ts seeds a default row on first run,
@@ -66,12 +79,39 @@ export function loadStockConfig(): StockConfig {
   const parsed = JSON.parse(stored) as Partial<StockConfig>;
   return {
     ...parsed,
+    // Older configs predate per-zone tank sizing and used a single global
+    // tankTopN with an uptime filter (removed) - fall back to the current
+    // Classic raid progression's known sizes so existing installs don't
+    // silently revert to flat top-4-everywhere on next load.
+    tankTopNByZone:
+      parsed.tankTopNByZone ?? [
+        { zone: "Molten Core", topN: 3 },
+        { zone: "Blackwing Lair", topN: 3 },
+        { zone: "Temple of Ahn'Qiraj", topN: 4 },
+        { zone: "Naxxramas", topN: 4 },
+      ],
     newPlayerGraceReports: parsed.newPlayerGraceReports ?? 2,
     newPlayerPenaltyLeniency: parsed.newPlayerPenaltyLeniency ?? 0.3,
     minAttendancePct: parsed.minAttendancePct ?? 0.3,
     damageTrendWeight: parsed.damageTrendWeight ?? 0.5,
     damagePeerWeight: parsed.damagePeerWeight ?? 0.5,
-    damageTrendZClamp: parsed.damageTrendZClamp ?? 4,
+    // Older configs (and single-value edits made before the up/down split)
+    // stored one shared clamp under the now-removed `damageTrendZClamp` key -
+    // fall back to it for both directions so existing installs keep their
+    // tuned value instead of silently reverting to the default.
+    damageTrendZClampUp:
+      parsed.damageTrendZClampUp ?? (parsed as { damageTrendZClamp?: number }).damageTrendZClamp ?? 4,
+    damageTrendZClampDown:
+      parsed.damageTrendZClampDown ?? (parsed as { damageTrendZClamp?: number }).damageTrendZClamp ?? 4,
+    // `priceSensitivity` (percent-of-price) was replaced by these two flat-
+    // dollar fields. Deliberately NOT read from the old key - there's no
+    // meaningful conversion between "% of price" and "$ flat" without
+    // knowing the price level the old value was tuned against, unlike the
+    // damageTrendZClamp backfill above (a valid shared-value carry-forward,
+    // not a unit change). A stale `priceSensitivity` in an older stored blob
+    // is simply ignored.
+    pricePerScorePointUp: parsed.pricePerScorePointUp ?? 8,
+    pricePerScorePointDown: parsed.pricePerScorePointDown ?? 8,
     driftIntervalMs: parsed.driftIntervalMs ?? 60 * 60 * 1000,
     fundValuationIntervalMs: parsed.fundValuationIntervalMs ?? 60 * 60 * 1000,
     driftMaxPct: parsed.driftMaxPct ?? 0.005,
@@ -209,27 +249,24 @@ export function computeStock(): PlayerStock[] {
       });
     }
 
-    // Tank identification: the top N warriors by damage taken this raid,
-    // restricted to those who were actually getting hit for a meaningful
-    // share of their own time in combat (so a DPS warrior who eats one big
-    // cleave hit doesn't get mistaken for a tank). Uptime is measured
-    // against the player's own active (damage-dealing) time, not the whole
-    // raid session - a multi-hour night is mostly downtime between pulls,
-    // so measuring against session length made everyone's uptime tiny and
-    // nobody would ever clear a 20% bar. Recomputed fresh every report - a
-    // player can be "tank" one night and "dps" the next.
+    // Tank identification: the top N warriors by raw total damage taken
+    // this raid, straight ranking with no uptime filter - a raid's tanks
+    // are simply whoever ate the most damage. N is instance-specific (a
+    // 4-tank Naxx night doesn't mean a 4-tank Molten Core one), falling
+    // back to tankTopN for any zone without an explicit entry. Recomputed
+    // fresh every report - a player can be "tank" one night and "dps" the
+    // next.
+    const zoneTankTopN =
+      stockConfig.tankTopNByZone.find((z) => z.zone === report.zone)?.topN ?? stockConfig.tankTopN;
     const takenStats = damageRows.map((d) => {
       const key = playerKey(d.player_name, d.server);
       const taken = damageTakenByPlayer.get(key) ?? { total: 0, activeTime: 0 };
-      const dealtActiveTime = d.active_time ?? 0;
-      const uptimePct = dealtActiveTime > 0 ? taken.activeTime / dealtActiveTime : 0;
-      return { key, total: taken.total, uptimePct };
+      return { key, total: taken.total };
     });
     const tankKeys = new Set(
       takenStats
-        .filter((t) => t.uptimePct > stockConfig.tankMinUptimePct)
         .sort((a, b) => b.total - a.total)
-        .slice(0, stockConfig.tankTopN)
+        .slice(0, zoneTankTopN)
         .map((t) => t.key)
     );
 
@@ -299,7 +336,8 @@ export function computeStock(): PlayerStock[] {
       if (ewma) {
         const sd = Math.sqrt(ewma.variance);
         const rawZ = sd > 0 ? (participant.dps - ewma.mean) / sd : 0;
-        const clampedZ = Math.max(-stockConfig.damageTrendZClamp, Math.min(stockConfig.damageTrendZClamp, rawZ));
+        const clampedZ =
+          rawZ >= 0 ? Math.min(stockConfig.damageTrendZClampUp, rawZ) : Math.max(-stockConfig.damageTrendZClampDown, rawZ);
         const shrink = Math.min(1, ewma.count / stockConfig.coldStartReports);
         damageTrendScore = clampedZ * shrink;
       }
@@ -330,7 +368,8 @@ export function computeStock(): PlayerStock[] {
         ? 0
         : stockConfig.damageWeight * damageScore + stockConfig.castWeight * castScore;
       const prevPrice = runningPrice.get(participant.key) ?? stockConfig.startingPrice;
-      const price = prevPrice * (1 + stockConfig.priceSensitivity * reportScore);
+      const perPoint = reportScore >= 0 ? stockConfig.pricePerScorePointUp : stockConfig.pricePerScorePointDown;
+      const price = Math.max(MIN_PRICE, prevPrice + perPoint * reportScore);
       runningPrice.set(participant.key, price);
 
       if (!seriesByPlayer.has(participant.key)) {
@@ -390,10 +429,10 @@ export function snapshotPricesForReport(reportCode: string, createdAt: number = 
     // to point.price (computeStock()'s own first-ever value, which is just
     // startingPrice compounded once) only when there's no live price yet -
     // i.e. this warrior's very first price ever.
+    const perPoint =
+      point.report_score >= 0 ? stockConfig.pricePerScorePointUp : stockConfig.pricePerScorePointDown;
     const newPrice =
-      previousPrice !== null
-        ? previousPrice * (1 + stockConfig.priceSensitivity * point.report_score)
-        : point.price;
+      previousPrice !== null ? Math.max(MIN_PRICE, previousPrice + perPoint * point.report_score) : point.price;
     const delta = previousPrice !== null ? newPrice - previousPrice : null;
     insertPriceSnapshot(warriorId, newPrice, delta, "raid", reportCode, createdAt);
     // Both anchors now converge to the same freshly-resolved price - there's

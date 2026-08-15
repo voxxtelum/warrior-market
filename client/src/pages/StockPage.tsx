@@ -142,18 +142,18 @@ function sinceRaidBasePrice(series: PlayerPriceHistory['series']): number | null
   return null;
 }
 
-// Geometric-mean per-raid price growth, derived purely from the player's own
-// consecutive price points (no dependency on priceSensitivity/startingPrice
-// config) - a tenure-independent view of "quality per raid" alongside the
-// tenure-compounded price. Needs at least 2 raids to have one price ratio.
-function avgGrowthPerRaid(series: PlayerStock['series']): number | null {
+// Flat dollar-average per-raid price change, derived purely from the
+// player's own consecutive price points - a tenure-independent view of
+// "quality per raid" (a veteran and a rookie with the same per-raid dollar
+// gain are judged equally, rather than the veteran's larger base price
+// shrinking their %-return). Needs at least 2 raids to have one delta.
+function avgGainPerRaid(series: PlayerStock['series']): number | null {
   if (series.length < 2) return null;
-  let sumLogReturn = 0;
+  let sumDelta = 0;
   for (let i = 1; i < series.length; i++) {
-    sumLogReturn += Math.log(series[i].price / series[i - 1].price);
+    sumDelta += series[i].price - series[i - 1].price;
   }
-  const avgLogReturn = sumLogReturn / (series.length - 1);
-  return (Math.exp(avgLogReturn) - 1) * 100;
+  return sumDelta / (series.length - 1);
 }
 
 function rowKey(row: LeaderboardRow): string {
@@ -165,7 +165,7 @@ function rowKey(row: LeaderboardRow): string {
 // (e.g. a player's first appearance on the board). Ranked on currentPrice /
 // sinceRaidBasePrice (the same frozen-ledger family the Price column itself
 // sorts by, not the live-recomputed `price`/`prevPrice` pair used for the
-// raid-only "Change" and "Growth/raid" columns) so this always agrees with
+// raid-only "Change" and "Gain/raid" columns) so this always agrees with
 // a player's actual neighbors in the default Price-sorted view - otherwise
 // two players can show opposite-signed deltas of the same magnitude while
 // sitting right next to each other, because trading/drift moved currentPrice
@@ -208,13 +208,13 @@ function RankDeltaCell({ delta }: { delta: number | null }) {
   );
 }
 
-type SortKey = 'player' | 'price' | 'change' | 'avgGrowth' | 'raids';
+type SortKey = 'player' | 'price' | 'change' | 'avgGain' | 'raids';
 
 function sortValue(row: LeaderboardRow, key: SortKey): string | number | null {
   if (key === 'player') return row.player_name;
   if (key === 'price') return row.currentPrice;
   if (key === 'change') return changeValue(row);
-  if (key === 'avgGrowth') return avgGrowthPerRaid(row.series);
+  if (key === 'avgGain') return avgGainPerRaid(row.series);
   if (key === 'raids') return row.raidCount;
   return null;
 }
@@ -225,7 +225,7 @@ const COLUMNS: { key: SortKey | null; label: string; mobileHide?: boolean }[] = 
   { key: 'price', label: 'Price' },
   { key: null, label: 'Trend' },
   { key: 'change', label: 'Change (last raid)', mobileHide: true },
-  { key: 'avgGrowth', label: 'Growth/raid', mobileHide: true },
+  { key: 'avgGain', label: 'Gain/raid', mobileHide: true },
   { key: 'raids', label: 'Raids', mobileHide: true },
   { key: null, label: '', mobileHide: true },
 ];
@@ -371,11 +371,11 @@ export function StockPage() {
     return heatRange(pctChanges);
   }, [leaderboard]);
 
-  const { maxPos: maxPosGrowth, minNeg: minNegGrowth } = useMemo(() => {
-    const growthValues = leaderboard
-      .map((row) => avgGrowthPerRaid(row.series))
+  const { maxPos: maxPosGain, minNeg: minNegGain } = useMemo(() => {
+    const gainValues = leaderboard
+      .map((row) => avgGainPerRaid(row.series))
       .filter((v): v is number => v !== null);
-    return heatRange(growthValues);
+    return heatRange(gainValues);
   }, [leaderboard]);
 
   // Each dataset supplies its own real {x, y} points (x = epoch ms) on a
@@ -539,17 +539,17 @@ export function StockPage() {
                     ? ((row.price - row.prevPrice) / row.prevPrice) * 100
                     : 0;
                 const color = delta ? heatColor(pct, maxPos, minNeg) : null;
-                const growth = avgGrowthPerRaid(row.series);
-                const growthColor =
-                  growth !== null
-                    ? heatColor(growth, maxPosGrowth, minNegGrowth)
+                const gain = avgGainPerRaid(row.series);
+                const gainColor =
+                  gain !== null
+                    ? heatColor(gain, maxPosGain, minNegGain)
                     : null;
-                const growthCls =
-                  growth === null
+                const gainCls =
+                  gain === null
                     ? null
-                    : growth > 0
+                    : gain > 0
                       ? 'delta-pos'
-                      : growth < 0
+                      : gain < 0
                         ? 'delta-neg'
                         : 'delta-neutral';
 
@@ -622,17 +622,17 @@ export function StockPage() {
                       )}
                     </td>
                     <td className="mobile-hide">
-                      {growth !== null ? (
+                      {gain !== null ? (
                         <span
                           className={
-                            growthColor ? '' : (growthCls ?? undefined)
+                            gainColor ? '' : (gainCls ?? undefined)
                           }
                           style={
-                            growthColor ? { color: growthColor } : undefined
+                            gainColor ? { color: gainColor } : undefined
                           }
                         >
-                          {growth >= 0 ? '+' : ''}
-                          {growth.toFixed(2)}%
+                          {gain >= 0 ? '+' : ''}
+                          {gain.toFixed(2)}
                         </span>
                       ) : (
                         <span className="no-data">–</span>

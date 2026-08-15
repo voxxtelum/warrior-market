@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState } from "react";
-import { AdminLayout } from "../components/AdminLayout";
-import { ConfirmModal } from "../components/ConfirmModal";
-import { NotificationForm } from "../components/admin/NotificationForm";
-import { NotificationPopup } from "../components/NotificationPopup";
-import { WindowIcon } from "../components/icons/WindowIcon";
-import { PencilSquareIcon } from "../components/icons/PencilSquareIcon";
-import { TrashIconSolid } from "../components/icons/TrashIconSolid";
+import { useEffect, useRef, useState } from 'react';
+import { AdminLayout } from '../components/AdminLayout';
+import { ConfirmModal } from '../components/ConfirmModal';
+import { NotificationForm } from '../components/admin/NotificationForm';
+import { NotificationPopup } from '../components/NotificationPopup';
+import { WindowIcon } from '../components/icons/WindowIcon';
+import { PencilSquareIcon } from '../components/icons/PencilSquareIcon';
+import { TrashIconSolid } from '../components/icons/TrashIconSolid';
 import {
   activateAdminNotification,
   createAdminNotification,
@@ -15,8 +15,8 @@ import {
   uploadNotificationImage,
   type AdminNotificationInput,
   type AdminNotificationView,
-} from "../api";
-import { fmtDateTime } from "../format";
+} from '../api';
+import { fmtDateTime } from '../format';
 
 interface NotificationExportEntry {
   name: string;
@@ -27,7 +27,7 @@ interface NotificationExportEntry {
 
 // "YY-MM-DD-HHMMSS", local time - same convention as the Funds/StockConfig exports.
 function fmtExportTimestamp(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
+  const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(date.getFullYear() % 100)}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
 
@@ -47,7 +47,9 @@ function blobToDataUri(blob: Blob): Promise<string> {
 // its original path rather than aborting the whole export.
 async function inlineImagesForExport(html: string): Promise<string> {
   const srcs = new Set<string>();
-  for (const match of html.matchAll(/<img[^>]+src="(\/uploads\/notifications\/[^"]+)"/g)) {
+  for (const match of html.matchAll(
+    /<img[^>]+src="(\/uploads\/notifications\/[^"]+)"/g,
+  )) {
     srcs.add(match[1]);
   }
   let result = html;
@@ -75,7 +77,7 @@ async function materializeImagesForImport(html: string): Promise<string> {
   for (const dataUri of dataUris) {
     try {
       const blob = await (await fetch(dataUri)).blob();
-      const ext = blob.type.split("/")[1] || "png";
+      const ext = blob.type.split('/')[1] || 'png';
       const file = new File([blob], `import.${ext}`, { type: blob.type });
       const { url } = await uploadNotificationImage(file);
       result = result.split(`src="${dataUri}"`).join(`src="${url}"`);
@@ -89,13 +91,20 @@ async function materializeImagesForImport(html: string): Promise<string> {
 }
 
 export function AdminNotificationsPage() {
-  const [notifications, setNotifications] = useState<AdminNotificationView[] | null>(null);
+  const [notifications, setNotifications] = useState<
+    AdminNotificationView[] | null
+  >(null);
   const [editing, setEditing] = useState<AdminNotificationView | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<AdminNotificationView | null>(null);
-  const [previewing, setPreviewing] = useState<AdminNotificationView | null>(null);
+  const [previewing, setPreviewing] = useState<AdminNotificationView | null>(
+    null,
+  );
   const [busyId, setBusyId] = useState<number | null>(null);
-  const [ioStatus, setIoStatus] = useState<{ text: string; kind: "success" | "error" } | null>(null);
+  const [ioStatus, setIoStatus] = useState<{
+    text: string;
+    kind: 'success' | 'error';
+  } | null>(null);
   const [ioBusy, setIoBusy] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -147,17 +156,27 @@ export function AdminNotificationsPage() {
           buttonLink: n.buttonLink,
         })),
       );
-      const json = JSON.stringify({ exportedAt: new Date().toISOString(), notifications: entries }, null, 2);
-      const blob = new Blob([json], { type: "application/json" });
+      const json = JSON.stringify(
+        { exportedAt: new Date().toISOString(), notifications: entries },
+        null,
+        2,
+      );
+      const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
+      const a = document.createElement('a');
       a.href = url;
       a.download = `notifications-${fmtExportTimestamp(new Date())}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      setIoStatus({ text: `Exported ${entries.length} notification(s).`, kind: "success" });
+      setIoStatus({
+        text: `Exported ${entries.length} notification(s).`,
+        kind: 'success',
+      });
     } catch (err) {
-      setIoStatus({ text: err instanceof Error ? err.message : String(err), kind: "error" });
+      setIoStatus({
+        text: err instanceof Error ? err.message : String(err),
+        kind: 'error',
+      });
     } finally {
       setIoBusy(false);
     }
@@ -170,7 +189,9 @@ export function AdminNotificationsPage() {
     setIoBusy(true);
     setIoStatus(null);
     try {
-      const parsed = JSON.parse(await file.text()) as { notifications?: NotificationExportEntry[] };
+      const parsed = JSON.parse(await file.text()) as {
+        notifications?: NotificationExportEntry[];
+      };
       if (!parsed || !Array.isArray(parsed.notifications)) {
         throw new Error("File doesn't contain a notifications export");
       }
@@ -189,16 +210,26 @@ export function AdminNotificationsPage() {
           const result = await createAdminNotification(input);
           created.push(result.name);
         } catch (err) {
-          failed.push(`${entry.name}: ${err instanceof Error ? err.message : String(err)}`);
+          failed.push(
+            `${entry.name}: ${err instanceof Error ? err.message : String(err)}`,
+          );
         }
       }
 
-      const parts = [`Imported ${created.length} of ${parsed.notifications.length} notification(s).`];
-      if (failed.length > 0) parts.push(`Failed - ${failed.join("; ")}`);
-      setIoStatus({ text: parts.join(" "), kind: failed.length > 0 ? "error" : "success" });
+      const parts = [
+        `Imported ${created.length} of ${parsed.notifications.length} notification(s).`,
+      ];
+      if (failed.length > 0) parts.push(`Failed - ${failed.join('; ')}`);
+      setIoStatus({
+        text: parts.join(' '),
+        kind: failed.length > 0 ? 'error' : 'success',
+      });
       load();
     } catch (err) {
-      setIoStatus({ text: `Import failed: ${err instanceof Error ? err.message : String(err)}`, kind: "error" });
+      setIoStatus({
+        text: `Import failed: ${err instanceof Error ? err.message : String(err)}`,
+        kind: 'error',
+      });
     } finally {
       setIoBusy(false);
     }
@@ -207,44 +238,62 @@ export function AdminNotificationsPage() {
   return (
     <AdminLayout>
       <div className="card">
-        <div className="card-header-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div
+          className="card-header-row"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
           <h2 style={{ margin: 0 }}>Notifications</h2>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
             <input
               ref={importInputRef}
               type="file"
               accept="application/json,.json"
-              style={{ display: "none" }}
+              style={{ display: 'none' }}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) handleImportFile(file);
-                e.target.value = "";
+                e.target.value = '';
               }}
             />
-            <button type="button" onClick={() => importInputRef.current?.click()} disabled={ioBusy}>
+            <button
+              type="button"
+              onClick={() => importInputRef.current?.click()}
+              disabled={ioBusy}
+            >
               Import
             </button>
-            <button type="button" onClick={handleExport} disabled={ioBusy || !notifications || notifications.length === 0}>
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={ioBusy || !notifications || notifications.length === 0}
+            >
               Export
             </button>
-            <button type="button" className="btn-affirm" onClick={() => setCreating(true)}>
+            <button
+              type="button"
+              className="btn-affirm"
+              onClick={() => setCreating(true)}
+            >
               New Notification
             </button>
           </div>
         </div>
-        {ioStatus && <p className={`status ${ioStatus.kind}`}>{ioStatus.text}</p>}
-        <p className="subtitle" style={{ marginBottom: "1rem" }}>
-          Only one notification can be active at a time - activating one automatically deactivates whichever was
-          active before it. Each user only ever sees the active notification once.
-        </p>
+        {ioStatus && (
+          <p className={`status ${ioStatus.kind}`}>{ioStatus.text}</p>
+        )}
+
         <div className="table-scroll">
           <table>
             <thead>
               <tr>
                 <th>Name</th>
                 <th>Button</th>
-                <th>Links to</th>
-                <th>Status</th>
+                <th className="text-left">Links to</th>
+                <th className="text-left">Status</th>
                 <th>Updated</th>
                 <th></th>
               </tr>
@@ -254,11 +303,17 @@ export function AdminNotificationsPage() {
                 <tr key={n.id}>
                   <td>{n.name}</td>
                   <td>{n.buttonText}</td>
-                  <td>{n.buttonLink}</td>
-                  <td>{n.active ? "Active" : "Inactive"}</td>
+                  <td className="text-left">{n.buttonLink}</td>
+                  <td className="text-left">{n.active ? 'Active' : 'Inactive'}</td>
                   <td>{fmtDateTime(n.updatedAt)}</td>
                   <td>
-                    <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: '0.5rem',
+                        justifyContent: 'flex-end',
+                      }}
+                    >
                       <button
                         type="button"
                         className="btn-icon-only"
@@ -278,11 +333,20 @@ export function AdminNotificationsPage() {
                         <PencilSquareIcon className="icon-btn-icon" />
                       </button>
                       {n.active ? (
-                        <button type="button" onClick={() => handleDeactivate(n)} disabled={busyId === n.id}>
+                        <button
+                          type="button"
+                          onClick={() => handleDeactivate(n)}
+                          disabled={busyId === n.id}
+                        >
                           Deactivate
                         </button>
                       ) : (
-                        <button type="button" className="btn-affirm" onClick={() => handleActivate(n)} disabled={busyId === n.id}>
+                        <button
+                          type="button"
+                          className="btn-affirm"
+                          onClick={() => handleActivate(n)}
+                          disabled={busyId === n.id}
+                        >
                           Activate
                         </button>
                       )}
@@ -336,7 +400,12 @@ export function AdminNotificationsPage() {
       {deleting && (
         <ConfirmModal
           title={`Delete ${deleting.name}?`}
-          body={<p>This cannot be undone. Users who already saw it won't be affected either way.</p>}
+          body={
+            <p>
+              This cannot be undone. Users who already saw it won't be affected
+              either way.
+            </p>
+          }
           confirmLabel="Delete notification"
           onConfirm={handleDelete}
           onClose={() => setDeleting(null)}

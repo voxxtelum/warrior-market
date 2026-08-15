@@ -28,7 +28,7 @@ Why two anchors instead of one? Because trading pressure and raid performance sh
 
 This is the only thing that "really" moves a price — everything else (drift, trades) is just texture on top of it.
 
-**Step 1 — figure out who's a tank this raid.** For each report, whoever took the most damage (as a share of their own time in combat, so a DPS warrior eating one big hit doesn't get mistaken for a tank) is classified as a tank for *that specific raid*. Someone can be a tank one week and DPS the next.
+**Step 1 — figure out who's a tank this raid.** For each report, the top N warriors by raw total damage taken are classified as tanks for *that specific raid* — straight ranking, no other filter. N is instance-specific (`tankTopNByZone`), since a Naxxramas night and a Molten Core night don't need the same number of tanks. Someone can be a tank one week and DPS the next.
 
 **Step 2 — check attendance.** Anyone whose active time this raid is far below the raid's top attendee (someone who disconnected, showed up late, etc.) gets flagged as low-attendance. Their raid still shows up in their history, but it can't move their price — it's treated as neutral.
 
@@ -49,13 +49,15 @@ report score  = (damage weight × damage score) + (cast weight × cast score)
 
 (Low-attendance warriors skip straight to `report score = 0` — no move this raid, but the raid still shows up in their history.)
 
-**Step 6 — apply it to the live price, and freeze it.** Unlike every other number on this page, `report score` isn't applied to some independent "true" price — it's applied directly to whatever the price is actually trading at right now, live demand and drift included:
+**Step 6 — apply it to the live price, and freeze it.** Unlike every other number on this page, `report score` isn't applied to some independent "true" price — it's added directly to whatever the price is actually trading at right now, live demand and drift included. The move is a **flat dollar amount** per point of report score, not a percentage — a rookie and a veteran with the same report score move by the same number of dollars, regardless of how expensive either one already is. Gains and losses use separate rates:
 
 ```
-new price = current live price × (1 + price sensitivity × report score)
+new price = current live price + (price per score point × report score)
 ```
 
-That new price is permanently recorded, and *both* anchors (trading anchor and raid anchor) reset to match it. A raid always resolves the price forward from wherever it already was — it never corrects it back to some other value trading pressure never touched. This is the one moment `price sensitivity` and the current live price interact directly; every other timeline in this doc only ever moves the live price relative to itself.
+(`price per score point` is `pricePerScorePointUp` when report score is positive, `pricePerScorePointDown` when it's negative.) The result is floored at a small positive minimum so a very bad night can never drive a price to zero or below.
+
+That new price is permanently recorded, and *both* anchors (trading anchor and raid anchor) reset to match it. A raid always resolves the price forward from wherever it already was — it never corrects it back to some other value trading pressure never touched. This is the one moment `price per score point` and the current live price interact directly; every other timeline in this doc only ever moves the live price relative to itself.
 
 ### Config that affects this stage
 
@@ -63,16 +65,18 @@ That new price is permanently recorded, and *both* anchors (trading anchor and r
 |---|---|---|---|
 | `damageWeight` | 0.6 | Damage score's share of the report score. | Raw performance matters more than ability/rotation usage in the final score. |
 | `castWeight` | 0.4 | Cast score's share of the report score. | Playing your rotation "correctly" matters more than raw damage numbers. |
-| `priceSensitivity` | 0.05 | How much a report score of ±1 (a maximal good/bad raid) moves the price. | Raids swing prices harder — both good and bad nights hit harder. |
+| `pricePerScorePointUp` | 8 | Flat dollars a positive report score of 1.0 moves the price, regardless of current price. | Good nights swing prices harder in dollar terms, independent of tenure. |
+| `pricePerScorePointDown` | 8 | Flat dollars a negative report score of 1.0 moves the price, regardless of current price. | Bad nights swing prices harder in dollar terms, independent of tenure. |
 | `startingPrice` | 100 | Where a brand-new warrior's price starts. | New warriors start higher on the board before they've proven anything. |
 | `damageTrendWeight` | 0.5 | Trend score's share of the damage score. | "Are you personally improving" matters more than "are you beating your raid-mates tonight." |
 | `damagePeerWeight` | 0.5 | Peer score's share of the damage score. | "Are you beating your raid-mates tonight" matters more than personal improvement. |
-| `damageTrendZClamp` | 4 | Caps how extreme a single trend score can be, before the raid-average subtraction. | A single unusually good or bad night is allowed to swing the trend score further before it gets capped. |
+| `damageTrendZClampUp` | 4 | Caps how extreme a single **good**-night trend score can be, before the raid-average subtraction. | An unusually good night is allowed to swing the trend score further upward before it gets capped. |
+| `damageTrendZClampDown` | 4 | Caps how extreme a single **bad**-night trend score can be, before the raid-average subtraction. | An unusually bad night is allowed to swing the trend score further downward before it gets capped. |
 | `dpsEmaAlpha` | 0.15 | How fast a warrior's "recent DPS average" (what trend score compares against) reacts to new raids. | Old raids get forgotten faster — the baseline leans more heavily on just the last night or two. |
 | `coldStartReports` | 3 | How many raids in a zone it takes before trend score reaches full strength. | Takes longer for a warrior new to a zone before their trend score counts at full weight. |
 | `minBucketSize` | 2 | Minimum eligible raid-mates needed before a cast/DPS ranking counts. | Small raids more often have that night's ranking skipped entirely (safer against noise, but less signal used). |
-| `tankTopN` | 4 | Max number of warriors classified as tanks per raid. | More warriors can be labeled a tank on a given night. |
-| `tankMinUptimePct` | 0.20 | Minimum share of a warrior's own active time spent taking damage to be classified as a tank. | Stricter bar to count as a tank — fewer warriors qualify. |
+| `tankTopN` | 4 | Fallback max number of warriors classified as tanks per raid, for any zone with no entry in `tankTopNByZone`. | More warriors can be labeled a tank on a given night, in zones not covered by the per-zone table. |
+| `tankTopNByZone` | MC 3, BWL 3, AQ40 4, Naxx 4 | Per-zone override for `tankTopN`, keyed by exact WCL zone name. Ranking is straight top-N by raw total damage taken this raid — no uptime filter. | More warriors can be labeled a tank on a given night, for that specific zone. |
 | `newPlayerGraceReports` | 2 | How many of a warrior's first raids in a zone get their *negative* cast score softened. | New warriors get the leniency for longer before being judged at full strength. |
 | `newPlayerPenaltyLeniency` | 0.3 | How much of a negative cast score still applies during the grace period. | Less forgiveness during the grace period — a new warrior's bad nights count for more (1 = no leniency at all). |
 | `minAttendancePct` | 0.3 | Attendance floor (vs. the raid's top attendee) below which a night is excluded from moving price. | Stricter attendance bar — more partial nights get excluded. |
@@ -152,13 +156,13 @@ new price      = current price × (1 + capped impact)     [buy: positive, sell: 
 This is the part that trips people up when tuning config, so it gets its own section: **not every number on the Stock page comes from the same place.**
 
 - **Frozen** — the actual tradable **Price** column (including the small "change since last raid" figure shown right underneath it, and the same figure in the trade modal), the price chart, and everything wallet/portfolio-related (holdings value, trade fills). These all come from the permanent `price_snapshots` ledger — the record of every raid result, drift tick, and trade that's ever actually happened. Once a row lands in that ledger, it never changes on its own.
-- **Live** — the **Trend** sparkline, the **Change (last raid)** *column* (further right in the table, distinct from the small delta under Price), and **Growth/raid**. These come from re-running the entire raid-scoring calculation from scratch, from the raw WarcraftLogs data, every single time the Stock page loads — using whatever the config says *right now*. Nothing about them is saved or cached.
+- **Live** — the **Trend** sparkline, the **Change (last raid)** *column* (further right in the table, distinct from the small delta under Price), and **Gain/raid**. These come from re-running the entire raid-scoring calculation from scratch, from the raw WarcraftLogs data, every single time the Stock page loads — using whatever the config says *right now*. Nothing about them is saved or cached.
 
-That second group is why changing a weight can *look* like it rewrote history: the moment you save new `damageWeight`/`castWeight`/etc. and reload the page, the Trend line, the "Change (last raid)" column, and "Growth/raid" for every warrior immediately reflect the new weights applied across their entire raid history — while the Price column, its small change figure, and the chart sitting right next to them don't move at all, because those are reading the frozen ledger instead.
+That second group is why changing a weight can *look* like it rewrote history: the moment you save new `damageWeight`/`castWeight`/etc. and reload the page, the Trend line, the "Change (last raid)" column, and "Gain/raid" for every warrior immediately reflect the new weights applied across their entire raid history — while the Price column, its small change figure, and the chart sitting right next to them don't move at all, because those are reading the frozen ledger instead.
 
 Don't mix the two groups together — e.g. comparing the frozen current price against the live-recomputed last-raid value produces a number that matches neither the chart nor the config. The small delta under the Price column and in the trade modal deliberately stay frozen-to-frozen (current price vs. the ledger's own last raid-sourced snapshot) for exactly this reason.
 
-Since a raid's `report score` now gets applied to the live (trading-affected) price rather than to an independent fundamentals value, the live group's **"Change (last raid)"** and **"Growth/raid"** can diverge more visibly from the frozen Price column's own raid-to-raid move than they used to. That's expected, not a bug: the live group answers "how did this warrior objectively perform, ignoring the market," while the frozen Price answers "what did the market actually pay" — the two are now genuinely different questions, not just different data sources for the same one.
+Since a raid's `report score` now gets applied to the live (trading-affected) price rather than to an independent fundamentals value, the live group's **"Change (last raid)"** and **"Gain/raid"** can diverge more visibly from the frozen Price column's own raid-to-raid move than they used to. That's expected, not a bug: the live group answers "how did this warrior objectively perform, ignoring the market," while the frozen Price answers "what did the market actually pay" — the two are now genuinely different questions, not just different data sources for the same one.
 
 ## Where to tune all of this
 

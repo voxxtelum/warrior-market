@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getStockConfig, saveStockConfig, type StockAbilityConfig, type StockConfig } from "../../api";
+import { getStockConfig, saveStockConfig, type StockAbilityConfig, type StockConfig, type TankTopNZoneConfig } from "../../api";
 import { exponentialConvergence, fmtConvergenceDuration, reversionConvergence } from "../../convergence";
 import { slugifyHeading } from "../../docsMarkdown";
 
 const STATUS_VISIBLE_MS = 3000;
 const STATUS_FADE_MS = 1000;
 
-type ScalarKey = Exclude<keyof StockConfig, "abilities">;
+type ScalarKey = Exclude<keyof StockConfig, "abilities" | "tankTopNByZone">;
 
 type ScalarField = { key: ScalarKey; label: string; step: string; description: string };
 
@@ -38,6 +38,11 @@ function abilitiesEqual(a: StockAbilityConfig[], b: StockAbilityConfig[]): boole
   );
 }
 
+function tankTopNByZoneEqual(a: TankTopNZoneConfig[], b: TankTopNZoneConfig[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((z, i) => z.zone === b[i].zone && z.topN === b[i].topN);
+}
+
 // Grouped by which timeline in STOCKS.md each setting affects, rather than
 // one flat list - a report ingest, a drift tick, and a trade each read a
 // different subset of stock_config, and grouping the admin form the same
@@ -47,16 +52,17 @@ function abilitiesEqual(a: StockAbilityConfig[], b: StockAbilityConfig[]): boole
 const RAID_SCORING_FIELDS: ScalarField[] = [
   { key: "damageWeight", label: "Damage weight", step: "0.05", description: "How much raw damage output affects the price" },
   { key: "castWeight", label: "Cast weight", step: "0.05", description: "How much tracked ability cast counts affect price" },
-  { key: "priceSensitivity", label: "Price sensitivity", step: "0.01", description: "How strongly each raid's score moves the price" },
+  { key: "pricePerScorePointUp", label: "Price per score point (up)", step: "0.5", description: "Flat dollar amount the price moves per 1.0 of a positive report score, regardless of current price" },
+  { key: "pricePerScorePointDown", label: "Price per score point (down)", step: "0.5", description: "Flat dollar amount the price moves per 1.0 of a negative report score, regardless of current price" },
   { key: "startingPrice", label: "Starting price", step: "1", description: "Starting price for a player with no history" },
   { key: "damageTrendWeight", label: "Damage trend weight", step: "0.05", description: "Weight of personal DPS trend (vs. own history) within the damage score" },
   { key: "damagePeerWeight", label: "Damage peer weight", step: "0.05", description: "Weight of peer DPS ranking (vs. bucket-mates this raid) within the damage score" },
-  { key: "damageTrendZClamp", label: "Damage trend z-clamp", step: "0.5", description: "Max absolute z-score for the personal DPS trend, before cold-start shrink is applied" },
+  { key: "damageTrendZClampUp", label: "Damage trend z-clamp (up)", step: "0.5", description: "Max positive z-score for the personal DPS trend (good nights), before cold-start shrink is applied" },
+  { key: "damageTrendZClampDown", label: "Damage trend z-clamp (down)", step: "0.5", description: "Max negative z-score for the personal DPS trend (bad nights), before cold-start shrink is applied" },
   { key: "dpsEmaAlpha", label: "DPS EMA alpha", step: "0.01", description: "How fast the DPS baseline reacts to new raids" },
   { key: "coldStartReports", label: "Cold-start reports", step: "1", description: "Raids needed before damage score reaches full weight" },
   { key: "minBucketSize", label: "Min bucket size", step: "1", description: "Minimum peers required to rank a cast count" },
-  { key: "tankTopN", label: "Tank top N", step: "1", description: "Max warriors classified as tanks per raid" },
-  { key: "tankMinUptimePct", label: "Tank min uptime %", step: "0.01", description: "Min damage-taken uptime to be classified as tank" },
+  { key: "tankTopN", label: "Tank top N (default)", step: "1", description: "Max warriors classified as tanks per raid, for any zone not listed in the per-zone table below" },
   { key: "newPlayerGraceReports", label: "New-player grace reports", step: "1", description: "Raids in a zone during which a new player's cast penalties are softened" },
   { key: "newPlayerPenaltyLeniency", label: "New-player penalty leniency", step: "0.05", description: "Fraction of a negative cast score still applied during the grace period (0 = fully forgiven, 1 = no leniency)" },
   { key: "minAttendancePct", label: "Min attendance %", step: "0.05", description: "Active-time ratio (vs. the raid's top attendee) below which a report is excluded from affecting price" },
@@ -89,8 +95,10 @@ const BUCKETS = ["all", "dps", "tank"];
 export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor: string) => void }) {
   const [scalars, setScalars] = useState<Record<ScalarKey, number> | null>(null);
   const [abilities, setAbilities] = useState<StockAbilityConfig[] | null>(null);
+  const [tankTopNByZone, setTankTopNByZone] = useState<TankTopNZoneConfig[] | null>(null);
   const [savedScalars, setSavedScalars] = useState<Record<ScalarKey, number> | null>(null);
   const [savedAbilities, setSavedAbilities] = useState<StockAbilityConfig[] | null>(null);
+  const [savedTankTopNByZone, setSavedTankTopNByZone] = useState<TankTopNZoneConfig[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ text: string; kind: "success" | "error" } | null>(null);
   const [statusFading, setStatusFading] = useState(false);
@@ -99,11 +107,13 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
   useEffect(() => {
     getStockConfig()
       .then((config) => {
-        const { abilities: loadedAbilities, ...loadedScalars } = config;
+        const { abilities: loadedAbilities, tankTopNByZone: loadedTankTopNByZone, ...loadedScalars } = config;
         setScalars(loadedScalars);
         setAbilities(loadedAbilities.map((a) => ({ ...a })));
+        setTankTopNByZone(loadedTankTopNByZone.map((z) => ({ ...z })));
         setSavedScalars(loadedScalars);
         setSavedAbilities(loadedAbilities.map((a) => ({ ...a })));
+        setSavedTankTopNByZone(loadedTankTopNByZone.map((z) => ({ ...z })));
       })
       .catch(() => {});
   }, []);
@@ -123,9 +133,13 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
   }, [status]);
 
   const dirty = useMemo(() => {
-    if (!scalars || !abilities || !savedScalars || !savedAbilities) return false;
-    return !scalarsEqual(scalars, savedScalars) || !abilitiesEqual(abilities, savedAbilities);
-  }, [scalars, abilities, savedScalars, savedAbilities]);
+    if (!scalars || !abilities || !tankTopNByZone || !savedScalars || !savedAbilities || !savedTankTopNByZone) return false;
+    return (
+      !scalarsEqual(scalars, savedScalars) ||
+      !abilitiesEqual(abilities, savedAbilities) ||
+      !tankTopNByZoneEqual(tankTopNByZone, savedTankTopNByZone)
+    );
+  }, [scalars, abilities, tankTopNByZone, savedScalars, savedAbilities, savedTankTopNByZone]);
 
   // Live off the draft `scalars` (not savedScalars) so this updates as the
   // admin edits fields, before saving - the whole point is not having to
@@ -151,14 +165,26 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
     setAbilities((prev) => [...(prev ?? []), { id: 0, name: "", weight: 1, bucket: "all" }]);
   }
 
+  function updateTankZone<K extends keyof TankTopNZoneConfig>(index: number, key: K, value: TankTopNZoneConfig[K]) {
+    setTankTopNByZone((prev) => prev?.map((z, i) => (i === index ? { ...z, [key]: value } : z)) ?? null);
+  }
+
+  function removeTankZone(index: number) {
+    setTankTopNByZone((prev) => prev?.filter((_, i) => i !== index) ?? null);
+  }
+
+  function addTankZone() {
+    setTankTopNByZone((prev) => [...(prev ?? []), { zone: "", topN: 1 }]);
+  }
+
   // Exports whatever's currently in the form (including unsaved edits) -
   // not just the last-saved config - since "back up what I'm looking at
   // right now" is the more useful default, and it matches what Import
-  // hands back: the same { scalars..., abilities } shape round-trips
-  // losslessly.
+  // hands back: the same { scalars..., abilities, tankTopNByZone } shape
+  // round-trips losslessly.
   function handleExport() {
-    if (!scalars || !abilities) return;
-    const json = JSON.stringify({ ...scalars, abilities }, null, 2);
+    if (!scalars || !abilities || !tankTopNByZone) return;
+    const json = JSON.stringify({ ...scalars, abilities, tankTopNByZone }, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -178,7 +204,7 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
     try {
       const parsed = JSON.parse(await file.text()) as Record<string, unknown>;
       if (!parsed || typeof parsed !== "object") throw new Error("File doesn't contain a JSON object");
-      const { abilities: importedAbilities, ...importedScalars } = parsed;
+      const { abilities: importedAbilities, tankTopNByZone: importedTankTopNByZone, ...importedScalars } = parsed;
       setScalars((prev) => {
         if (!prev) return prev;
         const next = { ...prev };
@@ -190,6 +216,9 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
       if (Array.isArray(importedAbilities)) {
         setAbilities(importedAbilities.map((a) => ({ ...a })));
       }
+      if (Array.isArray(importedTankTopNByZone)) {
+        setTankTopNByZone(importedTankTopNByZone.map((z) => ({ ...z })));
+      }
       setStatus({ text: 'Imported as a draft - review below, then click "Save changes" to apply.', kind: "success" });
     } catch (err) {
       setStatus({ text: `Import failed: ${err instanceof Error ? err.message : String(err)}`, kind: "error" });
@@ -197,13 +226,14 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
   }
 
   async function handleSave() {
-    if (!scalars || !abilities) return;
+    if (!scalars || !abilities || !tankTopNByZone) return;
     setSaving(true);
     setStatus(null);
     try {
-      await saveStockConfig({ ...scalars, abilities });
+      await saveStockConfig({ ...scalars, abilities, tankTopNByZone });
       setSavedScalars(scalars);
       setSavedAbilities(abilities.map((a) => ({ ...a })));
+      setSavedTankTopNByZone(tankTopNByZone.map((z) => ({ ...z })));
       setStatus({ text: "Saved. Changes apply immediately, no restart needed.", kind: "success" });
     } catch (err) {
       setStatus({ text: err instanceof Error ? err.message : String(err), kind: "error" });
@@ -279,10 +309,10 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
               e.target.value = "";
             }}
           />
-          <button type="button" onClick={() => importInputRef.current?.click()} disabled={!scalars || !abilities}>
+          <button type="button" onClick={() => importInputRef.current?.click()} disabled={!scalars || !abilities || !tankTopNByZone}>
             Import config
           </button>
-          <button type="button" onClick={handleExport} disabled={!scalars || !abilities}>
+          <button type="button" onClick={handleExport} disabled={!scalars || !abilities || !tankTopNByZone}>
             Export config
           </button>
         </div>
@@ -294,6 +324,61 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
         "Timeline 1: A raid report gets ingested",
         RAID_SCORING_FIELDS,
       )}
+
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Tank identification by zone</h2>
+        <p className="subtitle" style={{ marginBottom: "1rem" }}>
+          Each raid report, the top N warriors by raw total damage taken are classified as tanks - no other filter.
+          N is looked up here by the report's zone name (must match exactly); zones not listed fall back to "Tank top
+          N (default)" above.
+        </p>
+        <div className="table-scroll">
+          <table id="tank-zone-config-table">
+            <thead>
+              <tr>
+                <th>Zone</th>
+                <th>Top N</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {tankTopNByZone?.map((z, i) => (
+                <tr key={i}>
+                  <td>
+                    <input type="text" value={z.zone} onChange={(e) => updateTankZone(i, "zone", e.target.value)} />
+                  </td>
+                  <td>
+                    <input
+                      type="number"
+                      step="1"
+                      value={z.topN}
+                      onChange={(e) => updateTankZone(i, "topN", Number(e.target.value))}
+                    />
+                  </td>
+                  <td>
+                    <button type="button" onClick={() => removeTankZone(i)}>
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="card-footer space-between">
+          <button type="button" onClick={addTankZone}>
+            Add zone
+          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem" }}>
+            {status && (
+              <span className={`status ${status.kind}${statusFading ? " fading" : ""}`}>{status.text}</span>
+            )}
+            <button type="button" className="btn-affirm" onClick={handleSave} disabled={saving || !dirty}>
+              Save changes
+            </button>
+          </div>
+        </div>
+      </div>
 
       {renderFieldGroup(
         "Idle drift",

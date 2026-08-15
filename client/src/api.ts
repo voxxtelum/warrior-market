@@ -428,6 +428,26 @@ export async function markNotificationRead(id: number): Promise<void> {
   await fetch(`/api/notifications/${id}/read`, { method: "POST" });
 }
 
+// Admin-authored broadcast popup (distinct from the wallet-event
+// NotificationView above) - see NotificationPopup.tsx.
+export interface ActiveNotificationView {
+  id: number;
+  name: string;
+  content: string;
+  buttonText: string;
+  buttonLink: string;
+}
+
+export async function getActiveNotification(): Promise<ActiveNotificationView | null> {
+  const res = await fetch("/api/notifications/active");
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function markNotificationViewed(id: number): Promise<void> {
+  await fetch(`/api/notifications/${id}/viewed`, { method: "POST" });
+}
+
 export interface MarketSummary {
   totalMarketSize: number;
   totalTradeVolume: number;
@@ -513,6 +533,22 @@ export interface AdminWalletAdjustment {
 export async function getAdminAuditLog(): Promise<AdminWalletAdjustment[]> {
   const res = await fetch("/api/admin/market/audit-log");
   if (!res.ok) throw new Error("Failed to load audit log");
+  return res.json();
+}
+
+export interface AdminNotificationAuditEntry {
+  id: number;
+  adminUsername: string;
+  notificationId: number | null;
+  notificationName: string | null;
+  action: string;
+  detail: string | null;
+  createdAt: number;
+}
+
+export async function getAdminNotificationAuditLog(): Promise<AdminNotificationAuditEntry[]> {
+  const res = await fetch("/api/admin/notifications/meta/audit-log");
+  if (!res.ok) throw new Error("Failed to load notification audit log");
   return res.json();
 }
 
@@ -919,5 +955,113 @@ export async function estimateFundStats(
     body: JSON.stringify({ constituents, gainMultiplier, lossMultiplier }),
   });
   if (!res.ok) throw new Error("Failed to estimate fund stats");
+  return res.json();
+}
+
+// --- Admin Notifications ---------------------------------------------------
+
+export interface AdminNotificationView {
+  id: number;
+  name: string;
+  content: string;
+  buttonText: string;
+  buttonLink: string;
+  active: boolean;
+  createdBy: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AdminNotificationInput {
+  name: string;
+  content: string;
+  buttonText: string;
+  buttonLink: string;
+}
+
+export async function getNotificationPublicLinks(): Promise<string[]> {
+  const res = await fetch("/api/admin/notifications/meta/public-links");
+  if (!res.ok) throw new Error("Failed to load link options");
+  return res.json();
+}
+
+export async function getAdminNotifications(): Promise<AdminNotificationView[]> {
+  const res = await fetch("/api/admin/notifications");
+  if (!res.ok) throw new Error("Failed to load notifications");
+  return res.json();
+}
+
+export async function getAdminNotification(id: number): Promise<AdminNotificationView> {
+  const res = await fetch(`/api/admin/notifications/${id}`);
+  if (!res.ok) throw new Error("Failed to load notification");
+  return res.json();
+}
+
+export async function createAdminNotification(input: AdminNotificationInput): Promise<AdminNotificationView> {
+  const res = await fetch("/api/admin/notifications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to create notification");
+  }
+  return res.json();
+}
+
+export async function updateAdminNotification(
+  id: number,
+  input: AdminNotificationInput,
+): Promise<AdminNotificationView> {
+  const res = await fetch(`/api/admin/notifications/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to update notification");
+  }
+  return res.json();
+}
+
+export async function activateAdminNotification(id: number): Promise<AdminNotificationView> {
+  const res = await fetch(`/api/admin/notifications/${id}/activate`, { method: "POST" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to activate notification");
+  }
+  return res.json();
+}
+
+export async function deactivateAdminNotification(id: number): Promise<AdminNotificationView> {
+  const res = await fetch(`/api/admin/notifications/${id}/deactivate`, { method: "POST" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to deactivate notification");
+  }
+  return res.json();
+}
+
+export async function deleteAdminNotification(id: number): Promise<void> {
+  const res = await fetch(`/api/admin/notifications/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to delete notification");
+  }
+}
+
+export async function uploadNotificationImage(file: File): Promise<{ url: string }> {
+  const formData = new FormData();
+  formData.append("image", file);
+  const res = await fetch("/api/admin/notifications/upload-image", {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to upload image");
+  }
   return res.json();
 }

@@ -1632,6 +1632,77 @@ button.modal-close:hover {
   border-radius: 2px;
 }
 
+.notification-popup {
+  max-width: 480px;
+  text-align: left;
+}
+.notification-popup .modal-title {
+  display: none;
+}
+.notification-popup-body {
+  line-height: 1.5;
+}
+.notification-popup-body p {
+  margin: 0 0 0.75rem;
+}
+.notification-popup-body img {
+  max-width: 100%;
+  border-radius: 4px;
+}
+.notification-popup-body h1,
+.notification-popup-body h2,
+.notification-popup-body h3 {
+  margin: 0 0 0.5rem;
+}
+
+.rich-text-editor {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.rich-text-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+}
+.rich-text-toolbar button,
+.rich-text-toolbar select {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.85rem;
+}
+.rich-text-toolbar button.is-active {
+  background: rgba(var(--accent-rgb), 0.3);
+}
+.rich-text-colors {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.color-swatch {
+  width: 1.1rem;
+  height: 1.1rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+.rich-text-content {
+  padding: 0.6rem 0.75rem;
+  min-height: 8rem;
+}
+.rich-text-content .ProseMirror {
+  outline: none;
+  min-height: 8rem;
+}
+.rich-text-content img {
+  max-width: 100%;
+  border-radius: 4px;
+}
+
 .link-character-row {
   display: flex;
   gap: 0.5rem;

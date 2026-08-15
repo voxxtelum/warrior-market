@@ -8,6 +8,7 @@ import { AdminReportsPage } from "./pages/AdminReportsPage";
 import { AdminManageAppPage } from "./pages/AdminManageAppPage";
 import { AdminManageFundsPage } from "./pages/AdminManageFundsPage";
 import { AdminPriceHistoryPage } from "./pages/AdminPriceHistoryPage";
+import { AdminNotificationsPage } from "./pages/AdminNotificationsPage";
 import { AdminAuditLogPage } from "./pages/AdminAuditLogPage";
 import { WalletPage } from "./pages/WalletPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
@@ -40,6 +41,7 @@ function App() {
       <Route path="/admin/manage-app" element={<AdminManageAppPage />} />
       <Route path="/admin/manage-funds" element={<AdminManageFundsPage />} />
       <Route path="/admin/price-history" element={<AdminPriceHistoryPage />} />
+      <Route path="/admin/notifications" element={<AdminNotificationsPage />} />
       <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
     </Routes>
   );

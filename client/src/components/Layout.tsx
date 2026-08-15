@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { MainNav } from "./MainNav";
 import { NotificationBanner } from "./NotificationBanner";
+import { NotificationPopup } from "./NotificationPopup";
 import { GlobalFooter } from "./GlobalFooter";
 
 interface LayoutProps {
@@ -27,6 +28,7 @@ export function Layout({ title, subtitle, icon, children }: LayoutProps) {
       </div>
 
       <NotificationBanner />
+      <NotificationPopup />
 
       {children}
 

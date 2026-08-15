@@ -2,6 +2,7 @@ import "dotenv/config";
 import express from "express";
 import cookieParser from "cookie-parser";
 import path from "node:path";
+import { dataDir } from "./db";
 import { reportsRouter } from "./routes/reports";
 import { compareRouter } from "./routes/compare";
 import { playersRouter } from "./routes/players";
@@ -13,6 +14,7 @@ import { tradingRouter } from "./routes/trading";
 import { notificationsRouter } from "./routes/notifications";
 import { adminMarketRouter } from "./routes/adminMarket";
 import { adminFundsRouter } from "./routes/adminFunds";
+import { adminNotificationsRouter } from "./routes/adminNotifications";
 import { fundsRouter } from "./routes/funds";
 import { faqRouter } from "./routes/faq";
 import { stocksDocRouter } from "./routes/stocksDoc";
@@ -46,6 +48,7 @@ app.use("/api/trading", tradingRouter);
 app.use("/api/notifications", notificationsRouter);
 app.use("/api/admin/market", requireAdmin, adminMarketRouter);
 app.use("/api/admin/funds", requireAdmin, adminFundsRouter);
+app.use("/api/admin/notifications", requireAdmin, adminNotificationsRouter);
 app.use("/api/funds", fundsRouter);
 app.use("/api/faq", faqRouter);
 app.use("/api/stocks-doc", stocksDocRouter);
@@ -53,6 +56,10 @@ app.use("/api/warriors", warriorsRouter);
 
 const clientDist = path.join(__dirname, "..", "client", "dist");
 app.use(express.static(clientDist));
+// Serves admin-uploaded notification images (see adminNotifications.ts) -
+// these live under data/, not clientDist, since they're runtime user content
+// rather than the built client bundle.
+app.use("/uploads", express.static(path.join(dataDir, "uploads")));
 
 // SPA fallback: any non-API GET that isn't a static asset is a client-side
 // route (react-router handles it, including the "/" -> "/stock" redirect),

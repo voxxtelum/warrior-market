@@ -3,7 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { randomBytes } from 'node:crypto';
 
-const dataDir = path.join(__dirname, '..', 'data');
+export const dataDir = path.join(__dirname, '..', 'data');
 fs.mkdirSync(dataDir, { recursive: true });
 
 export const db = new DatabaseSync(path.join(dataDir, 'warrior.db'));
@@ -270,6 +270,49 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_fund_transactions_user ON fund_transactions (user_id, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_fund_transactions_fund ON fund_transactions (fund_id, created_at DESC);
+
+  -- Admin-authored broadcast popups (distinct from the per-user "notifications"
+  -- table above, which is system-generated wallet-event messages). The partial
+  -- unique index enforces "only one active at a time" at the DB layer, not just
+  -- in application code - activateAdminNotification() deactivates the current
+  -- row before activating the new one, in the same transaction, so this index
+  -- is never violated mid-request.
+  CREATE TABLE IF NOT EXISTS admin_notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    content TEXT NOT NULL,
+    button_text TEXT NOT NULL,
+    button_link TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 0,
+    created_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_notifications_single_active
+    ON admin_notifications (active) WHERE active = 1;
+
+  -- One row per (notification, user) once that user has dismissed it (via the
+  -- popup's close X or its CTA button) - absence of a row means unseen.
+  -- Editing a notification's content never touches this table, so already-seen
+  -- users never see it resurface just because the admin tweaked the copy.
+  CREATE TABLE IF NOT EXISTS admin_notification_views (
+    notification_id INTEGER NOT NULL,
+    user_id TEXT NOT NULL,
+    viewed_at INTEGER NOT NULL,
+    PRIMARY KEY (notification_id, user_id)
+  );
+
+  -- Audit trail for admin_notifications mutations, shown in the Audit Log tab
+  -- alongside admin_wallet_adjustments. notification_id is nullable-safe
+  -- against a later delete (SQLite has no FK enforcement in this codebase).
+  CREATE TABLE IF NOT EXISTS admin_notification_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_discord_id TEXT NOT NULL,
+    notification_id INTEGER,
+    action TEXT NOT NULL,
+    detail TEXT,
+    created_at INTEGER NOT NULL
+  );
 `);
 
 // Idle drift reverts toward this, and demand-driven trade impact updates it -
@@ -1802,6 +1845,226 @@ export function markNotificationRead(userId: string, id: number) {
   db.prepare(
     `UPDATE notifications SET read_at = ? WHERE id = ? AND user_id = ?`,
   ).run(Date.now(), id, userId);
+}
+
+export class AdminNotificationError extends Error {}
+
+export interface AdminNotificationRow {
+  id: number;
+  name: string;
+  content: string;
+  button_text: string;
+  button_link: string;
+  active: number;
+  created_by: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export function getAdminNotificationById(id: number): AdminNotificationRow | null {
+  return (
+    (db.prepare(`SELECT * FROM admin_notifications WHERE id = ?`).get(id) as
+      | AdminNotificationRow
+      | undefined) ?? null
+  );
+}
+
+export function listAdminNotifications(): AdminNotificationRow[] {
+  return db
+    .prepare(`SELECT * FROM admin_notifications ORDER BY id DESC`)
+    .all() as unknown as AdminNotificationRow[];
+}
+
+export function recordNotificationAudit(
+  adminDiscordId: string,
+  notificationId: number | null,
+  action: string,
+  detail: string | null,
+): void {
+  db.prepare(
+    `INSERT INTO admin_notification_audit (admin_discord_id, notification_id, action, detail, created_at) VALUES (?, ?, ?, ?, ?)`,
+  ).run(adminDiscordId, notificationId, action, detail, Date.now());
+}
+
+export interface CreateAdminNotificationInput {
+  name: string;
+  content: string;
+  buttonText: string;
+  buttonLink: string;
+  createdBy: string;
+}
+
+export function createAdminNotification(input: CreateAdminNotificationInput): AdminNotificationRow {
+  const now = Date.now();
+  db.exec('BEGIN');
+  try {
+    const result = db
+      .prepare(
+        `INSERT INTO admin_notifications (name, content, button_text, button_link, active, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 0, ?, ?, ?)`,
+      )
+      .run(input.name, input.content, input.buttonText, input.buttonLink, input.createdBy, now, now);
+    const id = Number(result.lastInsertRowid);
+    recordNotificationAudit(input.createdBy, id, 'create', input.name);
+    db.exec('COMMIT');
+    return getAdminNotificationById(id)!;
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+export interface UpdateAdminNotificationInput {
+  name: string;
+  content: string;
+  buttonText: string;
+  buttonLink: string;
+}
+
+export function updateAdminNotification(
+  id: number,
+  input: UpdateAdminNotificationInput,
+  adminDiscordId: string,
+): AdminNotificationRow {
+  const existing = getAdminNotificationById(id);
+  if (!existing) throw new AdminNotificationError('Unknown notification');
+  db.exec('BEGIN');
+  try {
+    db.prepare(
+      `UPDATE admin_notifications SET name = ?, content = ?, button_text = ?, button_link = ?, updated_at = ? WHERE id = ?`,
+    ).run(input.name, input.content, input.buttonText, input.buttonLink, Date.now(), id);
+    recordNotificationAudit(adminDiscordId, id, 'update', input.name);
+    db.exec('COMMIT');
+    return getAdminNotificationById(id)!;
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+// Deactivates whichever notification is currently active (if any) before
+// activating this one, in the same transaction - enforces "only one active"
+// alongside the partial unique index on admin_notifications(active) WHERE
+// active = 1, which guards the invariant even if this ever raced.
+export function activateAdminNotification(id: number, adminDiscordId: string): AdminNotificationRow {
+  const target = getAdminNotificationById(id);
+  if (!target) throw new AdminNotificationError('Unknown notification');
+  const now = Date.now();
+  db.exec('BEGIN');
+  try {
+    db.prepare(`UPDATE admin_notifications SET active = 0, updated_at = ? WHERE active = 1 AND id != ?`).run(
+      now,
+      id,
+    );
+    db.prepare(`UPDATE admin_notifications SET active = 1, updated_at = ? WHERE id = ?`).run(now, id);
+    recordNotificationAudit(adminDiscordId, id, 'activate', target.name);
+    db.exec('COMMIT');
+    return getAdminNotificationById(id)!;
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+export function deactivateAdminNotification(id: number, adminDiscordId: string): AdminNotificationRow {
+  const target = getAdminNotificationById(id);
+  if (!target) throw new AdminNotificationError('Unknown notification');
+  db.exec('BEGIN');
+  try {
+    db.prepare(`UPDATE admin_notifications SET active = 0, updated_at = ? WHERE id = ?`).run(Date.now(), id);
+    recordNotificationAudit(adminDiscordId, id, 'deactivate', target.name);
+    db.exec('COMMIT');
+    return getAdminNotificationById(id)!;
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+export function deleteAdminNotification(id: number, adminDiscordId: string): void {
+  const target = getAdminNotificationById(id);
+  if (!target) throw new AdminNotificationError('Unknown notification');
+  db.exec('BEGIN');
+  try {
+    db.prepare(`DELETE FROM admin_notification_views WHERE notification_id = ?`).run(id);
+    db.prepare(`DELETE FROM admin_notifications WHERE id = ?`).run(id);
+    recordNotificationAudit(adminDiscordId, null, 'delete', target.name);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
+// The single active notification, or null if none is active or this user has
+// already dismissed it (a view row already exists).
+export function getActiveNotificationForUser(userId: string): AdminNotificationRow | null {
+  return (
+    (db
+      .prepare(
+        `SELECT n.* FROM admin_notifications n
+         WHERE n.active = 1
+           AND NOT EXISTS (
+             SELECT 1 FROM admin_notification_views v
+             WHERE v.notification_id = n.id AND v.user_id = ?
+           )`,
+      )
+      .get(userId) as AdminNotificationRow | undefined) ?? null
+  );
+}
+
+// Idempotent: both the popup's close-X and its CTA button call this before
+// dismissing/navigating, and a user should never be able to trigger it twice.
+export function recordNotificationView(notificationId: number, userId: string): void {
+  db.prepare(
+    `INSERT INTO admin_notification_views (notification_id, user_id, viewed_at) VALUES (?, ?, ?)
+     ON CONFLICT (notification_id, user_id) DO NOTHING`,
+  ).run(notificationId, userId, Date.now());
+}
+
+export interface AdminNotificationAuditView {
+  id: number;
+  adminUsername: string;
+  notificationId: number | null;
+  notificationName: string | null;
+  action: string;
+  detail: string | null;
+  createdAt: number;
+}
+
+// notification_name comes from the audit row's own `detail` snapshot when the
+// live admin_notifications row is gone (deleted), falling back to the LEFT
+// JOIN's live name otherwise - so a deleted notification's history still
+// reads sensibly instead of showing a blank name forever.
+export function getAdminNotificationAudit(): AdminNotificationAuditView[] {
+  const rows = db
+    .prepare(
+      `SELECT a.id, a.notification_id, a.action, a.detail, a.created_at,
+              admin.username AS admin_username, n.name AS notification_name
+       FROM admin_notification_audit a
+       JOIN users admin ON admin.discord_id = a.admin_discord_id
+       LEFT JOIN admin_notifications n ON n.id = a.notification_id
+       ORDER BY a.id DESC`,
+    )
+    .all() as unknown as {
+    id: number;
+    notification_id: number | null;
+    action: string;
+    detail: string | null;
+    created_at: number;
+    admin_username: string;
+    notification_name: string | null;
+  }[];
+
+  return rows.map((r) => ({
+    id: r.id,
+    adminUsername: r.admin_username,
+    notificationId: r.notification_id,
+    notificationName: r.notification_name ?? r.detail,
+    action: r.action,
+    detail: r.detail,
+    createdAt: r.created_at,
+  }));
 }
 
 export interface TransactionWithContext extends TransactionRow {

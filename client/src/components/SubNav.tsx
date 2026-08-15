@@ -5,6 +5,7 @@ const LINKS: TabNavLink[] = [
   { to: "/admin/manage-app", label: "Manage App" },
   { to: "/admin/manage-funds", label: "Manage Funds" },
   { to: "/admin/price-history", label: "Price History" },
+  { to: "/admin/notifications", label: "Notifications" },
   { to: "/admin/audit-log", label: "Audit Log" },
 ];
 

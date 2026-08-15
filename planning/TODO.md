@@ -1,29 +1,15 @@
-I want work on the Admin -> Manage App -> User Profile pages
+I want to add a new pop up window that serves a notification to users of a new feature
 
-Currently, I can link a warrior character to a user account with a dropdown menu.
-However, a lot of users might not be a warrior, and I would like the ability to add a character name to them.
+This should be configurable in the app, in the Admin route, in a tab called Notifications between Price History and Audit Log
 
-Instead of having a dropdown, I would like to replace it with a link to Link Character.
+Like the current notifications for adding/removing coins to user wallet, I want the notifications to be tracked so that a user only sees it once.
 
-This would open a modal that first has a dropdown with the warriors.
+One caveat: I only want one notification to be active at a time. I would like the ability to create more, but only one is ever shown to users at a time. By default, notifications should be inactive.
 
-Below that, there should be ability for me to manually enter a character name, select a realm, and select a class.
+In the new Notifications tab, there should be a table listing the notifications, similar to the Manage Funds tab. I like the UX of this tab, and I would like to have basic CRUD functionality for the notifications like the funds, and the import/export feature.
 
-The realms can only be one of the follow:
-Atiesh
-Azuresong
-Myzrael
-OldBlanchy
+Each notification should also have a name, and an affirmative button at the bottom that links to a page on the site that I can select. For example, if I wanted to create a notification for the new Funds feature, there should be a button at the bottom (with editable text - so it says Start Trading) that I can set to link to the market/funds page. Obviously all admin routes are excluded, only public routes
 
-The colors of the classes are as follows
-Druid #FF7D0A
-Hunter #ABD473
-Mage #69CCF0
-Paladin #F58CBA
-Priest #FFFFFF
-Rogue #FFF569
-Shaman #0070DE
-Warlock #9482C9
-Warrior #C79C6E
+As for the content in the modal, I would really like to have a basic WYSIWYG editor, with the ability to add small images. (basic font styling, colors, alignment, sizes, etc)
 
-These colors should be applied to the character names on these pages (leaderboard and the admin -> manage app -> users tab and the users profile page)
+I would also like the ability to test a notification from the notifications table, so that it just shows the modal but does not track a viewed state. This is just for testing purposes and previewing the notification.

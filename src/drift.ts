@@ -9,7 +9,15 @@ import {
   setAnchorPrice,
   setLastDriftAt,
 } from "./db";
-import { loadStockConfig, type StockConfig } from "./stock";
+import { loadStockConfig, MIN_PRICE, type StockConfig } from "./stock";
+
+// Small, non-configurable jitter applied to a swing's dollar magnitude so
+// the result doesn't land on a suspiciously round number (every swing
+// otherwise being an exact multiple of the configured magnitude/fuzz would
+// look robotic) - purely cosmetic, not a tunable economic knob, hence
+// hardcoded rather than a stock_config field.
+const SWING_COSMETIC_FUZZ_MIN = 0.03;
+const SWING_COSMETIC_FUZZ_MAX = 0.05;
 
 // Nudges every warrior's price between raids so the market has texture on
 // off nights, without turning into a free random walk that could wander to
@@ -23,8 +31,11 @@ import { loadStockConfig, type StockConfig } from "./stock";
 //  - then either a small step (reversion toward that anchor, a pull toward
 //    the current market-wide average price via marketGravityStrength so
 //    the whole market can't drift up or down together forever, and random
-//    noise, summed and capped at driftMaxPct), OR, rarely (swingChancePct),
-//    one much larger "overnight swing" in a random direction that bypasses
+//    noise, summed and capped at driftMaxPct - a percentage move), OR,
+//    rarely (swingChancePct), one much larger "overnight swing" in a random
+//    direction: a flat dollar amount (swingUpMagnitude/swingDownMagnitude,
+//    swingMagnitudeFuzz) rather than a percentage, so a swing hits a cheap
+//    and an expensive warrior for the same number of coins - that bypasses
 //    the driftMaxPct cap entirely, for flavor. A warrior already displaced
 //    more than swingCooldownGapPct from its anchor in one direction can't
 //    take another swing the same direction until price drifts back.
@@ -61,7 +72,11 @@ export function runDriftTick() {
 
     const gapPct = (anchorPrice - currentPrice) / anchorPrice;
 
-    let totalPct: number;
+    // Swings are a flat dollar delta (so a cheap and an expensive warrior
+    // get hit for the same number of coins); the normal tick stays a
+    // percentage of currentPrice. Both resolve to a dollar delta here so
+    // they can be applied and floored the same way below.
+    let delta: number;
     let source: "drift" | "swing" = "drift";
 
     if (config.swingChancePct > 0 && Math.random() < config.swingChancePct) {
@@ -70,19 +85,26 @@ export function runDriftTick() {
         (direction === "down" && gapPct > config.swingCooldownGapPct) ||
         (direction === "up" && gapPct < -config.swingCooldownGapPct);
       if (!cooldownBlocked) {
-        const baseMagnitude = direction === "down" ? config.swingDownMagnitudePct : config.swingUpMagnitudePct;
-        const fuzz = (Math.random() * 2 - 1) * config.swingMagnitudeFuzzPct;
-        const magnitude = Math.max(0, baseMagnitude + fuzz);
-        totalPct = direction === "down" ? -magnitude : magnitude;
+        const baseMagnitude = direction === "down" ? config.swingDownMagnitude : config.swingUpMagnitude;
+        const fuzz = (Math.random() * 2 - 1) * config.swingMagnitudeFuzz;
+        let magnitude = Math.max(0, baseMagnitude + fuzz);
+        // Cosmetic-only jitter (see SWING_COSMETIC_FUZZ_MIN/MAX above) so
+        // the final dollar amount doesn't land on a suspiciously round
+        // number - nudges magnitude a few percent either way, never flips
+        // the direction already chosen above.
+        const cosmeticFuzzPct =
+          SWING_COSMETIC_FUZZ_MIN + Math.random() * (SWING_COSMETIC_FUZZ_MAX - SWING_COSMETIC_FUZZ_MIN);
+        magnitude *= 1 + (Math.random() < 0.5 ? -1 : 1) * cosmeticFuzzPct;
+        delta = direction === "down" ? -magnitude : magnitude;
         source = "swing";
       } else {
-        totalPct = normalTickPct(gapPct, currentPrice, marketAvg, config);
+        delta = currentPrice * normalTickPct(gapPct, currentPrice, marketAvg, config);
       }
     } else {
-      totalPct = normalTickPct(gapPct, currentPrice, marketAvg, config);
+      delta = currentPrice * normalTickPct(gapPct, currentPrice, marketAvg, config);
     }
 
-    const newPrice = currentPrice * (1 + totalPct);
+    const newPrice = Math.max(MIN_PRICE, currentPrice + delta);
     insertPriceSnapshot(warrior.id, newPrice, newPrice - currentPrice, source, null, now);
   }
 

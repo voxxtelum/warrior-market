@@ -77,9 +77,9 @@ const DRIFT_FIELDS: ScalarField[] = [
   { key: "demandAnchorDecayPct", label: "Demand anchor decay %", step: "0.01", description: "Fraction of the gap between a warrior's trading anchor and their raid anchor that closes every drift tick - how fast a demand-driven pump fades without sustained buying" },
   { key: "marketGravityStrength", label: "Market gravity strength", step: "0.01", description: "How strongly every price is pulled toward the current market-wide average each drift tick - keeps the whole market from drifting up (or down) together" },
   { key: "swingChancePct", label: "Swing chance %", step: "0.005", description: "Per-warrior, per-tick odds of a large overnight swing that bypasses the normal drift cap. 0 disables it" },
-  { key: "swingUpMagnitudePct", label: "Swing up magnitude %", step: "0.01", description: "Base size of an overnight swing to the upside" },
-  { key: "swingDownMagnitudePct", label: "Swing down magnitude %", step: "0.01", description: "Base size of an overnight swing to the downside" },
-  { key: "swingMagnitudeFuzzPct", label: "Swing magnitude fuzz %", step: "0.005", description: "Random +/- range applied around the base swing magnitude" },
+  { key: "swingUpMagnitude", label: "Swing up magnitude ($)", step: "1", description: "Flat dollar size of an overnight swing to the upside, regardless of current price" },
+  { key: "swingDownMagnitude", label: "Swing down magnitude ($)", step: "1", description: "Flat dollar size of an overnight swing to the downside, regardless of current price" },
+  { key: "swingMagnitudeFuzz", label: "Swing magnitude fuzz ($)", step: "0.5", description: "Flat dollar +/- range applied around the base swing magnitude" },
   { key: "swingCooldownGapPct", label: "Swing cooldown gap %", step: "0.01", description: "How far a price must already be displaced from its anchor (in a swing's direction) before another same-direction swing gets blocked" },
 ];
 

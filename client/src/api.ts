@@ -241,9 +241,9 @@ export interface StockConfig {
   demandAnchorDecayPct: number;
   marketGravityStrength: number;
   swingChancePct: number;
-  swingUpMagnitudePct: number;
-  swingDownMagnitudePct: number;
-  swingMagnitudeFuzzPct: number;
+  swingUpMagnitude: number;
+  swingDownMagnitude: number;
+  swingMagnitudeFuzz: number;
   swingCooldownGapPct: number;
 }
 

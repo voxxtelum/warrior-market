@@ -511,9 +511,9 @@ const DEFAULT_STOCK_CONFIG = {
   demandAnchorDecayPct: 0.05,
   marketGravityStrength: 0.03,
   swingChancePct: 0.01,
-  swingUpMagnitudePct: 0.1,
-  swingDownMagnitudePct: 0.1,
-  swingMagnitudeFuzzPct: 0.02,
+  swingUpMagnitude: 20,
+  swingDownMagnitude: 20,
+  swingMagnitudeFuzz: 5,
   swingCooldownGapPct: 0.08,
 };
 const hasStockConfig = db

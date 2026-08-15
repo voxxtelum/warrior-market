@@ -54,17 +54,19 @@ export interface StockConfig {
   demandAnchorDecayPct: number;
   marketGravityStrength: number;
   swingChancePct: number;
-  swingUpMagnitudePct: number;
-  swingDownMagnitudePct: number;
-  swingMagnitudeFuzzPct: number;
+  swingUpMagnitude: number;
+  swingDownMagnitude: number;
+  swingMagnitudeFuzz: number;
   swingCooldownGapPct: number;
 }
 
 // Absolute floor under any warrior's price. Purely a divide-by-zero/negative-
 // price safety net (executeTrade in db.ts computes coinAmount / price to get
 // shares) - not a tunable economic knob, hence hardcoded rather than a
-// stock_config field an admin could accidentally zero out.
-const MIN_PRICE = 1;
+// stock_config field an admin could accidentally zero out. Exported since
+// drift.ts's swing mechanic also writes flat dollar deltas and needs the
+// same floor.
+export const MIN_PRICE = 1;
 
 // Reads the DB-stored config on every call (rather than caching once at
 // import time) so edits made on the admin page take effect on the next
@@ -122,9 +124,12 @@ export function loadStockConfig(): StockConfig {
     demandAnchorDecayPct: parsed.demandAnchorDecayPct ?? 0.05,
     marketGravityStrength: parsed.marketGravityStrength ?? 0.03,
     swingChancePct: parsed.swingChancePct ?? 0.01,
-    swingUpMagnitudePct: parsed.swingUpMagnitudePct ?? 0.1,
-    swingDownMagnitudePct: parsed.swingDownMagnitudePct ?? 0.1,
-    swingMagnitudeFuzzPct: parsed.swingMagnitudeFuzzPct ?? 0.02,
+    // Same reasoning as pricePerScorePointUp/Down above: no valid "% of
+    // price" -> "$ flat" conversion exists, so old swing*Pct values are not
+    // carried forward, just a fresh default.
+    swingUpMagnitude: parsed.swingUpMagnitude ?? 20,
+    swingDownMagnitude: parsed.swingDownMagnitude ?? 20,
+    swingMagnitudeFuzz: parsed.swingMagnitudeFuzz ?? 5,
     swingCooldownGapPct: parsed.swingCooldownGapPct ?? 0.08,
   } as StockConfig;
 }

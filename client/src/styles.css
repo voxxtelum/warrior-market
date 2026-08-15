@@ -1828,6 +1828,9 @@ box-shadow:
   }
 }
 
+.fund-card {
+  padding: 0.6rem 1.25rem;
+}
 .fund-card-top {
   display: flex;
   align-items: center;
@@ -1840,6 +1843,7 @@ box-shadow:
 .fund-card-name {
   margin: 0;
   font-size: 1.4rem;
+  font-weight: 400;
 }
 .fund-card-meta {
   display: flex;

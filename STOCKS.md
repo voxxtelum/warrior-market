@@ -92,7 +92,7 @@ Each tick, for every warrior:
 
 **Step 1 — decay the trading anchor toward the raid anchor.** Whatever gap trading has opened up between the two anchors shrinks a little (`demandAnchorDecayPct`). This is the mechanism that makes a demand-driven pump or dump fade over time instead of sticking around forever.
 
-**Step 2 — roll for a rare "overnight swing."** There's a small chance (`swingChancePct`) this warrior gets hit with a much bigger, sudden move instead of the normal small nudge — a random direction, sized around `swingUpMagnitudePct`/`swingDownMagnitudePct` with some randomness added (`swingMagnitudeFuzzPct`). This move ignores the normal per-tick cap entirely, on purpose — it's meant to feel like real news, not routine noise.
+**Step 2 — roll for a rare "overnight swing."** There's a small chance (`swingChancePct`) this warrior gets hit with a much bigger, sudden move instead of the normal small nudge — a random direction, sized around a **flat dollar amount** (`swingUpMagnitude`/`swingDownMagnitude`) with some randomness added (`swingMagnitudeFuzz`, also flat dollars). Unlike the normal tick below, a swing is not a percentage of price — a cheap and an expensive warrior get hit by the same number of coins. A small, fixed, non-configurable jitter (±3-5%) is also applied to the final amount so swings don't all land on suspiciously round numbers (a "+20" swing might actually post as "+19.14"). This move ignores the normal per-tick cap entirely, on purpose — it's meant to feel like real news, not routine noise.
 
 There's a safety valve on this, though: if a warrior already got knocked well off their anchor in one direction (further than `swingCooldownGapPct`), another swing in *that same direction* is blocked until the price drifts back closer to the anchor. This stops a warrior from getting unluckily hammered by several swings in a row, stacking into an absurd move. A swing in the *opposite* direction is never blocked — a warrior can always get a bounce back.
 
@@ -104,8 +104,8 @@ There's a safety valve on this, though: if a warrior already got knocked well of
 
 ```
 normal move = reversion + gravity + random noise, clamped to ±driftMaxPct
-new price   = current price × (1 + normal move)          [normal tick]
-new price   = current price × (1 ± swing magnitude)       [swing tick, no cap]
+new price   = current price × (1 + normal move)           [normal tick, percentage]
+new price   = current price ± swing magnitude              [swing tick, flat dollars, no cap]
 ```
 
 ### Config that affects this stage
@@ -118,9 +118,9 @@ new price   = current price × (1 ± swing magnitude)       [swing tick, no cap]
 | `demandAnchorDecayPct` | 0.05 (5%) | Share of the gap between the trading anchor and the raid anchor that closes every tick. | Demand-driven pumps/dumps fade faster — trading pressure has to stay sustained to keep sticking. |
 | `marketGravityStrength` | 0.03 (3%) | Pull toward the market-wide average price each tick. | Every warrior's price stays closer to the pack — harder for the whole market, or one warrior, to drift far from the group. |
 | `swingChancePct` | 1% | Chance, per warrior per tick, of a big overnight swing instead of a normal move. | Swings happen more often (0 disables them entirely). |
-| `swingUpMagnitudePct` | 10% | Base size of an upward overnight swing. | Pump swings are bigger on average. |
-| `swingDownMagnitudePct` | 10% | Base size of a downward overnight swing. | Crash swings are bigger on average. |
-| `swingMagnitudeFuzzPct` | 2% | Random wobble added around the base swing magnitude. | Swing sizes get less predictable — a wider range around the base magnitude (e.g. a 10% base with 5% fuzz lands anywhere from 5-15%). |
+| `swingUpMagnitude` | $20 | Flat dollar base size of an upward overnight swing, regardless of current price. | Pump swings are bigger in dollar terms, on average. |
+| `swingDownMagnitude` | $20 | Flat dollar base size of a downward overnight swing, regardless of current price. | Crash swings are bigger in dollar terms, on average. |
+| `swingMagnitudeFuzz` | $5 | Flat dollar wobble added around the base swing magnitude. | Swing sizes get less predictable — a wider range around the base magnitude (e.g. a $20 base with $10 fuzz lands anywhere from $10-30). |
 | `swingCooldownGapPct` | 8% | How far a price must already be displaced from its anchor (in a swing's direction) before another same-direction swing gets blocked. | The safety net kicks in later — same-direction swings can chain more freely before one finally gets blocked. |
 
 ---

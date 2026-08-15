@@ -75,9 +75,9 @@ const NUMERIC_FIELDS: (keyof StockConfig)[] = [
   "demandAnchorDecayPct",
   "marketGravityStrength",
   "swingChancePct",
-  "swingUpMagnitudePct",
-  "swingDownMagnitudePct",
-  "swingMagnitudeFuzzPct",
+  "swingUpMagnitude",
+  "swingDownMagnitude",
+  "swingMagnitudeFuzz",
   "swingCooldownGapPct",
 ];
 

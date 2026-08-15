@@ -3,7 +3,7 @@ export interface AuthUser {
   username: string;
   avatar: string | null;
   isAdmin: boolean;
-  linkedWarrior: { playerName: string; server: string } | null;
+  linkedWarrior: { playerName: string; server: string; class: string | null } | null;
 }
 
 export async function getMe(): Promise<AuthUser | null> {
@@ -28,6 +28,7 @@ export interface AdminWarriorRow {
   id: number;
   playerName: string;
   server: string;
+  class: string | null;
 }
 
 export async function getAdminWarriors(): Promise<AdminWarriorRow[]> {
@@ -45,6 +46,23 @@ export async function linkUserWarrior(discordId: string, warriorId: number): Pro
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || "Failed to link warrior");
+  }
+}
+
+export async function linkUserWarriorManual(
+  discordId: string,
+  playerName: string,
+  server: string,
+  characterClass: string,
+): Promise<void> {
+  const res = await fetch(`/api/admin/users/${encodeURIComponent(discordId)}/link-manual`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ playerName, server, class: characterClass }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to link character");
   }
 }
 
@@ -385,7 +403,7 @@ export interface LeaderboardEntryView {
   balance: number;
   holdingsValue: number;
   netWorth: number;
-  linkedWarrior: { playerName: string; server: string } | null;
+  linkedWarrior: { playerName: string; server: string; class: string | null } | null;
 }
 
 export async function getLeaderboard(): Promise<LeaderboardEntryView[]> {
@@ -454,7 +472,7 @@ export interface AdminWalletRow {
   userId: string;
   username: string;
   avatar: string | null;
-  linkedWarrior: { id: number; playerName: string; server: string } | null;
+  linkedWarrior: { id: number; playerName: string; server: string; class: string | null } | null;
   firstLoginAt: number;
   lastLoginAt: number;
   balance: number;
@@ -525,7 +543,7 @@ export interface AdminUserDetail {
   username: string;
   avatar: string | null;
   isAdmin: boolean;
-  linkedWarrior: { id: number; playerName: string; server: string } | null;
+  linkedWarrior: { id: number; playerName: string; server: string; class: string | null } | null;
   firstLoginAt: number;
   lastLoginAt: number;
   balance: number;

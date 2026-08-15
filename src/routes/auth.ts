@@ -79,7 +79,7 @@ authRouter.get("/me", (req, res) => {
       avatar: req.user.avatar,
       isAdmin: Boolean(req.user.is_admin),
       linkedWarrior: linked
-        ? { playerName: linked.player_name, server: linked.server }
+        ? { playerName: linked.player_name, server: linked.server, class: linked.class }
         : null,
     },
   });

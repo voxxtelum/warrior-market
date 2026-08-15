@@ -135,7 +135,12 @@ adminMarketRouter.get("/users/:userId", (req, res) => {
     avatar: targetUser.avatar,
     isAdmin: Boolean(targetUser.is_admin),
     linkedWarrior: linked
-      ? { id: linked.warrior_id, playerName: linked.player_name, server: linked.server }
+      ? {
+          id: linked.warrior_id,
+          playerName: linked.player_name,
+          server: linked.server,
+          class: linked.class,
+        }
       : null,
     firstLoginAt: targetUser.first_login_at,
     lastLoginAt: targetUser.last_login_at,

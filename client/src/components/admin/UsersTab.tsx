@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../authContext';
 import { AddRemoveCoinsCard } from '../AddRemoveCoinsCard';
 import { HoldingsTable } from '../HoldingsTable';
+import { LinkCharacterModal } from './LinkCharacterModal';
 import { NetWorthDeltaBadge } from '../NetWorthDeltaBadge';
 import { Pagination } from '../Pagination';
 import { PortfolioBreakdownCard } from '../PortfolioBreakdownCard';
@@ -10,7 +11,6 @@ import {
   getAdminUserDetail,
   getAdminWallets,
   getAdminWarriors,
-  linkUserWarrior,
   setUserAdmin,
   unlinkUserWarrior,
   type AdminUserDetail,
@@ -19,6 +19,7 @@ import {
 } from '../../api';
 import { fmtCoin, fmtDateTime, fmtRelativeTime } from '../../format';
 import { computePortfolioConcentration } from '../../portfolio';
+import { classColor } from '../../warriorClasses';
 
 const PAGE_SIZE = 25;
 
@@ -85,7 +86,7 @@ export function UsersTab() {
   const [page, setPage] = useState(0);
 
   const [warriors, setWarriors] = useState<AdminWarriorRow[] | null>(null);
-  const [linkSelection, setLinkSelection] = useState('');
+  const [showLinkModal, setShowLinkModal] = useState(false);
 
   function reloadWallets() {
     // A non-admin briefly hits this before RequireAdmin's redirect commits -
@@ -110,7 +111,6 @@ export function UsersTab() {
       return;
     }
     setPage(0);
-    setLinkSelection('');
     reloadUserDetail(selectedUserId);
     if (warriors === null) {
       getAdminWarriors()
@@ -151,14 +151,6 @@ export function UsersTab() {
     const nowAdmin = !userDetail.isAdmin;
     setUserDetail({ ...userDetail, isAdmin: nowAdmin });
     await setUserAdmin(userDetail.userId, nowAdmin);
-  }
-
-  async function handleLink() {
-    if (!userDetail || linkSelection === '') return;
-    await linkUserWarrior(userDetail.userId, Number(linkSelection));
-    setLinkSelection('');
-    reloadUserDetail(userDetail.userId);
-    reloadWallets();
   }
 
   async function handleUnlink() {
@@ -233,7 +225,10 @@ export function UsersTab() {
                   </td>
                   <td>
                     {w.linkedWarrior ? (
-                      <span className="warrior-name">
+                      <span
+                        className="warrior-name"
+                        style={{ color: classColor(w.linkedWarrior.class) }}
+                      >
                         {w.linkedWarrior.playerName}-{w.linkedWarrior.server}
                       </span>
                     ) : (
@@ -291,49 +286,30 @@ export function UsersTab() {
             <div className="admin-user-heading-name-row">
               <h2>{userDetail?.username ?? '…'}</h2>
               {userDetail?.linkedWarrior ? (
-                <>
-                  <select
-                    className="admin-heading-select warrior-name"
-                    value={userDetail.linkedWarrior.id}
-                    onChange={() => {}}
-                  >
-                    <option value={userDetail.linkedWarrior.id}>
-                      {userDetail.linkedWarrior.playerName}-{userDetail.linkedWarrior.server}
-                    </option>
-                  </select>
-                  <button
-                    type="button"
-                    className="text-link text-link-accent admin-user-heading-link-action"
-                    onClick={handleUnlink}
-                  >
-                    Unlink
-                  </button>
-                </>
+                <span
+                  className="warrior-name"
+                  style={{ color: classColor(userDetail.linkedWarrior.class) }}
+                >
+                  {userDetail.linkedWarrior.playerName}-{userDetail.linkedWarrior.server}
+                </span>
               ) : (
-                <>
-                  <select
-                    className="admin-heading-select"
-                    value={linkSelection}
-                    onChange={(e) => setLinkSelection(e.target.value)}
-                  >
-                    <option value="" disabled>
-                      Select a character
-                    </option>
-                    {unlinkedWarriors.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.playerName}-{w.server}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="text-link text-link-accent admin-user-heading-link-action"
-                    aria-disabled={linkSelection === ''}
-                    onClick={handleLink}
-                  >
-                    Link
-                  </button>
-                </>
+                <span className="no-data">No character linked</span>
+              )}
+              <button
+                type="button"
+                className="text-link text-link-accent admin-user-heading-link-action"
+                onClick={() => setShowLinkModal(true)}
+              >
+                Link Character
+              </button>
+              {userDetail?.linkedWarrior && (
+                <button
+                  type="button"
+                  className="text-link text-link-accent admin-user-heading-link-action"
+                  onClick={handleUnlink}
+                >
+                  Unlink
+                </button>
               )}
             </div>
           </div>
@@ -487,6 +463,18 @@ export function UsersTab() {
         </div>
         <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
       </div>
+
+      {showLinkModal && userDetail && (
+        <LinkCharacterModal
+          userId={userDetail.userId}
+          unlinkedWarriors={unlinkedWarriors}
+          onClose={() => setShowLinkModal(false)}
+          onLinked={() => {
+            reloadUserDetail(userDetail.userId);
+            reloadWallets();
+          }}
+        />
+      )}
     </>
   );
 }

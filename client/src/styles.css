@@ -15,8 +15,10 @@
      which brightens to the full --accent on hover. */
   --accent-muted: #79d4cf;
 
-  /* Warrior / class name color */
-  --warrior: #c69b6d;
+  /* Warrior / class name color - matches the official WoW Warrior class
+     color (see client/src/warriorClasses.ts), used as the flat fallback
+     for character names outside the class-colored surfaces. */
+  --warrior: #C79C6E;
 
   /* Price & trade direction: positive = up/buy, negative = down/sell/error */
   --positive: #0ea5e9;
@@ -560,22 +562,6 @@ button:disabled {
 }
 .admin-user-heading-link-action {
   font-size: 0.8rem;
-}
-
-.admin-heading-select {
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  background: transparent;
-  border: none;
-  color: var(--warrior);
-  font-size: 1.1rem;
-  font-family: inherit;
-  padding: 0;
-  cursor: pointer;
-}
-.admin-heading-select:focus {
-  outline: none;
 }
 
 .admin-user-meta {
@@ -1644,6 +1630,16 @@ button.modal-close:hover {
 .trade-modal-content {
   max-width: 360px;
   border-radius: 2px;
+}
+
+.link-character-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  text-align: left;
+}
+.link-character-row select {
+  flex: 1;
 }
 
 .trade-info-list {

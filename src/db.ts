@@ -301,6 +301,18 @@ if (!warriorsHasRaidAnchorPrice) {
   db.exec(`ALTER TABLE warriors ADD COLUMN raid_anchor_price REAL`);
 }
 
+// WoW class (Druid/Hunter/Mage/.../Warrior), used to color character names
+// on the leaderboard and admin pages. Nullable - existing warriors have no
+// value until an admin sets one via the Link Character modal.
+const warriorsHasClass = (
+  db.prepare(`PRAGMA table_info(warriors)`).all() as unknown as {
+    name: string;
+  }[]
+).some((c) => c.name === 'class');
+if (!warriorsHasClass) {
+  db.exec(`ALTER TABLE warriors ADD COLUMN class TEXT`);
+}
+
 // Additive columns for the Funds feature (see funds.md) - notifications
 // gains a nullable fund_id (parallels the existing warrior_id) so a fund's
 // wallet-credit notifications can be traced back to it, and scheduler_state
@@ -958,6 +970,7 @@ export interface WarriorRow {
   player_name: string;
   server: string;
   first_seen_at: number;
+  class: string | null;
 }
 
 // Registers a warrior the first time it's seen. Brand-new warriors default
@@ -979,6 +992,34 @@ export function getOrCreateWarriorId(
     )
     .run(playerName, server, Date.now());
   setPlayerHidden(playerName, server, true);
+  return Number(result.lastInsertRowid);
+}
+
+// Admin-driven alternative to getOrCreateWarriorId: used when manually
+// linking a character that isn't from raid-log ingestion. Unlike that path,
+// this never hides the warrior - the admin is deliberately creating/claiming
+// it, not discovering it - and it always sets/updates the class.
+export function createOrUpdateManualWarrior(
+  playerName: string,
+  server: string,
+  characterClass: string,
+): number {
+  const existing = db
+    .prepare(`SELECT id FROM warriors WHERE player_name = ? AND server = ?`)
+    .get(playerName, server) as unknown as { id: number } | undefined;
+  if (existing) {
+    db.prepare(`UPDATE warriors SET class = ? WHERE id = ?`).run(
+      characterClass,
+      existing.id,
+    );
+    return existing.id;
+  }
+
+  const result = db
+    .prepare(
+      `INSERT INTO warriors (player_name, server, class, first_seen_at) VALUES (?, ?, ?, ?)`,
+    )
+    .run(playerName, server, characterClass, Date.now());
   return Number(result.lastInsertRowid);
 }
 
@@ -1031,16 +1072,16 @@ export function unlinkUser(userId: string): void {
 
 export function getLinkedWarrior(
   userId: string,
-): { warrior_id: number; player_name: string; server: string } | null {
+): { warrior_id: number; player_name: string; server: string; class: string | null } | null {
   const row = db
     .prepare(
-      `SELECT w.id AS warrior_id, w.player_name, w.server
+      `SELECT w.id AS warrior_id, w.player_name, w.server, w.class
        FROM user_warrior_links l
        JOIN warriors w ON w.id = l.warrior_id
        WHERE l.user_id = ?`,
     )
     .get(userId) as unknown as
-    | { warrior_id: number; player_name: string; server: string }
+    | { warrior_id: number; player_name: string; server: string; class: string | null }
     | undefined;
   return row ?? null;
 }
@@ -1816,7 +1857,7 @@ export interface LeaderboardEntry {
   balance: number;
   holdingsValue: number;
   netWorth: number;
-  linkedWarrior: { playerName: string; server: string } | null;
+  linkedWarrior: { playerName: string; server: string; class: string | null } | null;
 }
 
 // Net worth per user. Latest price per warrior is resolved once here (via
@@ -1825,7 +1866,7 @@ export interface LeaderboardEntry {
 export function getLeaderboard(): LeaderboardEntry[] {
   const wallets = db
     .prepare(
-      `SELECT w.*, u.username, u.avatar, wr.player_name AS linked_player_name, wr.server AS linked_server
+      `SELECT w.*, u.username, u.avatar, wr.player_name AS linked_player_name, wr.server AS linked_server, wr.class AS linked_class
        FROM wallets w
        JOIN users u ON u.discord_id = w.user_id
        LEFT JOIN user_warrior_links l ON l.user_id = w.user_id
@@ -1836,6 +1877,7 @@ export function getLeaderboard(): LeaderboardEntry[] {
     avatar: string | null;
     linked_player_name: string | null;
     linked_server: string | null;
+    linked_class: string | null;
   })[];
   const holdings = db
     .prepare(`SELECT * FROM holdings WHERE shares > 0`)
@@ -1872,7 +1914,11 @@ export function getLeaderboard(): LeaderboardEntry[] {
         netWorth: w.balance + holdingsValue + fundHoldingsValue,
         linkedWarrior:
           w.linked_player_name !== null
-            ? { playerName: w.linked_player_name, server: w.linked_server! }
+            ? {
+                playerName: w.linked_player_name,
+                server: w.linked_server!,
+                class: w.linked_class,
+              }
             : null,
       };
     })
@@ -1919,7 +1965,7 @@ export interface AdminWalletOverviewEntry {
   userId: string;
   username: string;
   avatar: string | null;
-  linkedWarrior: { id: number; playerName: string; server: string } | null;
+  linkedWarrior: { id: number; playerName: string; server: string; class: string | null } | null;
   firstLoginAt: number;
   lastLoginAt: number;
   balance: number;
@@ -1941,7 +1987,7 @@ export function getAdminWalletOverview(): AdminWalletOverviewEntry[] {
   const users = db
     .prepare(
       `SELECT u.discord_id, u.username, u.avatar, u.first_login_at, u.last_login_at,
-              l.warrior_id AS linked_warrior_id, w.player_name AS linked_player_name, w.server AS linked_server
+              l.warrior_id AS linked_warrior_id, w.player_name AS linked_player_name, w.server AS linked_server, w.class AS linked_class
        FROM users u
        LEFT JOIN user_warrior_links l ON l.user_id = u.discord_id
        LEFT JOIN warriors w ON w.id = l.warrior_id`,
@@ -1955,6 +2001,7 @@ export function getAdminWalletOverview(): AdminWalletOverviewEntry[] {
     linked_warrior_id: number | null;
     linked_player_name: string | null;
     linked_server: string | null;
+    linked_class: string | null;
   }[];
   const walletByUser = new Map(
     (db.prepare(`SELECT * FROM wallets`).all() as unknown as WalletRow[]).map(
@@ -2015,6 +2062,7 @@ export function getAdminWalletOverview(): AdminWalletOverviewEntry[] {
                 id: u.linked_warrior_id,
                 playerName: u.linked_player_name!,
                 server: u.linked_server!,
+                class: u.linked_class,
               }
             : null,
         firstLoginAt: u.first_login_at,

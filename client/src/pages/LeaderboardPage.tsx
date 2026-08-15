@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { MarketLayout } from '../components/MarketLayout';
 import { getLeaderboard, type LeaderboardEntryView } from '../api';
 import { fmtCoin } from '../format';
+import { classColor } from '../warriorClasses';
 
 export function LeaderboardPage() {
   const [entries, setEntries] = useState<LeaderboardEntryView[] | null>(null);
@@ -48,7 +49,10 @@ export function LeaderboardPage() {
                       )}
                       {e.linkedWarrior && (
                         <>
-                          <span className="warrior-name">
+                          <span
+                            className="warrior-name"
+                            style={{ color: classColor(e.linkedWarrior.class) }}
+                          >
                             {e.linkedWarrior.playerName}
                           </span>
                           &nbsp;

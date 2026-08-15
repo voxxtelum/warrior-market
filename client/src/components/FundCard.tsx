@@ -134,6 +134,14 @@ export function FundCard({ fund, onBuy }: FundCardProps) {
                     {loadingDetail && <p className="subtitle">Loading...</p>}
                     {detail && (
                         <table className="fund-constituents-table">
+                            <thead>
+                                <tr>
+                                    <th>Character</th>
+                                    <th>Shares</th>
+                                    <th>% of Fund</th>
+                                    <th>Price</th>
+                                </tr>
+                            </thead>
                             <tbody>
                                 {detail.constituents.map((c) => (
                                     <tr key={`${c.playerName}::${c.server}`}>

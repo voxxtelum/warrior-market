@@ -46,16 +46,21 @@ export function LeaderboardPage() {
                           height={20}
                         />
                       )}
-                      {e.username}
                       {e.linkedWarrior && (
                         <>
-                          {` (`}
                           <span className="warrior-name">
-                            {`${e.linkedWarrior.playerName}-${e.linkedWarrior.server}`}
+                            {e.linkedWarrior.playerName}
                           </span>
-                          {`)`}
+                          &nbsp;
                         </>
                       )}
+                      <span
+                        className={
+                          e.linkedWarrior ? 'username-muted' : undefined
+                        }
+                      >
+                        {e.username}
+                      </span>
                     </span>
                   </td>
                   <td className="mobile-hide">{fmtCoin(e.balance)}</td>

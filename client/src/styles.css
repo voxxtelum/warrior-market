@@ -319,6 +319,10 @@ nav.nav-dropdown a.active {
   color: var(--warrior);
 }
 
+.username-muted {
+  color: var(--muted);
+}
+
 .player-name-cell {
   display: inline-flex;
   align-items: center;

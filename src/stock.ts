@@ -37,6 +37,7 @@ export interface StockConfig {
   pricePerScorePointUp: number;
   pricePerScorePointDown: number;
   startingPrice: number;
+  startingWalletBalance: number;
   newPlayerGraceReports: number;
   newPlayerPenaltyLeniency: number;
   minAttendancePct: number;
@@ -114,6 +115,11 @@ export function loadStockConfig(): StockConfig {
     // is simply ignored.
     pricePerScorePointUp: parsed.pricePerScorePointUp ?? 8,
     pricePerScorePointDown: parsed.pricePerScorePointDown ?? 8,
+    // Not stock-pricing-related, but lives in this same single-row config
+    // blob rather than a separate table for one value - db.ts reads it
+    // directly (not through loadStockConfig()) to avoid a circular import,
+    // since db.ts is stock.ts's own dependency.
+    startingWalletBalance: parsed.startingWalletBalance ?? 1000,
     driftIntervalMs: parsed.driftIntervalMs ?? 60 * 60 * 1000,
     fundValuationIntervalMs: parsed.fundValuationIntervalMs ?? 60 * 60 * 1000,
     driftMaxPct: parsed.driftMaxPct ?? 0.005,

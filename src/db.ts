@@ -147,7 +147,7 @@ db.exec(`
   -- One row per user, overwritten in place on every hourly drift tick (see
   -- refreshPortfolioSnapshots()) - this is not a history log, just "net
   -- worth as of the last refresh," used to compute a "since last hour"
-  -- delta. Seeded at STARTING_BALANCE when a wallet is created.
+  -- delta. Seeded at the configured starting wallet balance when created.
   CREATE TABLE IF NOT EXISTS portfolio_snapshots (
     user_id TEXT PRIMARY KEY REFERENCES users(discord_id),
     net_worth REAL NOT NULL,
@@ -494,6 +494,7 @@ const DEFAULT_STOCK_CONFIG = {
   pricePerScorePointUp: 8,
   pricePerScorePointDown: 8,
   startingPrice: 100,
+  startingWalletBalance: 1000,
   newPlayerGraceReports: 2,
   newPlayerPenaltyLeniency: 0.3,
   minAttendancePct: 0.3,
@@ -1413,7 +1414,17 @@ export function getAdminPriceHistory(filters: PriceHistoryFilters): {
   };
 }
 
-const STARTING_BALANCE = 1000;
+// Admin-tunable via stock_config (see StockConfig.startingWalletBalance in
+// stock.ts) rather than a hardcoded constant. Reads the raw config blob
+// directly instead of going through stock.ts's loadStockConfig() - stock.ts
+// already imports from this file, so importing back from stock.ts here
+// would create a circular dependency. Re-read on every call (not cached) to
+// match the rest of stock_config's "no restart needed" behavior.
+function getStartingWalletBalance(): number {
+  const raw = getStockConfigRaw();
+  if (!raw) return 1000;
+  return (JSON.parse(raw) as { startingWalletBalance?: number }).startingWalletBalance ?? 1000;
+}
 
 export interface WalletRow {
   user_id: string;
@@ -1427,13 +1438,14 @@ export function getOrCreateWallet(userId: string): WalletRow {
     .get(userId) as unknown as WalletRow | undefined;
   if (existing) return existing;
   const now = Date.now();
+  const startingBalance = getStartingWalletBalance();
   db.prepare(
     `INSERT INTO wallets (user_id, balance, created_at) VALUES (?, ?, ?)`,
-  ).run(userId, STARTING_BALANCE, now);
+  ).run(userId, startingBalance, now);
   db.prepare(
     `INSERT INTO portfolio_snapshots (user_id, net_worth, created_at) VALUES (?, ?, ?)`,
-  ).run(userId, STARTING_BALANCE, now);
-  return { user_id: userId, balance: STARTING_BALANCE, created_at: now };
+  ).run(userId, startingBalance, now);
+  return { user_id: userId, balance: startingBalance, created_at: now };
 }
 
 export interface HoldingRow {
@@ -2248,12 +2260,13 @@ export interface AdminWalletOverviewEntry {
 // Like getLeaderboard(), but starts from every registered user (not just
 // ones who already have a wallets row) so the Manage Market page can show
 // (and adjust the balance of) a user who's never traded - they implicitly
-// have STARTING_BALANCE and no holdings until getOrCreateWallet() lazily
+// have the configured starting wallet balance and no holdings until getOrCreateWallet() lazily
 // creates their real row. This is also the single source for the
 // consolidated admin Users table, so it carries the login/link/turnover
 // fields that used to live on the separate Admin Users and Market Stats
 // pages.
 export function getAdminWalletOverview(): AdminWalletOverviewEntry[] {
+  const startingBalance = getStartingWalletBalance();
   const users = db
     .prepare(
       `SELECT u.discord_id, u.username, u.avatar, u.first_login_at, u.last_login_at,
@@ -2319,7 +2332,7 @@ export function getAdminWalletOverview(): AdminWalletOverviewEntry[] {
 
   return users
     .map((u) => {
-      const balance = walletByUser.get(u.discord_id) ?? STARTING_BALANCE;
+      const balance = walletByUser.get(u.discord_id) ?? startingBalance;
       const holdingsValue = holdingsValueByUser.get(u.discord_id) ?? 0;
       const fundHoldingsValue = fundHoldingsValueByUser.get(u.discord_id) ?? 0;
       return {
@@ -2485,8 +2498,8 @@ export function getAdminWalletAdjustments(): AdminWalletAdjustmentView[] {
   }));
 }
 
-// Wipes market state back to a clean slate: every wallet reset to
-// STARTING_BALANCE, all holdings/transactions/notifications cleared, and
+// Wipes market state back to a clean slate: every wallet reset to the
+// configured starting wallet balance, all holdings/transactions/notifications cleared, and
 // price_snapshots (both raid and drift) cleared - the caller is responsible
 // for calling stock.ts's rebuildRaidPriceSnapshots() right after, and this
 // resets last_drift_at so a stale timestamp doesn't fire an immediate
@@ -2495,13 +2508,14 @@ export function getAdminWalletAdjustments(): AdminWalletAdjustmentView[] {
 // out of scope for a *market* reset. admin_wallet_adjustments is also left
 // alone - it's a historical admin-action audit log, not market state.
 export function resetMarketState(): void {
+  const startingBalance = getStartingWalletBalance();
   db.exec('BEGIN');
   try {
     db.prepare(`DELETE FROM transactions`).run();
     db.prepare(`DELETE FROM holdings`).run();
     db.prepare(`DELETE FROM notifications`).run();
-    db.prepare(`UPDATE wallets SET balance = ?`).run(STARTING_BALANCE);
-    db.prepare(`UPDATE portfolio_snapshots SET net_worth = ?`).run(STARTING_BALANCE);
+    db.prepare(`UPDATE wallets SET balance = ?`).run(startingBalance);
+    db.prepare(`UPDATE portfolio_snapshots SET net_worth = ?`).run(startingBalance);
     db.prepare(`DELETE FROM price_snapshots`).run();
     db.exec('COMMIT');
   } catch (err) {

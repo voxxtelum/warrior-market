@@ -58,6 +58,7 @@ const NUMERIC_FIELDS: (keyof StockConfig)[] = [
   "pricePerScorePointUp",
   "pricePerScorePointDown",
   "startingPrice",
+  "startingWalletBalance",
   "newPlayerGraceReports",
   "newPlayerPenaltyLeniency",
   "minAttendancePct",

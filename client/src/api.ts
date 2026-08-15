@@ -224,6 +224,7 @@ export interface StockConfig {
   pricePerScorePointUp: number;
   pricePerScorePointDown: number;
   startingPrice: number;
+  startingWalletBalance: number;
   newPlayerGraceReports: number;
   newPlayerPenaltyLeniency: number;
   minAttendancePct: number;

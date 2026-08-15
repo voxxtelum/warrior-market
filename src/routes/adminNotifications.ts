@@ -61,6 +61,8 @@ const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
       color: [/^#[0-9a-f]{3,8}$/i, /^rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/i],
       "text-align": [/^(left|right|center|justify)$/],
       "font-size": [/^\d+(\.\d+)?(px|em|rem|%)$/],
+      "font-family": [/^[a-zA-Z0-9\s,'"-]+$/],
+      "font-weight": [/^(normal|bold|[1-9]00)$/],
     },
   },
   allowedSchemes: ["http", "https"],

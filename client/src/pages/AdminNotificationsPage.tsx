@@ -3,6 +3,9 @@ import { AdminLayout } from "../components/AdminLayout";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { NotificationForm } from "../components/admin/NotificationForm";
 import { NotificationPopup } from "../components/NotificationPopup";
+import { WindowIcon } from "../components/icons/WindowIcon";
+import { PencilSquareIcon } from "../components/icons/PencilSquareIcon";
+import { TrashIconSolid } from "../components/icons/TrashIconSolid";
 import {
   activateAdminNotification,
   createAdminNotification,
@@ -255,24 +258,44 @@ export function AdminNotificationsPage() {
                   <td>{n.active ? "Active" : "Inactive"}</td>
                   <td>{fmtDateTime(n.updatedAt)}</td>
                   <td>
-                    <button type="button" onClick={() => setPreviewing(n)}>
-                      Preview
-                    </button>
-                    <button type="button" onClick={() => setEditing(n)}>
-                      Edit
-                    </button>
-                    {n.active ? (
-                      <button type="button" onClick={() => handleDeactivate(n)} disabled={busyId === n.id}>
-                        Deactivate
+                    <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                      <button
+                        type="button"
+                        className="btn-icon-only"
+                        aria-label={`Preview "${n.name}"`}
+                        title="Preview"
+                        onClick={() => setPreviewing(n)}
+                      >
+                        <WindowIcon className="icon-btn-icon" />
                       </button>
-                    ) : (
-                      <button type="button" className="btn-affirm" onClick={() => handleActivate(n)} disabled={busyId === n.id}>
-                        Activate
+                      <button
+                        type="button"
+                        className="btn-icon-only"
+                        aria-label={`Edit "${n.name}"`}
+                        title="Edit"
+                        onClick={() => setEditing(n)}
+                      >
+                        <PencilSquareIcon className="icon-btn-icon" />
                       </button>
-                    )}
-                    <button type="button" className="btn-danger" onClick={() => setDeleting(n)}>
-                      Delete
-                    </button>
+                      {n.active ? (
+                        <button type="button" onClick={() => handleDeactivate(n)} disabled={busyId === n.id}>
+                          Deactivate
+                        </button>
+                      ) : (
+                        <button type="button" className="btn-affirm" onClick={() => handleActivate(n)} disabled={busyId === n.id}>
+                          Activate
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="btn-danger btn-icon-only"
+                        aria-label={`Delete "${n.name}"`}
+                        title="Delete"
+                        onClick={() => setDeleting(n)}
+                      >
+                        <TrashIconSolid className="icon-btn-icon" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

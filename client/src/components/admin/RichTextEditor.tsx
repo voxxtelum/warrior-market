@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { TextStyle } from "@tiptap/extension-text-style";
+import { FontFamily, TextStyle } from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
 import TextAlign from "@tiptap/extension-text-align";
 import Image from "@tiptap/extension-image";
 import { FontSize } from "./fontSizeExtension";
+import { FontWeight } from "./fontWeightExtension";
 import { uploadNotificationImage } from "../../api";
 
 const FONT_SIZES = [
@@ -14,7 +15,33 @@ const FONT_SIZES = [
   { label: "X-Large", value: "1.75rem" },
 ];
 
-const COLORS = ["#e6e6e6", "#ef4444", "#f59e0b", "#22c55e", "#3b82f6", "#a855f7"];
+const FONT_WEIGHTS = [
+  { label: "Light", value: "300" },
+  { label: "Normal", value: "400" },
+  { label: "Medium", value: "500" },
+  { label: "Semibold", value: "600" },
+  { label: "Bold", value: "700" },
+  { label: "Extrabold", value: "800" },
+];
+
+// IBM Plex Sans is the app's default (loaded sitewide in index.html) - Plex
+// Serif is loaded alongside it there too, so both render correctly both here
+// and in the actual popup (dangerouslySetInnerHTML just carries the inline
+// font-family style through).
+const FONT_FAMILIES = [{ label: "IBM Plex Serif", value: "'IBM Plex Serif', serif" }];
+
+const COLORS = [
+  "#ffffff",
+  "#111111",
+  "#ef4444",
+  "#f59e0b",
+  "#eab308",
+  "#22c55e",
+  "#06b6d4",
+  "#3b82f6",
+  "#a855f7",
+  "#ec4899",
+];
 
 interface RichTextEditorProps {
   content: string;
@@ -29,6 +56,8 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
       StarterKit,
       TextStyle,
       FontSize,
+      FontWeight,
+      FontFamily,
       Color,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Image,
@@ -128,6 +157,42 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
           ))}
           <option value="">Normal</option>
         </select>
+        <select
+          value=""
+          onChange={(e) => {
+            const weight = e.target.value;
+            editor
+              .chain()
+              .focus()
+              .setMark("textStyle", { fontWeight: weight || null })
+              .run();
+            e.target.value = "";
+          }}
+        >
+          <option value="">Weight...</option>
+          {FONT_WEIGHTS.map((w) => (
+            <option key={w.label} value={w.value}>
+              {w.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value=""
+          onChange={(e) => {
+            const family = e.target.value;
+            if (family) editor.chain().focus().setFontFamily(family).run();
+            else editor.chain().focus().unsetFontFamily().run();
+            e.target.value = "";
+          }}
+        >
+          <option value="">Font...</option>
+          {FONT_FAMILIES.map((f) => (
+            <option key={f.label} value={f.value}>
+              {f.label}
+            </option>
+          ))}
+          <option value="">Default</option>
+        </select>
         <button type="button" onClick={() => editor.chain().focus().setTextAlign("left").run()} aria-label="Align left">
           ⇤
         </button>
@@ -162,6 +227,13 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
               onClick={() => editor.chain().focus().setColor(c).run()}
             />
           ))}
+          <input
+            type="color"
+            className="color-picker"
+            aria-label="Custom text color"
+            defaultValue="#e6e6e6"
+            onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
+          />
           <button type="button" onClick={() => editor.chain().focus().unsetColor().run()}>
             Clear color
           </button>

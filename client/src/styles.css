@@ -18,7 +18,7 @@
   /* Warrior / class name color - matches the official WoW Warrior class
      color (see client/src/warriorClasses.ts), used as the flat fallback
      for character names outside the class-colored surfaces. */
-  --warrior: #C79C6E;
+  --warrior: #c79c6e;
 
   /* Price & trade direction: positive = up/buy, negative = down/sell/error */
   --positive: #0ea5e9;
@@ -340,6 +340,13 @@ nav.nav-dropdown a.active {
   border-radius: 4px;
   padding: 1.25rem;
   margin-bottom: 1.5rem;
+  box-shadow:
+    rgba(0, 0, 0, 0.07) 0px 1px 2px,
+    rgba(0, 0, 0, 0.07) 0px 2px 4px,
+    rgba(0, 0, 0, 0.07) 0px 4px 8px,
+    rgba(0, 0, 0, 0.07) 0px 8px 16px,
+    rgba(0, 0, 0, 0.07) 0px 16px 32px,
+    rgba(0, 0, 0, 0.07) 0px 32px 64px;
 }
 .danger-card {
   border-color: var(--danger);
@@ -964,34 +971,34 @@ tbody tr:hover {
   border-radius: 1px;
   background: var(--border);
 }
-[data-risk="1"] .risk-segment.filled {
+[data-risk='1'] .risk-segment.filled {
   background: var(--risk-1);
 }
-[data-risk="2"] .risk-segment.filled {
+[data-risk='2'] .risk-segment.filled {
   background: var(--risk-2);
 }
-[data-risk="3"] .risk-segment.filled {
+[data-risk='3'] .risk-segment.filled {
   background: var(--risk-3);
 }
-[data-risk="4"] .risk-segment.filled {
+[data-risk='4'] .risk-segment.filled {
   background: var(--risk-4);
 }
-[data-risk="5"] .risk-segment.filled {
+[data-risk='5'] .risk-segment.filled {
   background: var(--risk-5);
 }
-[data-risk="1"] .risk-bar-label {
+[data-risk='1'] .risk-bar-label {
   color: var(--risk-1);
 }
-[data-risk="2"] .risk-bar-label {
+[data-risk='2'] .risk-bar-label {
   color: var(--risk-2);
 }
-[data-risk="3"] .risk-bar-label {
+[data-risk='3'] .risk-bar-label {
   color: var(--risk-3);
 }
-[data-risk="4"] .risk-bar-label {
+[data-risk='4'] .risk-bar-label {
   color: var(--risk-4);
 }
-[data-risk="5"] .risk-bar-label {
+[data-risk='5'] .risk-bar-label {
   color: var(--risk-5);
 }
 .risk-bar-label {
@@ -1626,7 +1633,13 @@ button.modal-close:hover {
   color: rgba(var(--negative-rgb), 0.75);
   background: none;
 }
-
+box-shadow:
+  rgba(0, 0, 0, 0.07) 0px 1px 2px,
+  rgba(0, 0, 0, 0.07) 0px 2px 4px,
+  rgba(0, 0, 0, 0.07) 0px 4px 8px,
+  rgba(0, 0, 0, 0.07) 0px 8px 16px,
+  rgba(0, 0, 0, 0.07) 0px 16px 32px,
+  rgba(0, 0, 0, 0.07) 0px 32px 64px;
 .trade-modal-content {
   max-width: 360px;
   border-radius: 2px;
@@ -1639,6 +1652,9 @@ button.modal-close:hover {
 .notification-popup .modal-title {
   display: none;
 }
+.notification-popup .card-footer {
+  justify-content: center;
+}
 .notification-popup-body {
   line-height: 1.5;
 }
@@ -1646,8 +1662,17 @@ button.modal-close:hover {
   margin: 0 0 0.75rem;
 }
 .notification-popup-body img {
+  margin: 1rem 0;
   max-width: 100%;
+  border: 1px solid rgba(var(--accent-rgb), 0.05);
   border-radius: 4px;
+  box-shadow:
+    rgba(0, 0, 0, 0.07) 0px 1px 2px,
+    rgba(0, 0, 0, 0.07) 0px 2px 4px,
+    rgba(0, 0, 0, 0.07) 0px 4px 8px,
+    rgba(0, 0, 0, 0.07) 0px 8px 16px,
+    rgba(0, 0, 0, 0.07) 0px 16px 32px,
+    rgba(0, 0, 0, 0.07) 0px 32px 64px;
 }
 .notification-popup-body h1,
 .notification-popup-body h2,
@@ -1689,6 +1714,22 @@ button.modal-close:hover {
   border-radius: 50%;
   border: 1px solid var(--border);
   cursor: pointer;
+}
+.color-picker {
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+.color-picker::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.color-picker::-webkit-color-swatch {
+  border: none;
+  border-radius: 3px;
 }
 .rich-text-content {
   padding: 0.6rem 0.75rem;

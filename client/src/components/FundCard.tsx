@@ -146,7 +146,7 @@ export function FundCard({ fund, onBuy }: FundCardProps) {
                                 {detail.constituents.map((c) => (
                                     <tr key={`${c.playerName}::${c.server}`}>
                                         <td>{c.playerName}</td>
-                                        <td>{c.stockCount}</td>
+                                        <td>{c.stockCount.toFixed(2)}</td>
                                         <td>
                                             {(c.percentOfFund * 100).toFixed(2)}
                                             %

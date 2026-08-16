@@ -1948,6 +1948,10 @@ button.modal-close:hover {
   width: 100%;
   margin-top: 0.75rem;
 }
+.fund-constituents-table th:nth-child(2),
+.fund-constituents-table td:nth-child(2) {
+  text-align: right;
+}
 .trade-status-area .status.error {
   border-color: var(--negative);
 }

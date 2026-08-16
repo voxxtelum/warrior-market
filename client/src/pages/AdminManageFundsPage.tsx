@@ -191,10 +191,12 @@ export function AdminManageFundsPage() {
               <tr>
                 <th>Name</th>
                 <th>Risk</th>
+                <th>Gx</th>
+                <th>Lx</th>
                 <th>Fee</th>
                 <th>Tax</th>
                 <th>NAV</th>
-                <th>Shares out.</th>
+                <th>Shares</th>
                 <th>Status</th>
                 <th></th>
               </tr>
@@ -206,6 +208,8 @@ export function AdminManageFundsPage() {
                   <td>
                     <RiskBar risk={f.risk} />
                   </td>
+                  <td>{f.gainMultiplier.toFixed(2)}</td>
+                  <td>{f.lossMultiplier.toFixed(2)}</td>
                   <td>{(f.feePct * 100).toFixed(2)}%</td>
                   <td>{(f.taxPct * 100).toFixed(2)}%</td>
                   <td>{fmtCoin(f.nav)}</td>
@@ -225,7 +229,7 @@ export function AdminManageFundsPage() {
               ))}
               {funds?.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="subtitle">
+                  <td colSpan={10} className="subtitle">
                     No funds yet - create one above.
                   </td>
                 </tr>

@@ -592,6 +592,7 @@ export interface AdminUserDetail {
   lastLoginAt: number;
   balance: number;
   holdings: AdminUserHolding[];
+  fundHoldings: FundPositionView[];
   netWorth: number;
   netWorthDelta: number;
   tradeCount: number;

@@ -144,27 +144,37 @@ export function WalletPage() {
                 <th className="mobile-hide">Shares</th>
                 <th>NAV</th>
                 <th>Value</th>
+                <th>P&amp;L</th>
               </tr>
             </thead>
             <tbody>
               {fundPositions?.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="no-data">
+                  <td colSpan={6} className="no-data">
                     No fund holdings yet - visit the Funds tab to invest.
                   </td>
                 </tr>
               )}
-              {fundPositions?.map((p) => (
-                <tr key={p.fundId}>
-                  <td>{p.name}</td>
-                  <td>
-                    <RiskBar risk={p.risk} showLabel={false} />
-                  </td>
-                  <td className="mobile-hide">{p.shares.toFixed(3)}</td>
-                  <td>{fmtCoin(p.nav)}</td>
-                  <td>{fmtCoin(p.marketValue)}</td>
-                </tr>
-              ))}
+              {fundPositions?.map((p) => {
+                const pnl = p.marketValue - p.costBasisTotal;
+                return (
+                  <tr key={p.fundId}>
+                    <td>{p.name}</td>
+                    <td>
+                      <RiskBar risk={p.risk} showLabel={false} />
+                    </td>
+                    <td className="mobile-hide">{p.shares.toFixed(3)}</td>
+                    <td>{fmtCoin(p.nav)}</td>
+                    <td>{fmtCoin(p.marketValue)}</td>
+                    <td>
+                      <span className={pnl > 0 ? 'delta-pos' : pnl < 0 ? 'delta-neg' : 'delta-neutral'}>
+                        {pnl >= 0 ? '+' : ''}
+                        {fmtCoin(pnl)}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

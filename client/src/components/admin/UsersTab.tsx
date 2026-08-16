@@ -6,6 +6,7 @@ import { LinkCharacterModal } from './LinkCharacterModal';
 import { NetWorthDeltaBadge } from '../NetWorthDeltaBadge';
 import { Pagination } from '../Pagination';
 import { PortfolioBreakdownCard } from '../PortfolioBreakdownCard';
+import { RiskBar } from '../RiskBar';
 import { SidePill } from '../SidePill';
 import {
   getAdminUserDetail,
@@ -417,6 +418,53 @@ export function UsersTab() {
           holdingsValue={userConcentration.holdingsValue}
           emptyMessage="No holdings."
         />
+      </div>
+
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Funds</h2>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Fund</th>
+                <th>Risk</th>
+                <th className="mobile-hide">Shares</th>
+                <th>NAV</th>
+                <th>Value</th>
+                <th>P&amp;L</th>
+              </tr>
+            </thead>
+            <tbody>
+              {userDetail?.fundHoldings.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="no-data">
+                    No fund holdings.
+                  </td>
+                </tr>
+              )}
+              {userDetail?.fundHoldings.map((p) => {
+                const pnl = p.marketValue - p.costBasisTotal;
+                return (
+                  <tr key={p.fundId}>
+                    <td>{p.name}</td>
+                    <td>
+                      <RiskBar risk={p.risk} showLabel={false} />
+                    </td>
+                    <td className="mobile-hide">{p.shares.toFixed(3)}</td>
+                    <td>{fmtCoin(p.nav)}</td>
+                    <td>{fmtCoin(p.marketValue)}</td>
+                    <td>
+                      <span className={pnl > 0 ? 'delta-pos' : pnl < 0 ? 'delta-neg' : 'delta-neutral'}>
+                        {pnl >= 0 ? '+' : ''}
+                        {fmtCoin(pnl)}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="card">

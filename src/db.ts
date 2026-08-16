@@ -3372,6 +3372,13 @@ export function executeFundTrade(
   let tax = 0;
 
   if (side === 'buy') {
+    // pool_value is floored at 0 (see fundValuation.ts), so a fund can go
+    // to but never below 0 NAV - at exactly 0, coinAmount / nav is
+    // Infinity shares, so buys must be rejected outright rather than
+    // minting an unbounded position for a real coin cost.
+    if (nav <= 0) {
+      throw new FundTradeError('This fund has 0 NAV and cannot be bought into right now');
+    }
     fee = coinAmount * fund.fee_pct;
     // Cent-rounded comparison, same rationale as executeTrade - a client
     // "use 100% of balance" amount can differ from wallet.balance by a

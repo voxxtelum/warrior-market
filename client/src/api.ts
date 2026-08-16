@@ -792,11 +792,12 @@ export async function getAdminFund(id: number): Promise<FundDetailView> {
 
 export async function createFund(
   input: CreateFundInput,
-): Promise<FundView & { skippedConstituents: FundConstituentInput[] }> {
+  opts?: { upsert?: boolean },
+): Promise<FundView & { skippedConstituents: FundConstituentInput[]; created: boolean }> {
   const res = await fetch("/api/admin/funds", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify(opts?.upsert ? { ...input, upsert: true } : input),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

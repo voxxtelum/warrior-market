@@ -12,6 +12,7 @@ import {
   removeFundConstituent,
   updateFund,
   updateFundConstituentWeight,
+  upsertFund,
   type FundConstituentInput,
   type FundRow,
 } from "../db";
@@ -88,7 +89,7 @@ adminFundsRouter.get("/:id", (req, res) => {
 });
 
 adminFundsRouter.post("/", (req, res) => {
-  const { name, risk, feePct, taxPct, description, gainMultiplier, lossMultiplier, constituents } =
+  const { name, risk, feePct, taxPct, description, gainMultiplier, lossMultiplier, constituents, upsert } =
     req.body ?? {};
   if (
     typeof name !== "string" ||
@@ -112,7 +113,7 @@ adminFundsRouter.post("/", (req, res) => {
   }
 
   try {
-    const { fund, skippedConstituents } = createFund({
+    const input = {
       name,
       risk,
       feePct,
@@ -121,8 +122,14 @@ adminFundsRouter.post("/", (req, res) => {
       gainMultiplier,
       lossMultiplier,
       constituents: parsedConstituents,
-    });
-    res.status(201).json({ ...serializeFund(fund), skippedConstituents });
+    };
+    if (upsert === true) {
+      const { fund, skippedConstituents, created } = upsertFund(input);
+      res.status(created ? 201 : 200).json({ ...serializeFund(fund), skippedConstituents, created });
+      return;
+    }
+    const { fund, skippedConstituents } = createFund(input);
+    res.status(201).json({ ...serializeFund(fund), skippedConstituents, created: true });
   } catch (err) {
     if (err instanceof FundError) {
       res.status(400).json({ error: err.message });

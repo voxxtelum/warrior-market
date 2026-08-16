@@ -88,11 +88,12 @@ export function AdminManageFundsPage() {
     }
   }
 
-  // Creates each imported fund via the same POST /api/admin/funds path a
-  // manual create uses - unmatched constituent warriors are skipped (not
-  // an aborting failure, per the server's createFund tolerance), and a
-  // whole fund that fails to create (e.g. duplicate name) is reported but
-  // doesn't stop the rest of the batch.
+  // Creates or updates each imported fund via the same POST /api/admin/funds
+  // path a manual create uses, with upsert:true so a name match resyncs the
+  // existing fund (scalars + full constituent basket replaced) instead of
+  // failing - unmatched constituent warriors are skipped (not an aborting
+  // failure, per the server's tolerance), and a whole fund that still fails
+  // (e.g. invalid name) is reported but doesn't stop the rest of the batch.
   async function handleImportFile(file: File) {
     setIoBusy(true);
     setIoStatus(null);
@@ -101,6 +102,7 @@ export function AdminManageFundsPage() {
       if (!parsed || !Array.isArray(parsed.funds)) throw new Error("File doesn't contain a funds export");
 
       const created: string[] = [];
+      const updated: string[] = [];
       const skippedNotes: string[] = [];
       const failed: string[] = [];
       for (const entry of parsed.funds) {
@@ -115,8 +117,8 @@ export function AdminManageFundsPage() {
           constituents: entry.constituents,
         };
         try {
-          const result = await createFund(input);
-          created.push(result.name);
+          const result = await createFund(input, { upsert: true });
+          (result.created ? created : updated).push(result.name);
           if (result.skippedConstituents.length > 0) {
             skippedNotes.push(
               `${result.name}: skipped ${result.skippedConstituents.map((c) => `${c.playerName} (${c.server})`).join(", ")}`,
@@ -127,7 +129,7 @@ export function AdminManageFundsPage() {
         }
       }
 
-      const parts = [`Imported ${created.length} of ${parsed.funds.length} fund(s).`];
+      const parts = [`Imported ${created.length + updated.length} of ${parsed.funds.length} fund(s) (${created.length} created, ${updated.length} updated).`];
       if (skippedNotes.length > 0) parts.push(`Skipped constituents - ${skippedNotes.join("; ")}`);
       if (failed.length > 0) parts.push(`Failed - ${failed.join("; ")}`);
       setIoStatus({ text: parts.join(" "), kind: failed.length > 0 ? "error" : "success" });

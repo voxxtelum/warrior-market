@@ -2926,6 +2926,51 @@ export function createFund(data: {
   }
 }
 
+// Create-or-replace by name, for config import: unlike createFund's hard
+// duplicate-name rejection, a name match here means "this is the same fund,
+// resync it" - scalars are overwritten and the whole constituent basket is
+// replaced with the imported one (direct stock_counts, no rebalance - this
+// is a full resync, not an incremental admin edit).
+export function upsertFund(data: {
+  name: string;
+  risk: number;
+  feePct: number;
+  taxPct: number;
+  description: string;
+  gainMultiplier: number;
+  lossMultiplier: number;
+  seedNav?: number;
+  constituents: FundConstituentInput[];
+}): { fund: FundRow; skippedConstituents: FundConstituentInput[]; created: boolean } {
+  const name = validateFundScalars(data);
+  const existing = getFundByName(name);
+  const { resolved, skipped } = resolveConstituentInputs(data.constituents);
+
+  if (!existing) {
+    const { fund, skippedConstituents } = createFund({ ...data, name, constituents: data.constituents });
+    return { fund, skippedConstituents, created: true };
+  }
+
+  db.exec('BEGIN');
+  try {
+    db.prepare(
+      `UPDATE funds SET name = ?, risk = ?, fee_pct = ?, tax_pct = ?, description = ?, gain_multiplier = ?, loss_multiplier = ?, deleted_at = NULL WHERE id = ?`,
+    ).run(name, data.risk, data.feePct, data.taxPct, data.description, data.gainMultiplier, data.lossMultiplier, existing.id);
+    db.prepare(`DELETE FROM fund_constituents WHERE fund_id = ?`).run(existing.id);
+    const insertConstituent = db.prepare(
+      `INSERT INTO fund_constituents (fund_id, warrior_id, stock_count, last_snapshot_price) VALUES (?, ?, ?, ?)`,
+    );
+    for (const c of resolved) {
+      insertConstituent.run(existing.id, c.warriorId, c.stockCount, getLatestPrice(c.warriorId));
+    }
+    db.exec('COMMIT');
+    return { fund: getFundById(existing.id)!, skippedConstituents: skipped, created: false };
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
 // Scalar fields only - constituents are excluded here and go through
 // addFundConstituent/removeFundConstituent/updateFundConstituentWeight
 // instead, since adding/removing carries rebalance side effects a bulk

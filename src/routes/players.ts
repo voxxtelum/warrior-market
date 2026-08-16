@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { listAllPlayers, setPlayerHidden } from "../db";
-import { rebuildRaidPriceSnapshots } from "../stock";
+import { backfillRaidPriceSnapshotsForWarrior } from "../stock";
 
 export const playersRouter = Router();
 
@@ -18,9 +18,12 @@ playersRouter.post("/hidden", (req, res) => {
   // Raid price computation excludes hidden players entirely (NOT_HIDDEN_CLAUSE
   // in db.ts), so a newly-unhidden warrior has zero price_snapshots from any
   // report processed while they were hidden - getLatestPrice stays null and
-  // they're untradeable until this rebuild backfills their raid history.
+  // they're untradeable until this backfills their raid history. Scoped to
+  // just this warrior (not rebuildRaidPriceSnapshots' global rebuild), which
+  // would otherwise overwrite every other warrior's raid-sourced price
+  // history with disconnected fundamentals-only values.
   if (!hidden) {
-    rebuildRaidPriceSnapshots();
+    backfillRaidPriceSnapshotsForWarrior(player_name, server);
   }
   res.status(204).end();
 });

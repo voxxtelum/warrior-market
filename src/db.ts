@@ -1194,6 +1194,17 @@ export function getPriceSnapshotCount(): number {
   ).c;
 }
 
+// Used to guard the single-warrior raid backfill (stock.ts's
+// backfillRaidPriceSnapshotsForWarrior) against re-inserting duplicate raid
+// history if a warrior is hidden and unhidden more than once.
+export function warriorHasRaidSnapshot(warriorId: number): boolean {
+  return (
+    db
+      .prepare(`SELECT 1 FROM price_snapshots WHERE warrior_id = ? AND source = 'raid' LIMIT 1`)
+      .get(warriorId) !== undefined
+  );
+}
+
 // Wipes every raid-sourced snapshot and replaces it with a freshly computed
 // set (see stock.ts's rebuildRaidPriceSnapshots) - used after a report is
 // deleted or the market is reset, when the raid-anchored price series needs

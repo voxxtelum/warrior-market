@@ -11,6 +11,7 @@ import {
   replaceRaidPriceSnapshots,
   setAnchorPrice,
   setRaidAnchorPrice,
+  warriorHasRaidSnapshot,
 } from "./db";
 
 export interface StockAbilityConfig {
@@ -491,6 +492,37 @@ export function rebuildRaidPriceSnapshots(): void {
     }
   }
   replaceRaidPriceSnapshots(entries);
+}
+
+// Backfills raid-derived price history for exactly one warrior - used when
+// an admin unhides a player who was auto-hidden on first sight (see
+// getOrCreateWarriorId), whose raid reports were therefore excluded from
+// every computeStock() run until now and so never got a price_snapshots row.
+// Deliberately NOT rebuildRaidPriceSnapshots(): that wipes and recomputes
+// EVERY warrior's raid history from pure fundamentals, discarding the
+// "compounded onto the live, demand/drift-adjusted price" values
+// snapshotPricesForReport normally writes - fine for a full market reset
+// (nothing live to preserve) but a real regression for a single unhide,
+// visibly disturbing every other warrior's "since last raid" figure to
+// backfill just one. This only ever inserts rows for the target warrior_id,
+// leaving everyone else's ledger untouched. A no-op if the warrior already
+// has raid history, so toggling hidden on/off more than once can't
+// duplicate rows.
+export function backfillRaidPriceSnapshotsForWarrior(playerName: string, server: string): void {
+  const warriorId = getOrCreateWarriorId(playerName, server);
+  if (warriorHasRaidSnapshot(warriorId)) return;
+  const playerStock = computeStock().find(
+    (p) => p.player_name === playerName && p.server === server,
+  );
+  if (!playerStock) return;
+  for (const point of playerStock.series) {
+    insertPriceSnapshot(warriorId, point.price, null, "raid", point.report_code, point.start_time);
+  }
+  const lastPoint = playerStock.series[playerStock.series.length - 1];
+  if (lastPoint) {
+    setAnchorPrice(warriorId, lastPoint.price);
+    setRaidAnchorPrice(warriorId, lastPoint.price);
+  }
 }
 
 // One-time migration for installs that already had raid history before this

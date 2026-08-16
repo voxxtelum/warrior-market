@@ -642,6 +642,7 @@ export interface WarriorVolumeRow {
   price: number | null;
   anchorPrice: number | null;
   raidAnchorPrice: number | null;
+  class: string | null;
 }
 
 export async function getWarriorVolumeOverview(): Promise<WarriorVolumeRow[]> {

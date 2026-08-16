@@ -110,7 +110,7 @@ export function CharactersTab() {
   const sortedRows = useMemo(() => {
     if (!rows) return [];
     return rows
-      .filter((r) => !r.hidden)
+      .filter((r) => !r.hidden && (r.class === null || r.class === 'Warrior'))
       .sort((a, b) => {
         const av = sortValue(a, sortKey);
         const bv = sortValue(b, sortKey);

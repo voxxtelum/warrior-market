@@ -1575,6 +1575,7 @@ export interface WarriorVolumeEntry {
   price: number | null;
   anchorPrice: number | null;
   raidAnchorPrice: number | null;
+  class: string | null;
 }
 
 // Per-warrior trade volume, for the admin Characters tab and the Price
@@ -1595,7 +1596,7 @@ export interface WarriorVolumeEntry {
 export function getWarriorVolumeOverview(): WarriorVolumeEntry[] {
   const rows = db
     .prepare(
-      `SELECT w.id AS warrior_id, w.player_name, w.server,
+      `SELECT w.id AS warrior_id, w.player_name, w.server, w.class,
               w.anchor_price, w.raid_anchor_price,
               COALESCE(SUM(t.total), 0) AS volume, COUNT(t.id) AS tradeCount,
               EXISTS(
@@ -1611,6 +1612,7 @@ export function getWarriorVolumeOverview(): WarriorVolumeEntry[] {
     warrior_id: number;
     player_name: string;
     server: string;
+    class: string | null;
     anchor_price: number | null;
     raid_anchor_price: number | null;
     volume: number;
@@ -1647,6 +1649,7 @@ export function getWarriorVolumeOverview(): WarriorVolumeEntry[] {
       price,
       anchorPrice: r.anchor_price,
       raidAnchorPrice: r.raid_anchor_price,
+      class: r.class,
     };
   });
 }

@@ -256,7 +256,7 @@ export function StockPage() {
     null,
   );
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
-  const [selectedRange, setSelectedRange] = useState<RangeKey>('All');
+  const [selectedRange, setSelectedRange] = useState<RangeKey>('1W');
   const [sortKey, setSortKey] = useState<SortKey>('price');
   const [sortDir, setSortDir] = useState<1 | -1>(-1);
   const [tradeModalTarget, setTradeModalTarget] = useState<{

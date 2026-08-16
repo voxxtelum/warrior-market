@@ -24,12 +24,25 @@ const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
 // younger than 3 days), there's no history yet - fall back to a single
 // current-NAV point, which Sparkline already renders as a plain dot (same
 // degenerate-case handling the Stock page's sparkline already relies on).
+//
+// A fund born inside the 3-day window has no snapshot from before its
+// first valuation tick - the tick that seeds pool_value can already land
+// far from seed_nav (constituents can carry backfilled price history), so
+// without an anchor the whole run-up from seed_nav is invisible and the
+// line looks flat even though the "All Time" delta shows real movement.
+// Prepend seed_nav as a synthetic genesis point in that case only - an
+// established fund's snapshots already span the window, and prepending
+// seed_nav there would swamp its real recent fluctuation with the
+// long-since-irrelevant gap back to its original seed.
 function serializeFundSummary(fund: FundRow) {
   const now = Date.now();
   const nav = getCurrentFundNav(fund);
   const navSevenDaysAgo = getFundNavAt(fund.id, now - SEVEN_DAYS_MS);
   const sparklineRows = getFundValueSnapshotsSince(fund.id, now - THREE_DAYS_MS);
-  const sparkline = sparklineRows.length > 0 ? sparklineRows.map((r) => r.nav) : [nav];
+  let sparkline = sparklineRows.length > 0 ? sparklineRows.map((r) => r.nav) : [nav];
+  if (fund.created_at > now - THREE_DAYS_MS) {
+    sparkline = [fund.seed_nav, ...sparkline];
+  }
   return {
     id: fund.id,
     name: fund.name,

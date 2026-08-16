@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { WarriorsLayout } from '../components/WarriorsLayout';
+import { ZonePicker } from '../components/ZonePicker';
 import { fmtDate } from '../format';
 import {
   getOverviewData,
@@ -201,22 +202,7 @@ export function OverviewPage() {
   return (
     <WarriorsLayout>
       <div className="card">
-        <form onSubmit={(e) => e.preventDefault()}>
-          <select
-            value={zone}
-            onChange={(e) => setZone(e.target.value)}
-            disabled={!zones || zones.length === 0}
-          >
-            {zones && zones.length === 0 && (
-              <option>No reports added yet</option>
-            )}
-            {zones?.map((z) => (
-              <option key={z} value={z}>
-                {z}
-              </option>
-            ))}
-          </select>
-        </form>
+        <ZonePicker zones={zones} value={zone} onChange={setZone} />
       </div>
 
       <div className="card">

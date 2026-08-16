@@ -3,6 +3,7 @@ import type { ChartDataset } from "chart.js/auto";
 import { WarriorsLayout } from "../components/WarriorsLayout";
 import { SortableTable } from "../components/SortableTable";
 import { LineChart } from "../components/LineChart";
+import { ZonePicker } from "../components/ZonePicker";
 import { paletteColor, withAlpha } from "../chartColors";
 import { fmtDate } from "../format";
 import { getCompareData, getZones, type CastCompareRow, type CompareData, type CompareReport } from "../api";
@@ -116,16 +117,7 @@ export function ComparePage() {
   return (
     <WarriorsLayout>
       <div className="card">
-        <form onSubmit={(e) => e.preventDefault()}>
-          <select value={zone} onChange={(e) => setZone(e.target.value)} disabled={!zones || zones.length === 0}>
-            {zones && zones.length === 0 && <option>No reports added yet</option>}
-            {zones?.map((z) => (
-              <option key={z} value={z}>
-                {z}
-              </option>
-            ))}
-          </select>
-        </form>
+        <ZonePicker zones={zones} value={zone} onChange={setZone} />
       </div>
 
       <div className="card">

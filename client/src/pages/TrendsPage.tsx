@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { WarriorsLayout } from "../components/WarriorsLayout";
 import { StackCell } from "../components/StackCell";
+import { ZonePicker } from "../components/ZonePicker";
 import { getCompareData, getZones, type CompareData, type CompareReport } from "../api";
 
 const NUM_ABILITY_COLUMNS = 4;
@@ -90,16 +91,7 @@ export function TrendsPage() {
   return (
     <WarriorsLayout>
       <div className="card">
-        <form onSubmit={(e) => e.preventDefault()}>
-          <select value={zone} onChange={(e) => setZone(e.target.value)} disabled={!zones || zones.length === 0}>
-            {zones && zones.length === 0 && <option>No reports added yet</option>}
-            {zones?.map((z) => (
-              <option key={z} value={z}>
-                {z}
-              </option>
-            ))}
-          </select>
-        </form>
+        <ZonePicker zones={zones} value={zone} onChange={setZone} />
         <div className="trends-ability-pickers">
           {abilitySelections.map((selectedId, i) => (
             <label key={i}>

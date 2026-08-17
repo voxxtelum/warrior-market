@@ -72,7 +72,8 @@ const RAID_SCORING_FIELDS: ScalarField[] = [
 const DRIFT_FIELDS: ScalarField[] = [
   { key: "driftIntervalMs", label: "Drift interval (ms)", step: "60000", description: "How often idle price drift ticks between raids - takes effect on the next tick, no restart needed" },
   { key: "fundValuationIntervalMs", label: "Fund valuation interval (ms)", step: "60000", description: "How often fund NAVs recompute from their constituent warriors - takes effect on the next tick, no restart needed" },
-  { key: "driftMaxPct", label: "Drift max %", step: "0.001", description: "Largest fraction a single normal drift tick can move a price, in either direction" },
+  { key: "driftMaxPct", label: "Drift max %", step: "0.001", description: "Largest fraction a single normal drift tick can move a price, in either direction - the hard cap on the total move (reversion + gravity + noise combined)" },
+  { key: "driftNoisePct", label: "Drift noise %", step: "0.001", description: "Amplitude of just the random component of a normal drift tick, independent of the overall cap above - set lower than Drift max % to make idle price action calmer without limiting how far reversion/gravity can move things when a real gap exists" },
   { key: "driftReversionStrength", label: "Drift reversion strength", step: "0.05", description: "How strongly drift pulls a price back toward its trading anchor (0 = no pull, 1 = fully anchored)" },
   { key: "demandAnchorDecayPct", label: "Demand anchor decay %", step: "0.01", description: "Fraction of the gap between a warrior's trading anchor and their raid anchor that closes every drift tick - how fast a demand-driven pump fades without sustained buying" },
   { key: "marketGravityStrength", label: "Market gravity strength", step: "0.01", description: "How strongly every price is pulled toward the current market-wide average each drift tick - keeps the whole market from drifting up (or down) together" },

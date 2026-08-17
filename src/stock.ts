@@ -2,6 +2,7 @@ import {
   getAllCasts,
   getAllDamage,
   getAllDamageTaken,
+  getAnchorPrice,
   getLatestPrice,
   getOrCreateWarriorId,
   getPriceSnapshotCount,
@@ -49,6 +50,7 @@ export interface StockConfig {
   driftIntervalMs: number;
   fundValuationIntervalMs: number;
   driftMaxPct: number;
+  driftNoisePct: number;
   driftReversionStrength: number;
   demandMaxPctPerTrade: number;
   demandLiquidityDenominator: number;
@@ -124,6 +126,12 @@ export function loadStockConfig(): StockConfig {
     driftIntervalMs: parsed.driftIntervalMs ?? 60 * 60 * 1000,
     fundValuationIntervalMs: parsed.fundValuationIntervalMs ?? 60 * 60 * 1000,
     driftMaxPct: parsed.driftMaxPct ?? 0.005,
+    // Split out of driftMaxPct, which used to double as both the noise
+    // amplitude and the overall tick cap - falls back to whatever
+    // driftMaxPct already is (not the hardcoded default below it) so an
+    // existing install's noise behavior is unchanged until an admin
+    // deliberately tunes them apart.
+    driftNoisePct: parsed.driftNoisePct ?? parsed.driftMaxPct ?? 0.005,
     driftReversionStrength: parsed.driftReversionStrength ?? 0.3,
     demandMaxPctPerTrade: parsed.demandMaxPctPerTrade ?? 0.015,
     demandLiquidityDenominator: parsed.demandLiquidityDenominator ?? 50000,
@@ -434,25 +442,32 @@ export function snapshotPricesForReport(reportCode: string, createdAt: number = 
     // current latest row for this warrior really is the row immediately
     // before this one.
     const previousPrice = getLatestPrice(warriorId);
-    // Apply this raid's score to the LIVE price (wherever demand/drift left
-    // it), not to computeStock()'s own independent fundamentals series - a
-    // raid resolves the bet players made on the live price, rather than
-    // correcting it to a value trading pressure never touched. Falls back
-    // to point.price (computeStock()'s own first-ever value, which is just
-    // startingPrice compounded once) only when there's no live price yet -
-    // i.e. this warrior's very first price ever.
     const perPoint =
       point.report_score >= 0 ? stockConfig.pricePerScorePointUp : stockConfig.pricePerScorePointDown;
-    const newPrice =
-      previousPrice !== null ? Math.max(MIN_PRICE, previousPrice + perPoint * point.report_score) : point.price;
-    const delta = previousPrice !== null ? newPrice - previousPrice : null;
-    insertPriceSnapshot(warriorId, newPrice, delta, "raid", reportCode, createdAt);
-    // Both anchors now converge to the same freshly-resolved price - there's
-    // no more "true target vs. blended" distinction. Demand/drift can pull
-    // anchor_price away from raid_anchor_price again between raids exactly
-    // as before; decay keeps pulling it back toward THIS raid's price.
-    setAnchorPrice(warriorId, newPrice);
-    setRaidAnchorPrice(warriorId, newPrice);
+
+    if (previousPrice === null) {
+      // This warrior's very first price ever - nothing else will seed a
+      // live price for them, so this one row has to do double duty: it's
+      // both the live price and the anchors' starting point.
+      insertPriceSnapshot(warriorId, point.price, null, "raid", reportCode, createdAt);
+      setAnchorPrice(warriorId, point.price);
+      setRaidAnchorPrice(warriorId, point.price);
+      continue;
+    }
+
+    // Every raid after the first applies its score to the anchor, not the
+    // live price - a raid resolves the market's fundamental value forward,
+    // but leaves whatever price trading/drift actually settled on alone.
+    // Idle drift's reversion component is what pulls the live price toward
+    // this new anchor afterward (see drift.ts). The resulting row is tagged
+    // "raid_anchor" (not "raid") specifically so getLatestPrice() can
+    // exclude it - it's an audit record of the anchor's movement, not a new
+    // live price.
+    const currentAnchor = getAnchorPrice(warriorId) ?? previousPrice;
+    const newAnchor = Math.max(MIN_PRICE, currentAnchor + perPoint * point.report_score);
+    insertPriceSnapshot(warriorId, newAnchor, newAnchor - currentAnchor, "raid_anchor", reportCode, createdAt);
+    setAnchorPrice(warriorId, newAnchor);
+    setRaidAnchorPrice(warriorId, newAnchor);
   }
 }
 

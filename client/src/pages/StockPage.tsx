@@ -77,14 +77,12 @@ interface LeaderboardRow {
   // on raid ingest - kept separate for the "since last raid" metrics.
   currentPrice: number;
   // Baseline for the "since last raid" figure shown against currentPrice -
-  // both come from the same frozen ledger (price_snapshots), unlike `price`
-  // below (computeStock()'s live-recomputed value, which can drift far from
-  // the ledger once scoring config has changed since). Usually the most
-  // recent raid's frozen price, EXCEPT right when that raid just landed and
-  // no drift tick has happened since - in that instant currentPrice IS that
-  // raid's price, so this instead falls back to the price immediately
-  // before the raid (see sinceRaidBasePriceByPlayer), so the delta reflects
-  // what the raid itself changed rather than reading a false 0.
+  // the warrior's raid_anchor_price, unlike `price` below (computeStock()'s
+  // live-recomputed value, which can drift far from the ledger once scoring
+  // config has changed since). A raid only ever moves the anchor now (not
+  // currentPrice directly, except a warrior's very first raid), so this and
+  // currentPrice naturally diverge as soon as drift/trading moves the live
+  // price afterward - no special-casing needed for a "just landed" raid.
   sinceRaidBasePrice: number | null;
   price: number;
   raidCount: number;
@@ -120,26 +118,6 @@ function buildLeaderboard(
 
 function changeValue(row: LeaderboardRow): number | null {
   return row.prevPrice !== null ? row.price - row.prevPrice : null;
-}
-
-// See sinceRaidBasePriceByPlayer's comment for why this isn't simply "the
-// most recent raid entry's price."
-function sinceRaidBasePrice(series: PlayerPriceHistory['series']): number | null {
-  const last = series[series.length - 1];
-  if (!last) return null;
-  if (last.source === 'raid') {
-    if (last.delta !== null) return last.price - last.delta;
-    // Bulk-rebuilt raid row (report delete / market reset) has no stored
-    // delta - fall back to the raid before it, if any.
-    for (let i = series.length - 2; i >= 0; i--) {
-      if (series[i].source === 'raid') return series[i].price;
-    }
-    return null;
-  }
-  for (let i = series.length - 1; i >= 0; i--) {
-    if (series[i].source === 'raid') return series[i].price;
-  }
-  return null;
 }
 
 // Flat dollar-average per-raid price change, derived purely from the
@@ -302,20 +280,19 @@ export function StockPage() {
     return map;
   }, [priceHistory]);
 
-  // Baseline for the "since last raid" figure per player - normally the
-  // frozen ledger's most recent raid-sourced snapshot, EXCEPT when that raid
-  // is also the ledger's newest entry overall (i.e. it just landed and no
-  // drift tick has run since), where using its own price as the baseline
-  // would always compare a value against itself and read a false 0. In that
-  // case, reconstruct the price from right before the raid via its stored
-  // `delta` instead, so the figure shows what the raid actually changed.
+  // Baseline for the "since last raid" figure per player - the server's
+  // raid_anchor_price, read directly rather than scanning the ledger for a
+  // 'raid'-sourced row. A raid (after a warrior's first) no longer writes a
+  // live-price row at all, so there's nothing to scan for beyond the very
+  // first raid - raid_anchor_price is continuously "what the most recent
+  // raid set", with no reconstruction needed (see stockRouter's /history
+  // handler).
   const sinceRaidBasePriceByPlayer = useMemo(() => {
     const map = new Map<string, number>();
     if (priceHistory) {
       for (const p of priceHistory) {
         const key = `${p.player_name}::${p.server}`;
-        const base = sinceRaidBasePrice(p.series);
-        if (base !== null) map.set(key, base);
+        if (p.lastRaidPrice !== null) map.set(key, p.lastRaidPrice);
       }
     }
     return map;

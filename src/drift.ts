@@ -31,7 +31,8 @@ const SWING_COSMETIC_FUZZ_MAX = 0.05;
 //  - then either a small step (reversion toward that anchor, a pull toward
 //    the current market-wide average price via marketGravityStrength so
 //    the whole market can't drift up or down together forever, and random
-//    noise, summed and capped at driftMaxPct - a percentage move), OR,
+//    noise sized by driftNoisePct - summed and capped at driftMaxPct, a
+//    percentage move), OR,
 //    rarely (swingChancePct), one much larger "overnight swing" in a random
 //    direction: a flat dollar amount (swingUpMagnitude/swingDownMagnitude,
 //    swingMagnitudeFuzz) rather than a percentage, so a swing hits a cheap
@@ -113,10 +114,11 @@ export function runDriftTick() {
 
 // The normal (non-swing) per-tick move: reversion toward the warrior's own
 // (possibly demand-decayed) anchor, a pull toward the current market-wide
-// average, and random noise - summed and capped at driftMaxPct.
+// average, and random noise (sized by driftNoisePct, independent of the
+// overall cap) - summed and capped at driftMaxPct.
 function normalTickPct(gapPct: number, currentPrice: number, marketAvg: number | null, config: StockConfig): number {
   const reversionComponent = gapPct * config.driftReversionStrength;
-  const randomComponent = (Math.random() * 2 - 1) * config.driftMaxPct;
+  const randomComponent = (Math.random() * 2 - 1) * config.driftNoisePct;
   const gravityComponent =
     marketAvg !== null ? ((marketAvg - currentPrice) / currentPrice) * config.marketGravityStrength : 0;
   return Math.max(

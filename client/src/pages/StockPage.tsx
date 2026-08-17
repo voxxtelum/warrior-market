@@ -322,20 +322,6 @@ export function StockPage() {
     return map;
   }, [priceHistory]);
 
-  // The most recent price_snapshots row's own stored delta per player - how
-  // much just the last event (whatever it was) moved the price, read
-  // straight off the ledger rather than computed against any baseline.
-  const lastTickDeltaByPlayer = useMemo(() => {
-    const map = new Map<string, number | null>();
-    if (priceHistory) {
-      for (const p of priceHistory) {
-        const last = p.series[p.series.length - 1];
-        if (last) map.set(`${p.player_name}::${p.server}`, last.delta);
-      }
-    }
-    return map;
-  }, [priceHistory]);
-
   const leaderboard = useMemo(
     () =>
       playersStock

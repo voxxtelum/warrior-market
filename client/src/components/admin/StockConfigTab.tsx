@@ -1,6 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getStockConfig, saveStockConfig, type StockAbilityConfig, type StockConfig, type TankTopNZoneConfig } from "../../api";
-import { exponentialConvergence, fmtConvergenceDuration, reversionConvergence } from "../../convergence";
+import {
+  getPriceDistribution,
+  getStockConfig,
+  saveStockConfig,
+  type StockAbilityConfig,
+  type StockConfig,
+  type TankTopNZoneConfig,
+} from "../../api";
+import {
+  exponentialConvergence,
+  fmtConvergenceDuration,
+  percentileValue,
+  reversionConvergence,
+  reversionStrengthForRaidCount,
+  sideACurveMultipliers,
+} from "../../convergence";
 import { slugifyHeading } from "../../docsMarkdown";
 
 const STATUS_VISIBLE_MS = 3000;
@@ -52,8 +66,12 @@ function tankTopNByZoneEqual(a: TankTopNZoneConfig[], b: TankTopNZoneConfig[]): 
 const RAID_SCORING_FIELDS: ScalarField[] = [
   { key: "damageWeight", label: "Damage weight", step: "0.05", description: "How much raw damage output affects the price" },
   { key: "castWeight", label: "Cast weight", step: "0.05", description: "How much tracked ability cast counts affect price" },
-  { key: "pricePerScorePointUp", label: "Price per score point (up)", step: "0.5", description: "Flat dollar amount the price moves per 1.0 of a positive report score, regardless of current price" },
-  { key: "pricePerScorePointDown", label: "Price per score point (down)", step: "0.5", description: "Flat dollar amount the price moves per 1.0 of a negative report score, regardless of current price" },
+  { key: "pricePerScorePointUp", label: "Price per score point (up)", step: "0.5", description: "Flat dollar amount the price moves per 1.0 of a positive report score, regardless of current price - scaled by the price curve below based on current price percentile" },
+  { key: "pricePerScorePointDown", label: "Price per score point (down)", step: "0.5", description: "Flat dollar amount the price moves per 1.0 of a negative report score, regardless of current price - scaled by the price curve below based on current price percentile" },
+  { key: "priceCurveCenterPercentile", label: "Price curve center percentile", step: "0.01", description: "Price percentile (0-1) where the gain/loss multiplier is exactly 1.0 (unchanged from the flat rate above). Below it, gains are boosted and losses cushioned; above it, the reverse - see the preview table below" },
+  { key: "priceCurveSteepness", label: "Price curve steepness", step: "1", description: "How sharply the multiplier transitions across the center percentile - higher means only warriors very close to the top/bottom of the field are affected" },
+  { key: "priceCurveGainAmplitude", label: "Price curve gain amplitude", step: "0.05", description: "Max amount gains are suppressed above the center percentile (0.6 = as low as 0.4x at the extreme)" },
+  { key: "priceCurveLossAmplitude", label: "Price curve loss amplitude", step: "0.05", description: "Max amount losses are amplified above the center percentile (0.9 = as high as 1.9x at the extreme)" },
   { key: "startingPrice", label: "Starting price", step: "1", description: "Starting price for a player with no history" },
   { key: "damageTrendWeight", label: "Damage trend weight", step: "0.05", description: "Weight of personal DPS trend (vs. own history) within the damage score" },
   { key: "damagePeerWeight", label: "Damage peer weight", step: "0.05", description: "Weight of peer DPS ranking (vs. bucket-mates this raid) within the damage score" },
@@ -74,7 +92,9 @@ const DRIFT_FIELDS: ScalarField[] = [
   { key: "fundValuationIntervalMs", label: "Fund valuation interval (ms)", step: "60000", description: "How often fund NAVs recompute from their constituent warriors - takes effect on the next tick, no restart needed" },
   { key: "driftMaxPct", label: "Drift max %", step: "0.001", description: "Largest fraction a single normal drift tick can move a price, in either direction - the hard cap on the total move (reversion + gravity + noise combined)" },
   { key: "driftNoisePct", label: "Drift noise %", step: "0.001", description: "Amplitude of just the random component of a normal drift tick, independent of the overall cap above - set lower than Drift max % to make idle price action calmer without limiting how far reversion/gravity can move things when a real gap exists" },
-  { key: "driftReversionStrength", label: "Drift reversion strength", step: "0.05", description: "How strongly drift pulls a price back toward its trading anchor (0 = no pull, 1 = fully anchored)" },
+  { key: "reversionNewPlayerHours", label: "Reversion: new player hours", step: "1", description: "Hours for a brand-new warrior's (0 raids) price to close 90% of its gap to the trading anchor" },
+  { key: "reversionVeteranHours", label: "Reversion: veteran hours", step: "1", description: "Hours for a fully-settled warrior's price to close 90% of its gap to the trading anchor" },
+  { key: "reversionSettleRaids", label: "Reversion: settle raids", step: "1", description: "Raid count scale of the transition from the new-player speed above to the veteran speed - roughly how many raids it takes to feel 'established'" },
   { key: "demandAnchorDecayPct", label: "Demand anchor decay %", step: "0.01", description: "Fraction of the gap between a warrior's trading anchor and their raid anchor that closes every drift tick - how fast a demand-driven pump fades without sustained buying" },
   { key: "marketGravityStrength", label: "Market gravity strength", step: "0.01", description: "How strongly every price is pulled toward the current market-wide average each drift tick - keeps the whole market from drifting up (or down) together" },
   { key: "swingChancePct", label: "Swing chance %", step: "0.005", description: "Per-warrior, per-tick odds of a large overnight swing that bypasses the normal drift cap. 0 disables it" },
@@ -103,6 +123,12 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ text: string; kind: "success" | "error" } | null>(null);
   const [statusFading, setStatusFading] = useState(false);
+  // Sorted, ascending - the live field's current tradable prices, fetched
+  // once on mount. Powers the Side A curve preview below; deliberately not
+  // re-fetched on every edit, since it's what "current prices" means -
+  // tweaking the curve shouldn't also move the distribution it's being
+  // compared against.
+  const [priceDistribution, setPriceDistribution] = useState<number[] | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -116,6 +142,9 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
         setSavedAbilities(loadedAbilities.map((a) => ({ ...a })));
         setSavedTankTopNByZone(loadedTankTopNByZone.map((z) => ({ ...z })));
       })
+      .catch(() => {});
+    getPriceDistribution()
+      .then(setPriceDistribution)
       .catch(() => {});
   }, []);
 
@@ -150,9 +179,56 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
     return {
       demandDecay: exponentialConvergence(scalars.demandAnchorDecayPct, scalars.driftIntervalMs),
       marketGravity: exponentialConvergence(scalars.marketGravityStrength, scalars.driftIntervalMs),
-      driftReversion: reversionConvergence(scalars.driftReversionStrength, scalars.driftMaxPct, scalars.driftIntervalMs),
     };
   }, [scalars]);
+
+  // Reversion strength is no longer one flat number - it's derived from
+  // raid count (see reversionStrengthForRaidCount) - so instead of a
+  // single convergence row, show a few illustrative points along that
+  // curve: a brand-new warrior, one right at the "settle raids" scale, and
+  // a comfortably veteran one.
+  const reversionBreakpoints = useMemo(() => {
+    if (!scalars) return null;
+    const points = [
+      { label: "New player (0 raids)", raidCount: 0 },
+      { label: `Settling (${scalars.reversionSettleRaids} raids)`, raidCount: scalars.reversionSettleRaids },
+      { label: "Veteran (settled)", raidCount: scalars.reversionSettleRaids * 4 },
+    ];
+    return points.map(({ label, raidCount }) => {
+      const strength = reversionStrengthForRaidCount(
+        raidCount,
+        scalars.reversionNewPlayerHours,
+        scalars.reversionVeteranHours,
+        scalars.reversionSettleRaids,
+        scalars.driftIntervalMs,
+      );
+      return { label, estimate: reversionConvergence(strength, scalars.driftMaxPct, scalars.driftIntervalMs) };
+    });
+  }, [scalars]);
+
+  // Side A curve preview: for a handful of percentile breakpoints (plus
+  // wherever the admin has the center currently set), show the resulting
+  // gain/loss multiplier and what price that percentile actually
+  // corresponds to in the live field today - so the curve can be
+  // sanity-checked and re-tuned without needing to know which specific
+  // warrior sits where.
+  const sideACurvePreview = useMemo(() => {
+    if (!scalars) return null;
+    const center = Math.min(1, Math.max(0, scalars.priceCurveCenterPercentile));
+    const breakpoints = Array.from(new Set([0, 0.1, 0.25, 0.5, 0.75, center, 0.9, 0.95, 1])).sort((a, b) => a - b);
+    return breakpoints.map((percentile) => ({
+      percentile,
+      isCenter: percentile === center,
+      price: priceDistribution ? percentileValue(priceDistribution, percentile) : null,
+      ...sideACurveMultipliers(
+        percentile,
+        scalars.priceCurveCenterPercentile,
+        scalars.priceCurveSteepness,
+        scalars.priceCurveGainAmplitude,
+        scalars.priceCurveLossAmplitude,
+      ),
+    }));
+  }, [scalars, priceDistribution]);
 
   function updateAbility<K extends keyof StockAbilityConfig>(index: number, key: K, value: StockAbilityConfig[K]) {
     setAbilities((prev) => prev?.map((a, i) => (i === index ? { ...a, [key]: value } : a)) ?? null);
@@ -326,6 +402,46 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
         RAID_SCORING_FIELDS,
       )}
 
+      {sideACurvePreview && (
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>Price curve preview</h2>
+          <p className="subtitle" style={{ marginBottom: "1rem" }}>
+            How the gain/loss multiplier above varies by current price percentile, computed live from the fields -
+            not who's at each percentile, just the shape of the curve and what it's worth in dollars against the
+            field's real prices today. Updates instantly as you edit a field, before saving.
+          </p>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Percentile</th>
+                  <th>Price today</th>
+                  <th>Gain multiplier</th>
+                  <th>Loss multiplier</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sideACurvePreview.map((row) => (
+                  <tr key={row.percentile}>
+                    <td>
+                      {(row.percentile * 100).toFixed(0)}%{row.isCenter ? " (center)" : ""}
+                    </td>
+                    <td>{row.price !== null ? `$${row.price.toFixed(0)}` : "—"}</td>
+                    <td>{row.gain.toFixed(2)}x</td>
+                    <td>{row.loss.toFixed(2)}x</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="subtitle" style={{ marginBottom: 0, marginTop: "1rem" }}>
+            "Price today" is interpolated from the live field's current tradable prices, fetched once when this page
+            loaded - it won't move as you edit the curve fields, since it's what the curve is being compared against,
+            not a result of it.
+          </p>
+        </div>
+      )}
+
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Tank identification by zone</h2>
         <p className="subtitle" style={{ marginBottom: "1rem" }}>
@@ -388,7 +504,7 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
         DRIFT_FIELDS,
       )}
 
-      {convergence && (
+      {convergence && reversionBreakpoints && (
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Convergence estimates</h2>
           <p className="subtitle" style={{ marginBottom: "1rem" }}>
@@ -419,21 +535,25 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
                   <td>{fmtConvergenceDuration(convergence.marketGravity.halfLifeMs)}</td>
                   <td>{fmtConvergenceDuration(convergence.marketGravity.ninetyPctMs)}</td>
                 </tr>
-                <tr>
-                  <td>Drift reversion (from an example 20% gap)</td>
-                  <td>this warrior's trading anchor</td>
-                  <td>{fmtConvergenceDuration(convergence.driftReversion.halfLifeMs)}</td>
-                  <td>{fmtConvergenceDuration(convergence.driftReversion.ninetyPctMs)}</td>
-                </tr>
+                {reversionBreakpoints.map((bp) => (
+                  <tr key={bp.label}>
+                    <td>Drift reversion - {bp.label}</td>
+                    <td>this warrior's trading anchor</td>
+                    <td>{fmtConvergenceDuration(bp.estimate.halfLifeMs)}</td>
+                    <td>{fmtConvergenceDuration(bp.estimate.ninetyPctMs)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
           <p className="subtitle" style={{ marginBottom: 0, marginTop: "1rem" }}>
             Demand anchor decay and market gravity are exact - they're never capped by "Drift max %". Drift reversion
-            is capped by it for any gap bigger than "Drift max %" / "Drift reversion strength", so it has no clean
-            percentage-based curve like the other two - the row above walks it tick-by-tick starting from a
-            representative 20% gap instead. None of these account for random noise or swing events, which add
-            variance around the trend but don't change it.
+            is capped by it for any gap bigger than "Drift max %" / that raid-count's derived reversion strength, so
+            it has no clean percentage-based curve like the other two - each row above walks it tick-by-tick starting
+            from a representative 20% gap instead, at the reversion speed for that many lifetime raids (see the
+            reversion fields above - reversion speed is no longer one flat number, it depends on how many raids a
+            warrior has been in). None of these account for random noise or swing events, which add variance around
+            the trend but don't change it.
           </p>
         </div>
       )}

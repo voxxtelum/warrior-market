@@ -59,6 +59,15 @@ new anchor = current trading anchor + (price per score point × report score)
 
 (`price per score point` is `pricePerScorePointUp` when report score is positive, `pricePerScorePointDown` when it's negative.) The result is floored at a small positive minimum so a very bad night can never drive the anchor to zero or below.
 
+Before that flat rate is applied, it's scaled by a **price curve** based on the warrior's current price percentile against the rest of the field: below `priceCurveCenterPercentile`, gains are boosted and losses are cushioned; above it, gains taper off and losses hit harder. Nobody's price is ever pulled toward the field by this — it only changes how big a raid's swing is, never its sign, so a warrior well ahead of the pack still only ever gains on a good night, just less than a warrior catching up would for the same performance. A warrior's very first-ever raid is never gated (there's no percentile to compare against before they have a price).
+
+```
+percentile          = this warrior's current price, ranked against every warrior's current price
+gain multiplier      = 1 − priceCurveGainAmplitude × tanh(priceCurveSteepness × (percentile − priceCurveCenterPercentile))
+loss multiplier      = 1 + priceCurveLossAmplitude × tanh(priceCurveSteepness × (percentile − priceCurveCenterPercentile))
+price per score point = (pricePerScorePointUp × gain multiplier) if report score ≥ 0, else (pricePerScorePointDown × loss multiplier)
+```
+
 *Both* anchors (trading anchor and raid anchor) reset to this same new value. The live price itself is left exactly where it was — a raid resolves the *fundamental* value forward, and idle drift's reversion step (Timeline 2) is what pulls the actual tradable price toward it over the following ticks, the same way it already handles a demand-driven gap. This is the one moment `price per score point` and the trading anchor interact directly; every other timeline in this doc only ever moves the live price relative to itself.
 
 A raid still writes a permanent, audit-only record of this move to the price history ledger (tagged `raid_anchor`), separate from the live price. The one exception is a warrior's very first-ever raid: since nothing else exists yet to give them a starting price, that one raid *does* set the live price directly (using `report score` applied to `startingPrice`), and it's tagged plain `raid` in the ledger.
@@ -71,6 +80,10 @@ A raid still writes a permanent, audit-only record of this move to the price his
 | `castWeight` | 0.4 | Cast score's share of the report score. | Playing your rotation "correctly" matters more than raw damage numbers. |
 | `pricePerScorePointUp` | 8 | Flat dollars a positive report score of 1.0 moves the price, regardless of current price. | Good nights swing prices harder in dollar terms, independent of tenure. |
 | `pricePerScorePointDown` | 8 | Flat dollars a negative report score of 1.0 moves the price, regardless of current price. | Bad nights swing prices harder in dollar terms, independent of tenure. |
+| `priceCurveCenterPercentile` | 0.85 | Price percentile where the gain/loss multiplier is exactly 1.0 (the flat rate above, unmodified). | The "unaffected" zone covers more of the field - only warriors closer to the very top get gated. |
+| `priceCurveSteepness` | 12 | How sharply the multiplier transitions across the center percentile. | Only warriors very close to the top/bottom of the field are affected; everyone else sits at (or near) the curve's extremes. |
+| `priceCurveGainAmplitude` | 0.6 | Max amount gains are suppressed above the center percentile. | A warrior at the very top earns even less per point of positive report score. |
+| `priceCurveLossAmplitude` | 0.9 | Max amount losses are amplified above the center percentile. | A warrior at the very top loses even more per point of negative report score. |
 | `startingPrice` | 100 | Where a brand-new warrior's price starts. | New warriors start higher on the board before they've proven anything. |
 | `damageTrendWeight` | 0.5 | Trend score's share of the damage score. | "Are you personally improving" matters more than "are you beating your raid-mates tonight." |
 | `damagePeerWeight` | 0.5 | Peer score's share of the damage score. | "Are you beating your raid-mates tonight" matters more than personal improvement. |
@@ -102,7 +115,7 @@ There's a safety valve on this, though: if a warrior already got knocked well of
 
 **Step 3 — if no swing happened (or one got blocked by the cooldown), do the normal small move instead**, made of three ingredients added together and capped at `driftMaxPct` total:
 
-- **Reversion** — a pull back toward the (possibly just-decayed) trading anchor, strength set by `driftReversionStrength`.
+- **Reversion** — a pull back toward the (possibly just-decayed) trading anchor, at a speed based on this warrior's lifetime raid count rather than one flat rate: a brand-new warrior's price closes 90% of its gap within `reversionNewPlayerHours` (a "hot IPO" feel), while a fully-settled warrior takes `reversionVeteranHours` - the transition between the two happens over roughly `reversionSettleRaids` raids. This is independent of the price curve above: a raid anchor can jump by a large or small amount depending on the warrior's price percentile, and separately, however big that jump was, it lands quickly or slowly depending on how many raids the warrior has under their belt.
 - **Market gravity** — a pull toward the current average price across every tradeable warrior, strength set by `marketGravityStrength`. This is what stops the *entire market* from drifting up (or down) together forever — an individual warrior can still climb relative to everyone else, but the whole roster can't just inflate in lockstep from drift alone.
 - **Random noise** — a small random nudge in either direction, sized independently by `driftNoisePct` (not by `driftMaxPct` — see the config table below).
 
@@ -119,7 +132,9 @@ new price   = current price ± swing magnitude              [swing tick, flat do
 | `driftIntervalMs` | 3,600,000 (1 hour) | How often a tick happens, in milliseconds. | Ticks happen *less* often — this is a time interval, so a bigger number means a slower market. Applies from the very next tick, no restart needed. |
 | `driftMaxPct` | 0.5% | The hard cap on a single *normal* tick's **total** move — reversion + gravity + noise combined (swings ignore this). | Reversion/gravity have more headroom to move a price in one tick when a real gap exists, on top of whatever `driftNoisePct` already uses. |
 | `driftNoisePct` | 0.5% | The size of just the random noise ingredient, independent of the overall cap above. | Idle price action gets choppier on quiet nights, without changing how far a real reversion/gravity pull can move a price. |
-| `driftReversionStrength` | 0.3 | How hard a normal tick pulls back toward the trading anchor. | Price snaps back toward its anchor more aggressively each tick (1 = almost fully anchored every tick; 0 = no pull at all, pure random walk). |
+| `reversionNewPlayerHours` | 12 | Hours for a brand-new warrior's (0 raids) price to close 90% of its gap to the trading anchor. | New warriors' prices land more slowly after a raid, less of a "hot IPO" feel. |
+| `reversionVeteranHours` | 48 | Hours for a fully-settled warrior's price to close 90% of its gap to the trading anchor. | Established warriors' anchor jumps take even longer to fully land - a bigger brake on how fast a runaway price is actually realized. |
+| `reversionSettleRaids` | 15 | Raid-count scale of the transition from the new-player speed to the veteran speed. | Takes more raids before a warrior's reversion speed feels "established" - the fast new-player catch-up lasts longer. |
 | `demandAnchorDecayPct` | 0.05 (5%) | Share of the gap between the trading anchor and the raid anchor that closes every tick. | Demand-driven pumps/dumps fade faster — trading pressure has to stay sustained to keep sticking. |
 | `marketGravityStrength` | 0.03 (3%) | Pull toward the market-wide average price each tick. | Every warrior's price stays closer to the pack — harder for the whole market, or one warrior, to drift far from the group. |
 | `swingChancePct` | 1% | Chance, per warrior per tick, of a big overnight swing instead of a normal move. | Swings happen more often (0 disables them entirely). |

@@ -3,6 +3,7 @@ import {
   getLastDriftAt,
   getLatestPrice,
   getRaidAnchorPrice,
+  getWarriorRaidCounts,
   insertPriceSnapshot,
   listWarriorsWithRaidSnapshot,
   refreshPortfolioSnapshots,
@@ -28,7 +29,9 @@ const SWING_COSMETIC_FUZZ_MAX = 0.05;
 //    executeTrade() in db.ts, which moves anchor_price but never
 //    raid_anchor_price) fades without sustained buying/selling instead of
 //    sticking forever;
-//  - then either a small step (reversion toward that anchor, a pull toward
+//  - then either a small step (reversion toward that anchor, at a speed
+//    derived from this warrior's lifetime raid count rather than a single
+//    flat rate - see reversionStrengthForRaidCount - plus a pull toward
 //    the current market-wide average price via marketGravityStrength so
 //    the whole market can't drift up or down together forever, and random
 //    noise sized by driftNoisePct - summed and capped at driftMaxPct, a
@@ -58,11 +61,21 @@ export function runDriftTick() {
   // order-dependent on which warrior happens to be processed first.
   const prices = warriors.map((w) => getLatestPrice(w.id)).filter((p): p is number => p !== null);
   const marketAvg = prices.length > 0 ? prices.reduce((sum, p) => sum + p, 0) / prices.length : null;
+  // Batched once per tick, same reasoning as `prices` above - lifetime
+  // raid count only changes when a new raid is ingested, never mid-tick.
+  const raidCounts = getWarriorRaidCounts();
 
   for (const warrior of warriors) {
     const currentPrice = getLatestPrice(warrior.id);
     let anchorPrice = getAnchorPrice(warrior.id);
     if (currentPrice === null || anchorPrice === null || anchorPrice <= 0) continue;
+
+    // Missing from the map would mean this warrior has no raid rows at
+    // all, which can't happen here - listWarriorsWithRaidSnapshot() only
+    // returns warriors with at least one - but default to 1 (their first
+    // raid) rather than 0 as a defensive fallback, matching what
+    // getWarriorRaidCounts()'s minimum real value would be anyway.
+    const reversionStrength = reversionStrengthForRaidCount(raidCounts.get(warrior.id) ?? 1, config);
 
     const raidAnchorPrice = getRaidAnchorPrice(warrior.id);
     if (raidAnchorPrice !== null && raidAnchorPrice > 0) {
@@ -99,10 +112,10 @@ export function runDriftTick() {
         delta = direction === "down" ? -magnitude : magnitude;
         source = "swing";
       } else {
-        delta = currentPrice * normalTickPct(gapPct, currentPrice, marketAvg, config);
+        delta = currentPrice * normalTickPct(gapPct, currentPrice, marketAvg, config, reversionStrength);
       }
     } else {
-      delta = currentPrice * normalTickPct(gapPct, currentPrice, marketAvg, config);
+      delta = currentPrice * normalTickPct(gapPct, currentPrice, marketAvg, config, reversionStrength);
     }
 
     const newPrice = Math.max(MIN_PRICE, currentPrice + delta);
@@ -113,11 +126,18 @@ export function runDriftTick() {
 }
 
 // The normal (non-swing) per-tick move: reversion toward the warrior's own
-// (possibly demand-decayed) anchor, a pull toward the current market-wide
-// average, and random noise (sized by driftNoisePct, independent of the
-// overall cap) - summed and capped at driftMaxPct.
-function normalTickPct(gapPct: number, currentPrice: number, marketAvg: number | null, config: StockConfig): number {
-  const reversionComponent = gapPct * config.driftReversionStrength;
+// (possibly demand-decayed) anchor at this warrior's own reversion speed
+// (see reversionStrengthForRaidCount), a pull toward the current
+// market-wide average, and random noise (sized by driftNoisePct,
+// independent of the overall cap) - summed and capped at driftMaxPct.
+function normalTickPct(
+  gapPct: number,
+  currentPrice: number,
+  marketAvg: number | null,
+  config: StockConfig,
+  reversionStrength: number,
+): number {
+  const reversionComponent = gapPct * reversionStrength;
   const randomComponent = (Math.random() * 2 - 1) * config.driftNoisePct;
   const gravityComponent =
     marketAvg !== null ? ((marketAvg - currentPrice) / currentPrice) * config.marketGravityStrength : 0;
@@ -125,6 +145,29 @@ function normalTickPct(gapPct: number, currentPrice: number, marketAvg: number |
     -config.driftMaxPct,
     Math.min(config.driftMaxPct, reversionComponent + randomComponent + gravityComponent),
   );
+}
+
+// Per-warrior drift reversion speed, derived from lifetime raid count
+// rather than a single flat rate: a brand-new warrior's price closes 90%
+// of its gap to the anchor within reversionNewPlayerHours (a "hot IPO"
+// feel), an established warrior takes reversionVeteranHours (anchor jumps
+// land slowly, independent of how the jump itself was sized - see
+// gainMultiplier/lossMultiplier in stock.ts for that side), transitioning
+// over roughly reversionSettleRaids raids.
+//
+// Expressed as hours-to-90%-closed rather than a raw per-tick rate so the
+// curve's real-world meaning doesn't silently change if driftIntervalMs is
+// ever retuned - the hours are converted to "how many ticks is that, at
+// today's interval" here, then to the per-tick rate that closes 90% of a
+// gap over that many ticks: (1-s)^ticks = 0.1  =>  s = 1 - 0.1^(1/ticks).
+function reversionStrengthForRaidCount(raidCount: number, config: StockConfig): number {
+  const tau = Math.max(config.reversionSettleRaids, 0.01);
+  const hoursToClose =
+    config.reversionNewPlayerHours +
+    (config.reversionVeteranHours - config.reversionNewPlayerHours) * (1 - Math.exp(-raidCount / tau));
+  const ticksToClose = (hoursToClose * 3_600_000) / config.driftIntervalMs;
+  if (ticksToClose <= 0) return 1;
+  return Math.min(1, Math.max(0, 1 - Math.pow(0.1, 1 / ticksToClose)));
 }
 
 // Self-rescheduling setTimeout (rather than a fixed setInterval) so an admin

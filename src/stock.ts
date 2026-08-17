@@ -2,9 +2,9 @@ import {
   getAllCasts,
   getAllDamage,
   getAllDamageTaken,
+  getAllLatestTradablePrices,
   clearAnchorPrices,
   getAnchorPrice,
-  getLatestPrice,
   getLatestRaidLedgerEntry,
   getOrCreateWarriorId,
   getPriceSnapshotCount,
@@ -41,6 +41,17 @@ export interface StockConfig {
   castWeight: number;
   pricePerScorePointUp: number;
   pricePerScorePointDown: number;
+  // Percentile-gated multiplier applied on top of pricePerScorePointUp/Down
+  // (see percentileRank/gainMultiplier/lossMultiplier below and
+  // snapshotPricesForReport) - lets a raid's dollar impact taper off near
+  // the top of the field and amplify near the bottom, without ever
+  // touching the sign of the move (no warrior is ever pulled toward a
+  // market mean - see marketGravityStrength for that, deliberately kept
+  // near-zero).
+  priceCurveCenterPercentile: number;
+  priceCurveSteepness: number;
+  priceCurveGainAmplitude: number;
+  priceCurveLossAmplitude: number;
   startingPrice: number;
   startingWalletBalance: number;
   newPlayerGraceReports: number;
@@ -54,7 +65,15 @@ export interface StockConfig {
   fundValuationIntervalMs: number;
   driftMaxPct: number;
   driftNoisePct: number;
-  driftReversionStrength: number;
+  // Replaces the old flat driftReversionStrength - per-warrior reversion
+  // speed is now derived from lifetime raid count (see
+  // reversionStrengthForRaidCount in drift.ts): a brand-new warrior's
+  // price catches up to its anchor within reversionNewPlayerHours, an
+  // established one takes reversionVeteranHours, and reversionSettleRaids
+  // sets how many raids it takes to transition between the two.
+  reversionNewPlayerHours: number;
+  reversionVeteranHours: number;
+  reversionSettleRaids: number;
   demandMaxPctPerTrade: number;
   demandLiquidityDenominator: number;
   tradeFeePct: number;
@@ -74,6 +93,36 @@ export interface StockConfig {
 // drift.ts's swing mechanic also writes flat dollar deltas and needs the
 // same floor.
 export const MIN_PRICE = 1;
+
+// Fraction of `sortedPrices` at or below `price` - the market-wide standing
+// snapshotPricesForReport() feeds into gainMultiplier/lossMultiplier below.
+// `sortedPrices` must already be ascending; a warrior's own current price
+// is expected to be a member of it (see snapshotPricesForReport, which
+// builds the array from the same getAllLatestWarriorPrices() snapshot it
+// looks the warrior's own previous price up in).
+export function percentileRank(price: number, sortedPrices: number[]): number {
+  if (sortedPrices.length === 0) return 0.5;
+  let below = 0;
+  for (const p of sortedPrices) {
+    if (p <= price) below++;
+  }
+  return below / sortedPrices.length;
+}
+
+// Percentile-gated multipliers on pricePerScorePointUp/Down (see
+// StockConfig.priceCurveCenterPercentile and friends). Both curves cross
+// 1.0 (no change from the flat rate) at the same center percentile;
+// gainMultiplier tapers down above it (raids near the top earn less),
+// lossMultiplier ramps up above it (raids near the top lose more) - never
+// the other way around, so nobody's price is ever pulled down by these,
+// only slowed on the way up or sped up on the way down.
+export function gainMultiplier(percentile: number, config: StockConfig): number {
+  return 1 - config.priceCurveGainAmplitude * Math.tanh(config.priceCurveSteepness * (percentile - config.priceCurveCenterPercentile));
+}
+
+export function lossMultiplier(percentile: number, config: StockConfig): number {
+  return 1 + config.priceCurveLossAmplitude * Math.tanh(config.priceCurveSteepness * (percentile - config.priceCurveCenterPercentile));
+}
 
 // Reads the DB-stored config on every call (rather than caching once at
 // import time) so edits made on the admin page take effect on the next
@@ -121,6 +170,10 @@ export function loadStockConfig(): StockConfig {
     // is simply ignored.
     pricePerScorePointUp: parsed.pricePerScorePointUp ?? 8,
     pricePerScorePointDown: parsed.pricePerScorePointDown ?? 8,
+    priceCurveCenterPercentile: parsed.priceCurveCenterPercentile ?? 0.85,
+    priceCurveSteepness: parsed.priceCurveSteepness ?? 12,
+    priceCurveGainAmplitude: parsed.priceCurveGainAmplitude ?? 0.6,
+    priceCurveLossAmplitude: parsed.priceCurveLossAmplitude ?? 0.9,
     // Not stock-pricing-related, but lives in this same single-row config
     // blob rather than a separate table for one value - db.ts reads it
     // directly (not through loadStockConfig()) to avoid a circular import,
@@ -135,7 +188,15 @@ export function loadStockConfig(): StockConfig {
     // existing install's noise behavior is unchanged until an admin
     // deliberately tunes them apart.
     driftNoisePct: parsed.driftNoisePct ?? parsed.driftMaxPct ?? 0.005,
-    driftReversionStrength: parsed.driftReversionStrength ?? 0.3,
+    // `driftReversionStrength` (a single flat rate) was replaced by the
+    // raid-count-gated curve above. Deliberately NOT read from the old key
+    // - there's no meaningful way to place a single flat rate somewhere on
+    // an hours-to-close-90%-of-the-gap curve without guessing, unlike the
+    // damageTrendZClamp backfill above. A stale `driftReversionStrength`
+    // in an older stored blob is simply ignored.
+    reversionNewPlayerHours: parsed.reversionNewPlayerHours ?? 12,
+    reversionVeteranHours: parsed.reversionVeteranHours ?? 48,
+    reversionSettleRaids: parsed.reversionSettleRaids ?? 15,
     demandMaxPctPerTrade: parsed.demandMaxPctPerTrade ?? 0.015,
     demandLiquidityDenominator: parsed.demandLiquidityDenominator ?? 50000,
     tradeFeePct: parsed.tradeFeePct ?? 0.0025,
@@ -255,6 +316,14 @@ export function computeStock(): PlayerStock[] {
   for (const report of reports) {
     const damageRows = damageByReport.get(report.code) ?? [];
     if (damageRows.length === 0) continue;
+
+    // Snapshot the field's running prices as they stood at the start of
+    // this report (before any of this report's own participants update
+    // runningPrice below) - so percentile gating within one report isn't
+    // order-dependent on which participant happens to be processed first,
+    // same reasoning as drift.ts snapshotting marketAvg before its own
+    // per-warrior updates.
+    const fieldPricesSnapshot = Array.from(runningPrice.values()).sort((a, b) => a - b);
 
     const reportCasts = castsByReport.get(report.code) ?? [];
     const castsByPlayer = new Map<string, Map<number, number>>();
@@ -390,8 +459,17 @@ export function computeStock(): PlayerStock[] {
       const reportScore = participant.lowAttendance
         ? 0
         : stockConfig.damageWeight * damageScore + stockConfig.castWeight * castScore;
+      // A participant's very first appearance in the walk has no field
+      // standing yet to gate against - same as the live incremental path
+      // in snapshotPricesForReport, which never percentile-gates a
+      // warrior's first-ever raid either.
+      const isFirstAppearance = !runningPrice.has(participant.key);
       const prevPrice = runningPrice.get(participant.key) ?? stockConfig.startingPrice;
-      const perPoint = reportScore >= 0 ? stockConfig.pricePerScorePointUp : stockConfig.pricePerScorePointDown;
+      const percentile = isFirstAppearance ? 0.5 : percentileRank(prevPrice, fieldPricesSnapshot);
+      const perPoint =
+        reportScore >= 0
+          ? stockConfig.pricePerScorePointUp * (isFirstAppearance ? 1 : gainMultiplier(percentile, stockConfig))
+          : stockConfig.pricePerScorePointDown * (isFirstAppearance ? 1 : lossMultiplier(percentile, stockConfig));
       const price = Math.max(MIN_PRICE, prevPrice + perPoint * reportScore);
       runningPrice.set(participant.key, price);
 
@@ -436,22 +514,25 @@ export function computeStock(): PlayerStock[] {
 export function snapshotPricesForReport(reportCode: string, createdAt: number = Date.now()) {
   const stockConfig = loadStockConfig();
   const allStock = computeStock();
+  // Batched, once for this whole report - not per-warrior getLatestPrice()
+  // calls in the loop below - both as an N-query-avoidance and so every
+  // participant's percentile is ranked against the same cross-sectional
+  // snapshot regardless of insert order within this report (same reasoning
+  // as computeStock()'s own fieldPricesSnapshot above).
+  const latestPrices = getAllLatestTradablePrices();
+  const sortedPrices = Array.from(latestPrices.values()).sort((a, b) => a - b);
   for (const playerStock of allStock) {
     const point = playerStock.series.find((s) => s.report_code === reportCode);
     if (!point) continue;
     const warriorId = getOrCreateWarriorId(playerStock.player_name, playerStock.server);
-    // This is a real-time, one-report-at-a-time insert (unlike the bulk
-    // historical replay in replaceRaidPriceSnapshots), so the ledger's
-    // current latest row for this warrior really is the row immediately
-    // before this one.
-    const previousPrice = getLatestPrice(warriorId);
-    const perPoint =
-      point.report_score >= 0 ? stockConfig.pricePerScorePointUp : stockConfig.pricePerScorePointDown;
+    const previousPrice = latestPrices.get(warriorId) ?? null;
 
     if (previousPrice === null) {
       // This warrior's very first price ever - nothing else will seed a
       // live price for them, so this one row has to do double duty: it's
-      // both the live price and the anchors' starting point.
+      // both the live price and the anchors' starting point. No percentile
+      // gating here either - there's no field standing yet to gate
+      // against, same as computeStock()'s own first-appearance case.
       insertPriceSnapshot(warriorId, point.price, null, "raid", reportCode, createdAt);
       setAnchorPrice(warriorId, point.price);
       setRaidAnchorPrice(warriorId, point.price);
@@ -465,7 +546,15 @@ export function snapshotPricesForReport(reportCode: string, createdAt: number = 
     // this new anchor afterward (see drift.ts). The resulting row is tagged
     // "raid_anchor" (not "raid") specifically so getLatestPrice() can
     // exclude it - it's an audit record of the anchor's movement, not a new
-    // live price.
+    // live price. pricePerScorePointUp/Down is gated by this warrior's
+    // current price percentile (see gainMultiplier/lossMultiplier above) -
+    // raids near the top of the field move the anchor less on a good night
+    // and more on a bad one; raids near the bottom, the reverse.
+    const percentile = percentileRank(previousPrice, sortedPrices);
+    const perPoint =
+      point.report_score >= 0
+        ? stockConfig.pricePerScorePointUp * gainMultiplier(percentile, stockConfig)
+        : stockConfig.pricePerScorePointDown * lossMultiplier(percentile, stockConfig);
     const currentAnchor = getAnchorPrice(warriorId) ?? previousPrice;
     const newAnchor = Math.max(MIN_PRICE, currentAnchor + perPoint * point.report_score);
     insertPriceSnapshot(warriorId, newAnchor, newAnchor - currentAnchor, "raid_anchor", reportCode, createdAt);

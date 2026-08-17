@@ -3337,6 +3337,46 @@ export function getAllLatestWarriorPrices(): Map<number, number> {
   return new Map(rows.map((r) => [r.warrior_id, r.price]));
 }
 
+// Same batched shape as getAllLatestWarriorPrices(), but excludes
+// 'raid_anchor' rows - same reasoning as getLatestPrice()'s own exclusion:
+// an anchor move is an audit record, never the live/tradable price. Needed
+// wherever code wants "current price of every warrior" as a comparison set
+// (e.g. percentile-ranking for the price-curve gating in stock.ts) without
+// the batched query drifting semantics away from what getLatestPrice()
+// would return for the same warrior one at a time.
+export function getAllLatestTradablePrices(): Map<number, number> {
+  const rows = db
+    .prepare(
+      `SELECT warrior_id, price FROM price_snapshots WHERE id IN (
+         SELECT MAX(id) FROM price_snapshots WHERE source != 'raid_anchor' GROUP BY warrior_id
+       )`,
+    )
+    .all() as unknown as { warrior_id: number; price: number }[];
+  return new Map(rows.map((r) => [r.warrior_id, r.price]));
+}
+
+// Lifetime raid attendance per warrior - true count of distinct raids
+// they've participated in, used to gate drift reversion speed by tenure
+// (see reversionStrengthForRaidCount in drift.ts). Deliberately NOT the
+// same thing as the "Raids" column on the Stock page
+// (client/src/pages/StockPage.tsx), which counts every price_snapshots row
+// except 'raid_anchor' (so it includes drift/swing/trade events too) - a
+// raid, whether a warrior's first ('raid'-tagged) or a later one
+// ('raid_anchor'-tagged), always writes exactly one row per report per
+// warrior, so counting distinct report codes across both tags is the
+// correct "how many raids has this warrior actually been in" figure.
+export function getWarriorRaidCounts(): Map<number, number> {
+  const rows = db
+    .prepare(
+      `SELECT warrior_id, COUNT(DISTINCT report_code) AS raid_count
+       FROM price_snapshots
+       WHERE source IN ('raid', 'raid_anchor')
+       GROUP BY warrior_id`,
+    )
+    .all() as unknown as { warrior_id: number; raid_count: number }[];
+  return new Map(rows.map((r) => [r.warrior_id, r.raid_count]));
+}
+
 export function getLastFundValuationAt(): number | null {
   const row = db
     .prepare(`SELECT last_fund_valuation_at FROM scheduler_state WHERE id = 1`)

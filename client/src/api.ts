@@ -223,6 +223,10 @@ export interface StockConfig {
   castWeight: number;
   pricePerScorePointUp: number;
   pricePerScorePointDown: number;
+  priceCurveCenterPercentile: number;
+  priceCurveSteepness: number;
+  priceCurveGainAmplitude: number;
+  priceCurveLossAmplitude: number;
   startingPrice: number;
   startingWalletBalance: number;
   newPlayerGraceReports: number;
@@ -236,7 +240,9 @@ export interface StockConfig {
   fundValuationIntervalMs: number;
   driftMaxPct: number;
   driftNoisePct: number;
-  driftReversionStrength: number;
+  reversionNewPlayerHours: number;
+  reversionVeteranHours: number;
+  reversionSettleRaids: number;
   demandMaxPctPerTrade: number;
   demandLiquidityDenominator: number;
   tradeFeePct: number;
@@ -265,6 +271,13 @@ export async function saveStockConfig(config: StockConfig): Promise<void> {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || "Failed to save config");
   }
+}
+
+export async function getPriceDistribution(): Promise<number[]> {
+  const res = await fetch("/api/stock/price-distribution");
+  if (!res.ok) throw new Error("Failed to load price distribution");
+  const body = (await res.json()) as { prices: number[] };
+  return body.prices;
 }
 
 export interface PlayerRow {

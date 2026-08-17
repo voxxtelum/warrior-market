@@ -51,6 +51,65 @@ export function reversionConvergence(
   };
 }
 
+// Mirrors reversionStrengthForRaidCount in src/drift.ts - per-warrior
+// drift reversion speed derived from lifetime raid count, expressed as
+// hours-to-90%-closed rather than a raw per-tick rate (see that function's
+// own comment for why). Needed client-side so the Convergence estimates
+// table can show a few illustrative raid-count breakpoints instead of a
+// single flat rate, now that reversion strength isn't one number.
+export function reversionStrengthForRaidCount(
+  raidCount: number,
+  newPlayerHours: number,
+  veteranHours: number,
+  settleRaids: number,
+  driftIntervalMs: number,
+): number {
+  const tau = Math.max(settleRaids, 0.01);
+  const hoursToClose = newPlayerHours + (veteranHours - newPlayerHours) * (1 - Math.exp(-raidCount / tau));
+  const ticksToClose = (hoursToClose * 3_600_000) / driftIntervalMs;
+  if (ticksToClose <= 0) return 1;
+  return Math.min(1, Math.max(0, 1 - Math.pow(0.1, 1 / ticksToClose)));
+}
+
+export interface SideACurveMultipliers {
+  gain: number;
+  loss: number;
+}
+
+// Mirrors gainMultiplier/lossMultiplier in src/stock.ts - a logistic curve
+// centered at `centerPercentile`; gainMultiplier tapers below 1 above the
+// center, lossMultiplier ramps above 1 above the center, both approaching
+// 1 (no change from the flat pricePerScorePointUp/Down rate) right at it.
+export function sideACurveMultipliers(
+  percentile: number,
+  centerPercentile: number,
+  steepness: number,
+  gainAmplitude: number,
+  lossAmplitude: number,
+): SideACurveMultipliers {
+  const t = Math.tanh(steepness * (percentile - centerPercentile));
+  return {
+    gain: 1 - gainAmplitude * t,
+    loss: 1 + lossAmplitude * t,
+  };
+}
+
+// Linear interpolation of the price at a given percentile within a sorted
+// (ascending) price distribution - "what would a warrior at this
+// percentile actually be worth today," for the admin preview table's
+// price-today column. Null with no data to interpolate from.
+export function percentileValue(sortedPrices: number[], percentile: number): number | null {
+  if (sortedPrices.length === 0) return null;
+  if (sortedPrices.length === 1) return sortedPrices[0];
+  const clamped = Math.min(1, Math.max(0, percentile));
+  const pos = clamped * (sortedPrices.length - 1);
+  const lower = Math.floor(pos);
+  const upper = Math.ceil(pos);
+  if (lower === upper) return sortedPrices[lower];
+  const frac = pos - lower;
+  return sortedPrices[lower] * (1 - frac) + sortedPrices[upper] * frac;
+}
+
 // Formats a millisecond duration into whichever unit reads most naturally.
 export function fmtConvergenceDuration(ms: number | null): string {
   if (ms === null) return "practically never";

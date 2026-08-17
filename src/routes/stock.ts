@@ -1,7 +1,13 @@
 import { Router } from "express";
 import { computeStock, loadStockConfig } from "../stock";
 import type { StockConfig } from "../stock";
-import { getAllPriceSnapshots, getLinkedAvatarsByIdentity, getRaidAnchorPrice, setStockConfigRaw } from "../db";
+import {
+  getAllLatestTradablePrices,
+  getAllPriceSnapshots,
+  getLinkedAvatarsByIdentity,
+  getRaidAnchorPrice,
+  setStockConfigRaw,
+} from "../db";
 import { requireAdmin } from "../middleware/auth";
 
 export const stockRouter = Router();
@@ -60,6 +66,16 @@ stockRouter.get("/config", requireAdmin, (_req, res) => {
   res.json(loadStockConfig());
 });
 
+// Just the current tradable price of every warrior, sorted, no names or
+// warrior IDs attached - powers the Side A curve preview on the admin
+// config page (percentile -> price today, so the gain/loss curve's center
+// can be sanity-checked against the live field without needing to know
+// which specific warrior sits where).
+stockRouter.get("/price-distribution", requireAdmin, (_req, res) => {
+  const prices = Array.from(getAllLatestTradablePrices().values()).sort((a, b) => a - b);
+  res.json({ prices });
+});
+
 const NUMERIC_FIELDS: (keyof StockConfig)[] = [
   "tankTopN",
   "minBucketSize",
@@ -69,6 +85,10 @@ const NUMERIC_FIELDS: (keyof StockConfig)[] = [
   "castWeight",
   "pricePerScorePointUp",
   "pricePerScorePointDown",
+  "priceCurveCenterPercentile",
+  "priceCurveSteepness",
+  "priceCurveGainAmplitude",
+  "priceCurveLossAmplitude",
   "startingPrice",
   "startingWalletBalance",
   "newPlayerGraceReports",
@@ -82,7 +102,9 @@ const NUMERIC_FIELDS: (keyof StockConfig)[] = [
   "fundValuationIntervalMs",
   "driftMaxPct",
   "driftNoisePct",
-  "driftReversionStrength",
+  "reversionNewPlayerHours",
+  "reversionVeteranHours",
+  "reversionSettleRaids",
   "demandMaxPctPerTrade",
   "demandLiquidityDenominator",
   "tradeFeePct",

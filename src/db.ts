@@ -1272,6 +1272,26 @@ export function getLastRaidPrice(warriorId: number): number | null {
   return getRaidAnchorPrice(warriorId);
 }
 
+// The warrior's current most recent raid/raid_anchor ledger row, if any -
+// used by rebuildRaidPriceSnapshots() to detect "the report being deleted
+// was this warrior's most recent raid" and, when so, undo exactly that
+// report's own recorded delta rather than recomputing the warrior's entire
+// history under whatever stock_config happens to be active right now (which
+// can differ from what was active when their earlier raids actually
+// happened, producing a wrong anchor for reasons unrelated to the deleted
+// report at all). Must be read before replaceRaidPriceSnapshots() wipes and
+// rewrites these rows.
+export function getLatestRaidLedgerEntry(
+  warriorId: number,
+): { reportCode: string | null; delta: number | null } | null {
+  const row = db
+    .prepare(
+      `SELECT report_code, delta FROM price_snapshots WHERE warrior_id = ? AND source IN ('raid', 'raid_anchor') ORDER BY created_at DESC, id DESC LIMIT 1`,
+    )
+    .get(warriorId) as unknown as { report_code: string | null; delta: number | null } | undefined;
+  return row ? { reportCode: row.report_code, delta: row.delta } : null;
+}
+
 // The price idle drift reverts toward, and that demand-driven trades update -
 // deliberately not derived from price_snapshots (which would mean a demand
 // move gets slowly erased by the next drift tick, same as the old
@@ -1308,6 +1328,14 @@ export function setRaidAnchorPrice(warriorId: number, price: number): void {
     price,
     warriorId,
   );
+}
+
+// Reverts both anchors to "never raided" (NULL) - used by
+// rebuildRaidPriceSnapshots() when a report delete leaves a warrior with no
+// raid history left at all, so their anchors stop pointing at a raid that no
+// longer exists instead of just going stale.
+export function clearAnchorPrices(warriorId: number): void {
+  db.prepare(`UPDATE warriors SET anchor_price = NULL, raid_anchor_price = NULL WHERE id = ?`).run(warriorId);
 }
 
 // Excludes 'raid_anchor' rows - same reasoning as getLatestPrice(): those

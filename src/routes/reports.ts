@@ -40,8 +40,13 @@ reportsRouter.delete("/:code", requireAdmin, (req, res) => {
     res.status(404).json({ error: "Report not found" });
     return;
   }
+  // Captured before deleteReport() removes this report's damage rows -
+  // scopes the anchor rebuild to just these warriors (see
+  // rebuildRaidPriceSnapshots's own comment) rather than resetting every
+  // warrior in the game over one unrelated report going away.
+  const participantKeys = new Set(detail.damage.map((d) => `${d.player_name}::${d.server}`));
   deleteReport(req.params.code);
-  rebuildRaidPriceSnapshots();
+  rebuildRaidPriceSnapshots({ participantKeys, deletedReportCode: req.params.code });
   liquidateOrphanedHoldings();
   res.status(204).end();
 });

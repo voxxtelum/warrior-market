@@ -86,6 +86,14 @@ interface LeaderboardRow {
   // before the raid (see sinceRaidBasePriceByPlayer), so the delta reflects
   // what the raid itself changed rather than reading a false 0.
   sinceRaidBasePrice: number | null;
+  // The most recent price_snapshots row's own stored `delta` - how much the
+  // single last event (drift, swing, trade, or raid) actually moved the
+  // price, independent of where that leaves currentPrice relative to
+  // anything else. Distinct from sinceRaidBasePrice above: that one measures
+  // distance from a fixed reference point (the last raid), which can read
+  // as a small positive number even right after a large negative move, if
+  // the price was far enough above that reference beforehand.
+  lastTickDelta: number | null;
   price: number;
   raidCount: number;
   prevPrice: number | null;
@@ -97,6 +105,7 @@ function buildLeaderboard(
   playersStock: PlayerStock[],
   currentPriceByPlayer: Map<string, number>,
   sinceRaidBasePriceByPlayer: Map<string, number>,
+  lastTickDeltaByPlayer: Map<string, number | null>,
 ): LeaderboardRow[] {
   return playersStock
     .filter((p) => p.series.length > 0)
@@ -109,6 +118,7 @@ function buildLeaderboard(
         server: p.server,
         currentPrice: currentPriceByPlayer.get(key) ?? last.price,
         sinceRaidBasePrice: sinceRaidBasePriceByPlayer.get(key) ?? null,
+        lastTickDelta: lastTickDeltaByPlayer.get(key) ?? null,
         price: last.price,
         raidCount: p.series.length,
         prevPrice: prev ? prev.price : null,
@@ -321,12 +331,26 @@ export function StockPage() {
     return map;
   }, [priceHistory]);
 
+  // The most recent price_snapshots row's own stored delta per player - how
+  // much just the last event (whatever it was) moved the price, read
+  // straight off the ledger rather than computed against any baseline.
+  const lastTickDeltaByPlayer = useMemo(() => {
+    const map = new Map<string, number | null>();
+    if (priceHistory) {
+      for (const p of priceHistory) {
+        const last = p.series[p.series.length - 1];
+        if (last) map.set(`${p.player_name}::${p.server}`, last.delta);
+      }
+    }
+    return map;
+  }, [priceHistory]);
+
   const leaderboard = useMemo(
     () =>
       playersStock
-        ? buildLeaderboard(playersStock, currentPriceByPlayer, sinceRaidBasePriceByPlayer)
+        ? buildLeaderboard(playersStock, currentPriceByPlayer, sinceRaidBasePriceByPlayer, lastTickDeltaByPlayer)
         : [],
-    [playersStock, currentPriceByPlayer, sinceRaidBasePriceByPlayer],
+    [playersStock, currentPriceByPlayer, sinceRaidBasePriceByPlayer, lastTickDeltaByPlayer],
   );
 
   const rankDeltas = useMemo(() => buildRankDeltas(leaderboard), [leaderboard]);
@@ -523,16 +547,15 @@ export function StockPage() {
                   row.prevPrice !== null
                     ? priceDelta(row.prevPrice, row.price)
                     : null;
-                // Same "Change" shown in the trade modal - the live tradable
-                // price against row.sinceRaidBasePrice (frozen ledger), as
-                // opposed to `delta` above which compares the last two raid
-                // snapshots only. Deliberately uses the frozen ledger, not
-                // row.price (computeStock()'s live-recomputed value) - mixing
-                // a frozen number with a live-recomputed one produces a
-                // delta that doesn't match what's on the chart.
+                // What the single most recent price_snapshots event (drift,
+                // swing, trade, or raid) actually did to the price - a real
+                // move reads as that move, not as distance from some fixed
+                // reference point that can hide or invert the sign of what
+                // just happened. Opposed to `delta` above, which compares
+                // the last two *raid* snapshots only.
                 const liveDelta =
-                  row.sinceRaidBasePrice !== null
-                    ? priceDelta(row.sinceRaidBasePrice, row.currentPrice)
+                  row.lastTickDelta !== null
+                    ? priceDelta(row.currentPrice - row.lastTickDelta, row.currentPrice)
                     : null;
                 const pct =
                   row.prevPrice !== null

@@ -973,6 +973,10 @@ tbody tr:hover {
   background: rgba(var(--accent-green-rgb), 0.15);
   color: var(--accent-green);
 }
+.source-pill.raid_anchor {
+  background: rgba(var(--accent-green-rgb), 0.15);
+  color: var(--accent-green-light);
+}
 .source-pill.swing {
   background: rgba(191, 174, 72, 0.15);
   color: var(--accent-gold);

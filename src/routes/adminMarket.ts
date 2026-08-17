@@ -208,7 +208,7 @@ adminMarketRouter.get("/warriors/:warriorId/trades", (req, res) => {
   res.json(getWarriorTrades(warriorId));
 });
 
-const PRICE_HISTORY_SOURCES = ["raid", "drift", "swing", "trade"] as const;
+const PRICE_HISTORY_SOURCES = ["raid", "raid_anchor", "drift", "swing", "trade"] as const;
 type PriceHistorySource = (typeof PRICE_HISTORY_SOURCES)[number];
 
 // Cross-warrior price_snapshots feed for the admin Price History tab.
@@ -216,7 +216,7 @@ type PriceHistorySource = (typeof PRICE_HISTORY_SOURCES)[number];
 // excluded by default via the `sources` param, since it's overwhelmingly the
 // largest and least interesting slice of this ever-growing table.
 adminMarketRouter.get("/price-history", (req, res) => {
-  const sourcesParam = typeof req.query.sources === "string" ? req.query.sources : "raid,swing,trade";
+  const sourcesParam = typeof req.query.sources === "string" ? req.query.sources : "raid,raid_anchor,swing,trade";
   const sources = sourcesParam
     .split(",")
     .map((s) => s.trim())

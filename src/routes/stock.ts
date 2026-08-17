@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { computeStock, loadStockConfig } from "../stock";
 import type { StockConfig } from "../stock";
-import { getAllPriceSnapshots, getLinkedAvatarsByIdentity, setStockConfigRaw } from "../db";
+import { getAllPriceSnapshots, getLinkedAvatarsByIdentity, getRaidAnchorPrice, setStockConfigRaw } from "../db";
 import { requireAdmin } from "../middleware/auth";
 
 export const stockRouter = Router();
@@ -25,13 +25,25 @@ stockRouter.get("/history", (_req, res) => {
     {
       player_name: string;
       server: string;
+      // raid_anchor_price, read once per player - the baseline the Stock
+      // page uses for its "since last raid" figure. Since a raid (after a
+      // warrior's first) no longer writes a live-price row at all, this can
+      // no longer be reconstructed by scanning `series` for a 'raid' entry
+      // the way it used to be - raid_anchor_price is the only place it's
+      // still tracked continuously (see getLastRaidPrice's own comment).
+      lastRaidPrice: number | null;
       series: { created_at: number; price: number; delta: number | null; source: string; report_code: string | null }[];
     }
   >();
   for (const row of rows) {
     const key = `${row.player_name}::${row.server}`;
     if (!byPlayer.has(key)) {
-      byPlayer.set(key, { player_name: row.player_name, server: row.server, series: [] });
+      byPlayer.set(key, {
+        player_name: row.player_name,
+        server: row.server,
+        lastRaidPrice: getRaidAnchorPrice(row.warrior_id),
+        series: [],
+      });
     }
     byPlayer.get(key)!.series.push({
       created_at: row.created_at,
@@ -69,6 +81,7 @@ const NUMERIC_FIELDS: (keyof StockConfig)[] = [
   "driftIntervalMs",
   "fundValuationIntervalMs",
   "driftMaxPct",
+  "driftNoisePct",
   "driftReversionStrength",
   "demandMaxPctPerTrade",
   "demandLiquidityDenominator",

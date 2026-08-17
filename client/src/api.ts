@@ -235,6 +235,7 @@ export interface StockConfig {
   driftIntervalMs: number;
   fundValuationIntervalMs: number;
   driftMaxPct: number;
+  driftNoisePct: number;
   driftReversionStrength: number;
   demandMaxPctPerTrade: number;
   demandLiquidityDenominator: number;
@@ -297,6 +298,7 @@ export interface PriceSnapshotPoint {
 export interface PlayerPriceHistory {
   player_name: string;
   server: string;
+  lastRaidPrice: number | null;
   series: PriceSnapshotPoint[];
 }
 
@@ -668,7 +670,7 @@ export async function getWarriorTrades(warriorId: number): Promise<WarriorTradeR
   return res.json();
 }
 
-export type PriceHistorySource = "raid" | "drift" | "swing" | "trade";
+export type PriceHistorySource = "raid" | "raid_anchor" | "drift" | "swing" | "trade";
 
 export interface PriceHistoryEntry {
   id: number;

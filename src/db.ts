@@ -132,7 +132,7 @@ db.exec(`
     report_code TEXT,
     price REAL NOT NULL,
     delta REAL,
-    source TEXT NOT NULL CHECK (source IN ('raid', 'drift', 'swing', 'trade')),
+    source TEXT NOT NULL CHECK (source IN ('raid', 'raid_anchor', 'drift', 'swing', 'trade')),
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_price_snapshots_warrior ON price_snapshots (warrior_id, created_at DESC);
@@ -380,18 +380,19 @@ if (!schedulerStateHasLastFundValuationAt) {
 }
 
 // price_snapshots.source has a CHECK constraint, which SQLite can't widen
-// via ALTER TABLE - installs that predate the 'swing' and/or 'trade' sources
-// (and the 'delta' column) need the table rebuilt. Guarded by inspecting the
-// stored constraint text so this only ever runs once; the CREATE TABLE above
-// already includes the final shape for fresh installs, so this is a no-op
-// there. Checking for 'trade' alone covers both a pre-'swing' install and a
-// post-'swing'-but-pre-'trade' install in a single pass.
+// via ALTER TABLE - installs that predate the 'swing', 'trade', and/or
+// 'raid_anchor' sources (and the 'delta' column) need the table rebuilt.
+// Guarded by inspecting the stored constraint text so this only ever runs
+// once; the CREATE TABLE above already includes the final shape for fresh
+// installs, so this is a no-op there. Checking for 'raid_anchor' alone (the
+// newest addition) covers every older state - pre-'swing', pre-'trade', and
+// pre-'raid_anchor' installs alike - in a single pass.
 const priceSnapshotsSql = (
   db
     .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'price_snapshots'`)
     .get() as unknown as { sql: string } | undefined
 )?.sql;
-if (priceSnapshotsSql && !priceSnapshotsSql.includes("'trade'")) {
+if (priceSnapshotsSql && !priceSnapshotsSql.includes("'raid_anchor'")) {
   db.exec('BEGIN');
   try {
     db.exec(`
@@ -401,7 +402,7 @@ if (priceSnapshotsSql && !priceSnapshotsSql.includes("'trade'")) {
         report_code TEXT,
         price REAL NOT NULL,
         delta REAL,
-        source TEXT NOT NULL CHECK (source IN ('raid', 'drift', 'swing', 'trade')),
+        source TEXT NOT NULL CHECK (source IN ('raid', 'raid_anchor', 'drift', 'swing', 'trade')),
         created_at INTEGER NOT NULL
       );
       INSERT INTO price_snapshots_new (id, warrior_id, report_code, price, source, created_at)
@@ -505,6 +506,7 @@ const DEFAULT_STOCK_CONFIG = {
   driftIntervalMs: 60 * 60 * 1000,
   fundValuationIntervalMs: 60 * 60 * 1000,
   driftMaxPct: 0.005,
+  driftNoisePct: 0.005,
   driftReversionStrength: 0.3,
   demandMaxPctPerTrade: 0.015,
   demandLiquidityDenominator: 50000,
@@ -1162,7 +1164,7 @@ export interface PriceSnapshotRow {
   report_code: string | null;
   price: number;
   delta: number | null;
-  source: 'raid' | 'drift' | 'swing' | 'trade';
+  source: 'raid' | 'raid_anchor' | 'drift' | 'swing' | 'trade';
   created_at: number;
 }
 
@@ -1177,7 +1179,7 @@ export function insertPriceSnapshot(
   warriorId: number,
   price: number,
   delta: number | null,
-  source: 'raid' | 'drift' | 'swing' | 'trade',
+  source: 'raid' | 'raid_anchor' | 'drift' | 'swing' | 'trade',
   reportCode: string | null,
   createdAt: number,
 ) {
@@ -1220,7 +1222,11 @@ export function replaceRaidPriceSnapshots(
 ): void {
   db.exec('BEGIN');
   try {
-    db.prepare(`DELETE FROM price_snapshots WHERE source = 'raid'`).run();
+    // Also clears 'raid_anchor' audit rows - a full rebuild regenerates the
+    // raid series from scratch as a pure 'raid'-tagged series (see
+    // rebuildRaidPriceSnapshots), so any pre-rebuild audit rows would
+    // otherwise linger and no longer correspond to anything real.
+    db.prepare(`DELETE FROM price_snapshots WHERE source IN ('raid', 'raid_anchor')`).run();
     for (const e of entries) {
       // delta: null - this is a bulk historical replay of a warrior's raid
       // series interleaved with existing drift/trade rows that keep their
@@ -1248,23 +1254,42 @@ export function replaceRaidPriceSnapshots(
 export function getLatestPrice(warriorId: number): number | null {
   const row = db
     .prepare(
-      `SELECT price FROM price_snapshots WHERE warrior_id = ? ORDER BY created_at DESC, id DESC LIMIT 1`,
+      // Excludes 'raid_anchor' rows - those are audit-only records of an
+      // anchor move (see snapshotPricesForReport), never the live price.
+      `SELECT price FROM price_snapshots WHERE warrior_id = ? AND source != 'raid_anchor' ORDER BY created_at DESC, id DESC LIMIT 1`,
     )
     .get(warriorId) as unknown as { price: number } | undefined;
   return row ? row.price : null;
 }
 
-// The most recent raid-derived snapshot only (excludes drift/demand ticks) -
-// pairs with getLatestPrice() to build the same "change since last raid"
+// Pairs with getLatestPrice() to build the same "change since last raid"
 // figure the trade modal and stock leaderboard show, elsewhere keyed off
-// computeStock()'s own series instead of this table.
+// computeStock()'s own series instead of this table. Reads raid_anchor_price
+// directly rather than scanning price_snapshots - since every raid (not just
+// the first) now keeps both anchors in sync, this value IS continuously "what
+// the most recent raid set", with no ledger dependency or staleness risk.
 export function getLastRaidPrice(warriorId: number): number | null {
+  return getRaidAnchorPrice(warriorId);
+}
+
+// The warrior's current most recent raid/raid_anchor ledger row, if any -
+// used by rebuildRaidPriceSnapshots() to detect "the report being deleted
+// was this warrior's most recent raid" and, when so, undo exactly that
+// report's own recorded delta rather than recomputing the warrior's entire
+// history under whatever stock_config happens to be active right now (which
+// can differ from what was active when their earlier raids actually
+// happened, producing a wrong anchor for reasons unrelated to the deleted
+// report at all). Must be read before replaceRaidPriceSnapshots() wipes and
+// rewrites these rows.
+export function getLatestRaidLedgerEntry(
+  warriorId: number,
+): { reportCode: string | null; delta: number | null } | null {
   const row = db
     .prepare(
-      `SELECT price FROM price_snapshots WHERE warrior_id = ? AND source = 'raid' ORDER BY created_at DESC, id DESC LIMIT 1`,
+      `SELECT report_code, delta FROM price_snapshots WHERE warrior_id = ? AND source IN ('raid', 'raid_anchor') ORDER BY created_at DESC, id DESC LIMIT 1`,
     )
-    .get(warriorId) as unknown as { price: number } | undefined;
-  return row ? row.price : null;
+    .get(warriorId) as unknown as { report_code: string | null; delta: number | null } | undefined;
+  return row ? { reportCode: row.report_code, delta: row.delta } : null;
 }
 
 // The price idle drift reverts toward, and that demand-driven trades update -
@@ -1305,10 +1330,22 @@ export function setRaidAnchorPrice(warriorId: number, price: number): void {
   );
 }
 
+// Reverts both anchors to "never raided" (NULL) - used by
+// rebuildRaidPriceSnapshots() when a report delete leaves a warrior with no
+// raid history left at all, so their anchors stop pointing at a raid that no
+// longer exists instead of just going stale.
+export function clearAnchorPrices(warriorId: number): void {
+  db.prepare(`UPDATE warriors SET anchor_price = NULL, raid_anchor_price = NULL WHERE id = ?`).run(warriorId);
+}
+
+// Excludes 'raid_anchor' rows - same reasoning as getLatestPrice(): those
+// record an anchor move, not a real live-price event, and callers here
+// (fundStats.ts's daily basket series) need the actual tradeable price
+// history, not audit annotations.
 export function getPriceHistory(warriorId: number): PriceSnapshotRow[] {
   return db
     .prepare(
-      `SELECT * FROM price_snapshots WHERE warrior_id = ? ORDER BY created_at ASC, id ASC`,
+      `SELECT * FROM price_snapshots WHERE warrior_id = ? AND source != 'raid_anchor' ORDER BY created_at ASC, id ASC`,
     )
     .all(warriorId) as unknown as PriceSnapshotRow[];
 }
@@ -1334,12 +1371,16 @@ export function getAllPriceSnapshots(): (PriceSnapshotRow & {
 })[] {
   return db
     .prepare(
+      // Excludes 'raid_anchor' rows - those record an anchor move, not a
+      // real live-price event, and would otherwise plot a fake jump/dip
+      // into the chart (see getLatestPrice()'s own exclusion for why).
       `SELECT ps.*, w.player_name, w.server
        FROM price_snapshots ps
        JOIN warriors w ON w.id = ps.warrior_id
-       WHERE NOT EXISTS (
-         SELECT 1 FROM hidden_players hp WHERE hp.player_name = w.player_name AND hp.server = w.server
-       )
+       WHERE ps.source != 'raid_anchor'
+         AND NOT EXISTS (
+           SELECT 1 FROM hidden_players hp WHERE hp.player_name = w.player_name AND hp.server = w.server
+         )
        ORDER BY ps.created_at ASC, ps.id ASC`,
     )
     .all() as unknown as (PriceSnapshotRow & {
@@ -1349,7 +1390,7 @@ export function getAllPriceSnapshots(): (PriceSnapshotRow & {
 }
 
 export interface PriceHistoryFilters {
-  sources: ('raid' | 'drift' | 'swing' | 'trade')[];
+  sources: ('raid' | 'raid_anchor' | 'drift' | 'swing' | 'trade')[];
   warriorId?: number;
   limit: number;
   offset: number;
@@ -1361,7 +1402,7 @@ export interface PriceHistoryEntry {
   server: string;
   price: number;
   delta: number | null;
-  source: 'raid' | 'drift' | 'swing' | 'trade';
+  source: 'raid' | 'raid_anchor' | 'drift' | 'swing' | 'trade';
   createdAt: number;
 }
 
@@ -1837,7 +1878,14 @@ export function executeTrade(
       .run(userId, warriorId, side, shares, price, total, now);
 
     insertPriceSnapshot(warriorId, priceAfter, priceAfter - price, 'trade', null, now);
-    setAnchorPrice(warriorId, priceAfter);
+    // Nudge the anchor by this trade's own proportional impact rather than
+    // snapping it to match the traded price - preserves whatever gap a
+    // recent raid or prior trades left, instead of a single trade silently
+    // overwriting it. impactPct is bounded well within (-1, 1) by
+    // demandMaxPctPerTrade, so a positive anchor can never cross zero here.
+    const currentAnchor = getAnchorPrice(warriorId);
+    const anchorAfter = currentAnchor !== null && currentAnchor > 0 ? currentAnchor * (1 + impactPct) : priceAfter;
+    setAnchorPrice(warriorId, anchorAfter);
 
     db.exec('COMMIT');
     return {

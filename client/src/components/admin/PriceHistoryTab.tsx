@@ -13,6 +13,7 @@ const PAGE_SIZE = 50;
 
 const SOURCE_OPTIONS: { key: PriceHistorySource; label: string }[] = [
   { key: 'raid', label: 'Raid' },
+  { key: 'raid_anchor', label: 'Raid (anchor)' },
   { key: 'swing', label: 'Swing' },
   { key: 'trade', label: 'Trade' },
   { key: 'drift', label: 'Drift' },
@@ -20,7 +21,11 @@ const SOURCE_OPTIONS: { key: PriceHistorySource; label: string }[] = [
 
 // Drift excluded by default - it's overwhelmingly the largest and least
 // interesting slice of this table (hourly ticks, forever, every warrior).
-const DEFAULT_SOURCES: PriceHistorySource[] = ['raid', 'swing', 'trade'];
+// 'raid_anchor' rows are audit-only (a raid after a warrior's first no
+// longer moves the live price, only the anchor - see snapshotPricesForReport)
+// but are included by default alongside 'raid' since together they're the
+// full raid history for a warrior.
+const DEFAULT_SOURCES: PriceHistorySource[] = ['raid', 'raid_anchor', 'swing', 'trade'];
 
 function fmtPrice(n: number): string {
   return n.toFixed(2);

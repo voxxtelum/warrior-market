@@ -313,6 +313,22 @@ db.exec(`
     detail TEXT,
     created_at INTEGER NOT NULL
   );
+
+  -- One row per (week_start, week_end), upserted - see upsertWeeklySummary.
+  -- Admin-edited Discord-post text for the /admin/summary page, saved on
+  -- demand so past weeks' posts can be reviewed later; the raw metrics that
+  -- generated the draft are NOT stored, only the final text (this is a
+  -- save-what-you-posted log, not a re-renderable snapshot).
+  CREATE TABLE IF NOT EXISTS weekly_summaries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    week_start INTEGER NOT NULL,
+    week_end INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_weekly_summaries_week ON weekly_summaries (week_start, week_end);
 `);
 
 // Idle drift reverts toward this, and demand-driven trade impact updates it -
@@ -1350,6 +1366,41 @@ export function getPriceHistory(warriorId: number): PriceSnapshotRow[] {
     .all(warriorId) as unknown as PriceSnapshotRow[];
 }
 
+// "Latest tradeable price at or before this timestamp" - same idiom as
+// getFundNavAt, used by the weekly summary (summary.ts) to measure a
+// warrior's price move across an arbitrary past window rather than only
+// "since the last snapshot right now".
+export function getPriceAtOrBefore(warriorId: number, atOrBefore: number): number | null {
+  const row = db
+    .prepare(
+      `SELECT price FROM price_snapshots WHERE warrior_id = ? AND source != 'raid_anchor' AND created_at <= ? ORDER BY created_at DESC, id DESC LIMIT 1`,
+    )
+    .get(warriorId, atOrBefore) as unknown as { price: number } | undefined;
+  return row ? row.price : null;
+}
+
+// All non-'raid_anchor' price snapshots within [startMs, endMs] across every
+// warrior, for the weekly summary's "biggest mover"/volatility scan. Ordered
+// by warrior so callers can reduce per-warrior in a single pass.
+export function getPriceSnapshotsInRange(
+  startMs: number,
+  endMs: number,
+): (PriceSnapshotRow & { player_name: string; server: string; class: string | null })[] {
+  return db
+    .prepare(
+      `SELECT ps.*, w.player_name, w.server, w.class
+       FROM price_snapshots ps
+       JOIN warriors w ON w.id = ps.warrior_id
+       WHERE ps.source != 'raid_anchor' AND ps.created_at >= ? AND ps.created_at <= ?
+       ORDER BY ps.warrior_id ASC, ps.created_at ASC, ps.id ASC`,
+    )
+    .all(startMs, endMs) as unknown as (PriceSnapshotRow & {
+    player_name: string;
+    server: string;
+    class: string | null;
+  })[];
+}
+
 export function listWarriorsWithRaidSnapshot(): WarriorRow[] {
   return db
     .prepare(
@@ -1518,6 +1569,32 @@ export function getHolding(
   );
 }
 
+// Every open (shares > 0) holding across every user, for the weekly
+// summary's Diamond Hands metric - deliberately unscoped by the report
+// window, since "how long has this position gone without a sell" is a
+// current-state fact, not something that resets each week.
+export function getAllOpenHoldings(): (HoldingRow & {
+  username: string;
+  player_name: string;
+  server: string;
+  class: string | null;
+})[] {
+  return db
+    .prepare(
+      `SELECT h.*, u.username, w.player_name, w.server, w.class
+       FROM holdings h
+       JOIN users u ON u.discord_id = h.user_id
+       JOIN warriors w ON w.id = h.warrior_id
+       WHERE h.shares > 0`,
+    )
+    .all() as unknown as (HoldingRow & {
+    username: string;
+    player_name: string;
+    server: string;
+    class: string | null;
+  })[];
+}
+
 export function listHoldingsWithContext(userId: string): (HoldingRow & {
   player_name: string;
   server: string;
@@ -1565,6 +1642,45 @@ export function listAllTransactionsForUser(userId: string): TransactionRow[] {
        ORDER BY warrior_id ASC, created_at ASC, id ASC`,
     )
     .all(userId) as unknown as TransactionRow[];
+}
+
+// All buy/sell/liquidation rows in [startMs, endMs] across every user, for
+// the weekly summary (summary.ts). Joined with username/character identity
+// since every summary metric needs one or the other for display/mentions.
+export function getTransactionsInRange(
+  startMs: number,
+  endMs: number,
+): (TransactionRow & { username: string; player_name: string; server: string; class: string | null })[] {
+  return db
+    .prepare(
+      `SELECT t.*, u.username, w.player_name, w.server, w.class
+       FROM transactions t
+       JOIN users u ON u.discord_id = t.user_id
+       JOIN warriors w ON w.id = t.warrior_id
+       WHERE t.created_at >= ? AND t.created_at <= ?
+       ORDER BY t.created_at ASC, t.id ASC`,
+    )
+    .all(startMs, endMs) as unknown as (TransactionRow & {
+    username: string;
+    player_name: string;
+    server: string;
+    class: string | null;
+  })[];
+}
+
+// One (side, created_at) pair per transaction for a single (user, warrior)
+// holding, oldest first - used by the weekly summary's Diamond Hands metric
+// to find when the current unbroken "no sell" streak on an open position
+// began (see summary.ts).
+export function listTransactionsForHolding(
+  userId: string,
+  warriorId: number,
+): { side: 'buy' | 'sell' | 'liquidation'; created_at: number }[] {
+  return db
+    .prepare(
+      `SELECT side, created_at FROM transactions WHERE user_id = ? AND warrior_id = ? ORDER BY created_at ASC, id ASC`,
+    )
+    .all(userId, warriorId) as unknown as { side: 'buy' | 'sell' | 'liquidation'; created_at: number }[];
 }
 
 export interface WarriorHolderRow {
@@ -3606,4 +3722,55 @@ export function deleteFund(fundId: number, reason?: string): void {
     db.exec('ROLLBACK');
     throw err;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Weekly summaries (Admin > Summary page) - see weekly_summaries table
+// comment for what this does and doesn't store.
+
+export interface WeeklySummaryRow {
+  id: number;
+  week_start: number;
+  week_end: number;
+  content: string;
+  created_by: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export function upsertWeeklySummary(
+  weekStart: number,
+  weekEnd: number,
+  content: string,
+  createdBy: string,
+): WeeklySummaryRow {
+  const now = Date.now();
+  db.prepare(
+    `INSERT INTO weekly_summaries (week_start, week_end, content, created_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(week_start, week_end) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
+  ).run(weekStart, weekEnd, content, createdBy, now, now);
+  return db
+    .prepare(`SELECT * FROM weekly_summaries WHERE week_start = ? AND week_end = ?`)
+    .get(weekStart, weekEnd) as unknown as WeeklySummaryRow;
+}
+
+export function listWeeklySummaries(): WeeklySummaryRow[] {
+  return db
+    .prepare(`SELECT * FROM weekly_summaries ORDER BY week_start DESC`)
+    .all() as unknown as WeeklySummaryRow[];
+}
+
+export function getWeeklySummaryByWeek(weekStart: number, weekEnd: number): WeeklySummaryRow | null {
+  return (
+    (db
+      .prepare(`SELECT * FROM weekly_summaries WHERE week_start = ? AND week_end = ?`)
+      .get(weekStart, weekEnd) as unknown as WeeklySummaryRow) ?? null
+  );
+}
+
+export function getWeeklySummaryById(id: number): WeeklySummaryRow | null {
+  return (
+    (db.prepare(`SELECT * FROM weekly_summaries WHERE id = ?`).get(id) as unknown as WeeklySummaryRow) ?? null
+  );
 }

@@ -32,3 +32,22 @@ export const REALMS = ['Atiesh', 'Azuresong', 'Myzrael', 'OldBlanchy'] as const;
 export function classColor(characterClass: string | null | undefined): string {
   return CLASS_COLORS[(characterClass as WarriorClass) ?? 'Warrior'] ?? CLASS_COLORS.Warrior;
 }
+
+// Used to flavor the Admin Summary page's generated Discord text - real
+// Unicode glyphs, not `:shortcode:` text, since Discord only auto-converts
+// shortcodes as you type them, not when pasted in as plain text.
+export const CLASS_EMOJIS: Record<WarriorClass, string> = {
+  Druid: '🐻',
+  Hunter: '🏹',
+  Mage: '🔮',
+  Paladin: '🔨',
+  Priest: '✨',
+  Rogue: '🗡️',
+  Shaman: '⚡',
+  Warlock: '👹',
+  Warrior: '⚔️',
+};
+
+export function classEmoji(characterClass: string | null | undefined): string {
+  return CLASS_EMOJIS[(characterClass as WarriorClass) ?? 'Warrior'] ?? CLASS_EMOJIS.Warrior;
+}

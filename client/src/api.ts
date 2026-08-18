@@ -1078,6 +1078,91 @@ export async function deleteAdminNotification(id: number): Promise<void> {
   }
 }
 
+// --- Admin Summary ---------------------------------------------------------
+
+export interface SummaryCharacterRef {
+  warriorId: number;
+  playerName: string;
+  server: string;
+  class: string | null;
+}
+
+export interface SummaryUserRef {
+  userId: string;
+  username: string;
+}
+
+export interface WeeklySummaryData {
+  weekStart: number;
+  weekEnd: number;
+  mostActiveTrader: (SummaryUserRef & { tradeCount: number }) | null;
+  mostTradedCharacter: (SummaryCharacterRef & { tradeCount: number }) | null;
+  guildVolume: { buyVolume: number; sellVolume: number; netSentiment: number; totalVolume: number };
+  biggestTrade:
+    | (SummaryUserRef &
+        SummaryCharacterRef & {
+          side: "buy" | "sell";
+          shares: number;
+          price: number;
+          total: number;
+          createdAt: number;
+        })
+    | null;
+  biggestGainer: (SummaryCharacterRef & { pctChange: number; fromPrice: number; toPrice: number }) | null;
+  biggestLoser: (SummaryCharacterRef & { pctChange: number; fromPrice: number; toPrice: number }) | null;
+  mostVolatile: (SummaryCharacterRef & { volatility: number }) | null;
+  topRealizedGainer: (SummaryUserRef & { realizedPnl: number }) | null;
+  topRealizedLoser: (SummaryUserRef & { realizedPnl: number }) | null;
+  topFund: { fundId: number; name: string; pctChange: number } | null;
+  bottomFund: { fundId: number; name: string; pctChange: number } | null;
+  diamondHands: (SummaryUserRef & SummaryCharacterRef & { heldSinceMs: number }) | null;
+  paperHands: (SummaryUserRef & { sellCount: number }) | null;
+}
+
+export async function getAdminSummary(start: number, end: number): Promise<WeeklySummaryData> {
+  const res = await fetch(`/api/admin/summary?start=${start}&end=${end}`);
+  if (!res.ok) throw new Error("Failed to load weekly summary");
+  return res.json();
+}
+
+export interface SummaryHistoryEntry {
+  id: number;
+  weekStart: number;
+  weekEnd: number;
+  createdBy: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface SummaryHistoryDetail extends SummaryHistoryEntry {
+  content: string;
+}
+
+export async function getSummaryHistory(): Promise<SummaryHistoryEntry[]> {
+  const res = await fetch("/api/admin/summary/history");
+  if (!res.ok) throw new Error("Failed to load summary history");
+  return res.json();
+}
+
+export async function getSummaryHistoryById(id: number): Promise<SummaryHistoryDetail> {
+  const res = await fetch(`/api/admin/summary/history/${id}`);
+  if (!res.ok) throw new Error("Failed to load saved summary");
+  return res.json();
+}
+
+export async function saveWeeklySummary(weekStart: number, weekEnd: number, content: string): Promise<SummaryHistoryDetail> {
+  const res = await fetch("/api/admin/summary/history", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ weekStart, weekEnd, content }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to save summary");
+  }
+  return res.json();
+}
+
 export async function uploadNotificationImage(file: File): Promise<{ url: string }> {
   const formData = new FormData();
   formData.append("image", file);

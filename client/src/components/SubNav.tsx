@@ -7,6 +7,7 @@ const LINKS: TabNavLink[] = [
   { to: "/admin/price-history", label: "Price History" },
   { to: "/admin/notifications", label: "Notifications" },
   { to: "/admin/audit-log", label: "Audit Log" },
+  { to: "/admin/summary", label: "Summary" },
 ];
 
 export function SubNav() {

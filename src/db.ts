@@ -2451,13 +2451,7 @@ export function getLeaderboard(): LeaderboardEntry[] {
     .prepare(`SELECT * FROM holdings WHERE shares > 0`)
     .all() as unknown as HoldingRow[];
 
-  const latestPrices = new Map<number, number>();
-  const priceRows = db
-    .prepare(
-      `SELECT warrior_id, price FROM price_snapshots WHERE id IN (SELECT MAX(id) FROM price_snapshots GROUP BY warrior_id)`,
-    )
-    .all() as unknown as { warrior_id: number; price: number }[];
-  for (const r of priceRows) latestPrices.set(r.warrior_id, r.price);
+  const latestPrices = getAllLatestTradablePrices();
 
   const holdingsValueByUser = new Map<string, number>();
   for (const h of holdings) {
@@ -2581,13 +2575,7 @@ export function getAdminWalletOverview(): AdminWalletOverviewEntry[] {
     .prepare(`SELECT * FROM holdings WHERE shares > 0`)
     .all() as unknown as HoldingRow[];
 
-  const latestPrices = new Map<number, number>();
-  const priceRows = db
-    .prepare(
-      `SELECT warrior_id, price FROM price_snapshots WHERE id IN (SELECT MAX(id) FROM price_snapshots GROUP BY warrior_id)`,
-    )
-    .all() as unknown as { warrior_id: number; price: number }[];
-  for (const r of priceRows) latestPrices.set(r.warrior_id, r.price);
+  const latestPrices = getAllLatestTradablePrices();
 
   const holdingsValueByUser = new Map<string, number>();
   for (const h of holdings) {
@@ -3550,12 +3538,25 @@ function getFundHoldingsValueByUser(): Map<string, number> {
 }
 
 // Batched "current price of every warrior" lookup for the fund valuation
-// tick - avoids one getLatestPrice() query per constituent per fund, same
-// MAX(id) GROUP BY pattern getLeaderboard() already uses.
+// tick - avoids one getLatestPrice() query per constituent per fund.
+// Includes 'raid_anchor' rows (unlike getAllLatestTradablePrices()), since
+// funds should value against the current anchor, not just tradable prices.
+//
+// Ranks by created_at (not id): 'raid'/'raid_anchor' rows are inserted
+// whenever a raid report is processed, which can be well after their
+// created_at (the raid's actual in-game timestamp) trails newer drift/trade
+// rows. A plain MAX(id) GROUP BY would let such a backdated row outrank a
+// genuinely more recent snapshot.
 export function getAllLatestWarriorPrices(): Map<number, number> {
   const rows = db
     .prepare(
-      `SELECT warrior_id, price FROM price_snapshots WHERE id IN (SELECT MAX(id) FROM price_snapshots GROUP BY warrior_id)`,
+      `SELECT warrior_id, price FROM (
+         SELECT warrior_id, price,
+                ROW_NUMBER() OVER (
+                  PARTITION BY warrior_id ORDER BY created_at DESC, id DESC
+                ) AS rn
+         FROM price_snapshots
+       ) WHERE rn = 1`,
     )
     .all() as unknown as { warrior_id: number; price: number }[];
   return new Map(rows.map((r) => [r.warrior_id, r.price]));
@@ -3568,12 +3569,23 @@ export function getAllLatestWarriorPrices(): Map<number, number> {
 // (e.g. percentile-ranking for the price-curve gating in stock.ts) without
 // the batched query drifting semantics away from what getLatestPrice()
 // would return for the same warrior one at a time.
+//
+// Ranks by created_at (not id): 'raid' rows are inserted whenever a raid
+// report is processed, which can be well after their created_at (the raid's
+// actual in-game timestamp) trails newer drift/trade rows. A plain MAX(id)
+// GROUP BY would let such a backdated raid row outrank a genuinely more
+// recent drift/trade snapshot - the same ordering getLatestPrice() uses.
 export function getAllLatestTradablePrices(): Map<number, number> {
   const rows = db
     .prepare(
-      `SELECT warrior_id, price FROM price_snapshots WHERE id IN (
-         SELECT MAX(id) FROM price_snapshots WHERE source != 'raid_anchor' GROUP BY warrior_id
-       )`,
+      `SELECT warrior_id, price FROM (
+         SELECT warrior_id, price,
+                ROW_NUMBER() OVER (
+                  PARTITION BY warrior_id ORDER BY created_at DESC, id DESC
+                ) AS rn
+         FROM price_snapshots
+         WHERE source != 'raid_anchor'
+       ) WHERE rn = 1`,
     )
     .all() as unknown as { warrior_id: number; price: number }[];
   return new Map(rows.map((r) => [r.warrior_id, r.price]));

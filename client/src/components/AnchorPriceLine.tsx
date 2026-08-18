@@ -1,4 +1,9 @@
-import { MUTED_COLOR, NEGATIVE_COLOR, POSITIVE_COLOR, lerpColor } from '../chartColors';
+import {
+  MUTED_COLOR,
+  NEGATIVE_COLOR,
+  POSITIVE_COLOR,
+  lerpColor,
+} from '../chartColors';
 import { fmtCoin } from '../format';
 
 interface AnchorPriceLineProps {
@@ -15,7 +20,7 @@ const DEVIATION_CAP = 0.05;
 // label's width of each other (e.g. anchor and raid anchor both close to
 // price but far from each other), so positions get a min-gap declutter pass
 // after the log-scale position is computed.
-const MIN_GAP_PCT = 15;
+const MIN_GAP_PCT = 30;
 
 type Point = { cls: string; prefix: string; value: number };
 
@@ -33,7 +38,11 @@ type Point = { cls: string; prefix: string; value: number };
 // neutral since they're the reference points, not the moving value. The
 // line is mirrored when price is above its anchor so price always reads on
 // the left (see `flip` below).
-export function AnchorPriceLine({ price, anchorPrice, raidAnchorPrice }: AnchorPriceLineProps) {
+export function AnchorPriceLine({
+  price,
+  anchorPrice,
+  raidAnchorPrice,
+}: AnchorPriceLineProps) {
   const points: Point[] = [
     { cls: 'apl-anchor', prefix: 'A: ', value: anchorPrice },
     { cls: 'apl-raid-anchor', prefix: 'R: ', value: raidAnchorPrice },
@@ -48,7 +57,8 @@ export function AnchorPriceLine({ price, anchorPrice, raidAnchorPrice }: AnchorP
   const minLog = Math.min(...logValues);
   const maxLog = Math.max(...logValues);
   const rangeLog = maxLog - minLog;
-  const pctFor = (v: number) => (rangeLog === 0 ? 50 : ((Math.log(v) - minLog) / rangeLog) * 100);
+  const pctFor = (v: number) =>
+    rangeLog === 0 ? 50 : ((Math.log(v) - minLog) / rangeLog) * 100;
 
   // Declutter: push points apart (in ascending position order) until they're
   // at least MIN_GAP_PCT apart. A forward pass alone pushes a cluster of
@@ -65,7 +75,10 @@ export function AnchorPriceLine({ price, anchorPrice, raidAnchorPrice }: AnchorP
   for (let i = pcts.length - 2; i >= 0; i--) {
     pcts[i] = Math.min(pcts[i], pcts[i + 1] - MIN_GAP_PCT);
   }
-  const dev = price !== null && anchorPrice !== null && anchorPrice > 0 ? (price - anchorPrice) / anchorPrice : null;
+  const dev =
+    price !== null && anchorPrice !== null && anchorPrice > 0
+      ? (price - anchorPrice) / anchorPrice
+      : null;
 
   // Price trading below its anchor already lands on the left naturally (it's
   // the lower value). Mirror the line when price is trading *above* its
@@ -79,14 +92,25 @@ export function AnchorPriceLine({ price, anchorPrice, raidAnchorPrice }: AnchorP
   let color = MUTED_COLOR;
   if (dev !== null && dev !== 0) {
     const t = Math.min(1, Math.abs(dev) / DEVIATION_CAP);
-    color = lerpColor(MUTED_COLOR, dev > 0 ? POSITIVE_COLOR : NEGATIVE_COLOR, t);
+    color = lerpColor(
+      MUTED_COLOR,
+      dev > 0 ? POSITIVE_COLOR : NEGATIVE_COLOR,
+      t,
+    );
   }
 
   return (
-    <div className="anchor-price-line" style={{ ['--line-color' as string]: color }}>
+    <div
+      className="anchor-price-line"
+      style={{ ['--line-color' as string]: color }}
+    >
       <div className="apl-line" />
       {points.map((p) => (
-        <div key={p.cls} className={`apl-point ${p.cls}`} style={{ left: `${declutteredPct.get(p.cls)}%` }}>
+        <div
+          key={p.cls}
+          className={`apl-point ${p.cls}`}
+          style={{ left: `${declutteredPct.get(p.cls)}%` }}
+        >
           <span className="apl-dot" />
           <span className="apl-label">
             {p.prefix}

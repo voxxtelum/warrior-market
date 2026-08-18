@@ -1390,7 +1390,7 @@ tbody tr:hover {
 
 .anchor-price-line {
   position: relative;
-  min-width: 400px;
+  min-width: 200px;
   height: 2px;
   margin: 1.6rem 0.5rem;
 }

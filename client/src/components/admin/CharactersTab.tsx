@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pagination } from '../Pagination';
 import { SidePill } from '../SidePill';
+import { AnchorPriceLine } from '../AnchorPriceLine';
 import {
   getWarriorHolders,
   getWarriorTrades,
@@ -15,8 +16,6 @@ const TRADES_PAGE_SIZE = 10;
 
 type SortKey =
   | 'price'
-  | 'anchorPrice'
-  | 'raidAnchorPrice'
   | 'character'
   | 'invested'
   | 'volume'
@@ -26,9 +25,7 @@ type SortKey =
 
 const COLUMNS: { key: SortKey; label: string }[] = [
   { key: 'character', label: 'Character' },
-  { key: 'price', label: 'Price' },
-  { key: 'anchorPrice', label: 'Anchor Price' },
-  { key: 'raidAnchorPrice', label: 'Raid Anchor Price' },
+  { key: 'price', label: 'Price / Anchor / Raid Anchor' },
   { key: 'invested', label: 'Total Invested' },
   { key: 'volume', label: 'Volume' },
   { key: 'trades', label: 'Trades' },
@@ -38,10 +35,6 @@ function sortValue(row: WarriorVolumeRow, key: SortKey): string | number {
   switch (key) {
     case 'price':
       return row.price ?? 0;
-    case 'anchorPrice':
-      return row.anchorPrice ?? 0;
-    case 'raidAnchorPrice':
-      return row.raidAnchorPrice ?? 0;
     case 'character':
       return `${row.playerName}-${row.server}`.toLowerCase();
     case 'invested':
@@ -146,13 +139,7 @@ export function CharactersTab() {
                   <th
                     key={col.key}
                     className={
-                      col.key === 'volume' ||
-                      col.key === 'invested' ||
-                      col.key === 'price' ||
-                      col.key === 'anchorPrice' ||
-                      col.key === 'raidAnchorPrice'
-                        ? 'sortable text-right'
-                        : 'sortable'
+                      col.key === 'volume' || col.key === 'invested' ? 'sortable text-right' : 'sortable'
                     }
                     onClick={() => handleSort(col.key)}
                   >
@@ -171,7 +158,7 @@ export function CharactersTab() {
             <tbody>
               {rows?.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="no-data">
+                  <td colSpan={7} className="no-data">
                     No trades yet.
                   </td>
                 </tr>
@@ -184,10 +171,12 @@ export function CharactersTab() {
                   <td className="warrior-name">
                     {row.playerName}-{row.server}
                   </td>
-                  <td className="text-right">{row.price !== null ? fmtCoin(row.price) : '–'}</td>
-                  <td className="text-right">{row.anchorPrice !== null ? fmtCoin(row.anchorPrice) : '–'}</td>
-                  <td className="text-right">
-                    {row.raidAnchorPrice !== null ? fmtCoin(row.raidAnchorPrice) : '–'}
+                  <td>
+                    <AnchorPriceLine
+                      price={row.price}
+                      anchorPrice={row.anchorPrice}
+                      raidAnchorPrice={row.raidAnchorPrice}
+                    />
                   </td>
                   <td className="text-right">{fmtCoin(row.totalInvested)}</td>
                   <td className="text-right">{fmtCoin(row.volume)}</td>

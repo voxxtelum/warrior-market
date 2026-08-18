@@ -8,7 +8,7 @@ import { TradeModal } from '../components/TradeModal';
 import { ArrowsRightLeftIcon } from '../components/icons/ArrowsRightLeftIcon';
 import { useAuth } from '../authContext';
 import { useIsMobile } from '../hooks/useIsMobile';
-import { NEGATIVE_COLOR, POSITIVE_COLOR, paletteColor } from '../chartColors';
+import { NEGATIVE_COLOR, POSITIVE_COLOR, lerpColor, paletteColor } from '../chartColors';
 import { fmtCoin, fmtDate, fmtDateTime, priceDelta } from '../format';
 import {
   getMarketSummary,
@@ -20,21 +20,6 @@ import {
   type PlayerStock,
   type WalletData,
 } from '../api';
-
-function hexToRgb(hex: string): [number, number, number] {
-  return [
-    parseInt(hex.slice(1, 3), 16),
-    parseInt(hex.slice(3, 5), 16),
-    parseInt(hex.slice(5, 7), 16),
-  ];
-}
-
-function lerpColor(hexA: string, hexB: string, t: number): string {
-  const a = hexToRgb(hexA);
-  const b = hexToRgb(hexB);
-  const c = a.map((v, i) => Math.round(v + (b[i] - v) * t));
-  return `rgb(${c[0]}, ${c[1]}, ${c[2]})`;
-}
 
 const HEAT_POS_LIGHT = '#bfe3fa';
 const HEAT_POS_DARK = POSITIVE_COLOR;

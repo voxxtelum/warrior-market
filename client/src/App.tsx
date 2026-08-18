@@ -39,8 +39,8 @@ function App() {
       <Route path="/overview" element={<Navigate to="/warriors/raids" replace />} />
       <Route path="/faq" element={<FaqPage />} />
       <Route path="/documentation" element={<DocumentationPage />} />
-      <Route path="/admin" element={<AdminReportsPage />} />
-      <Route path="/admin/manage-app" element={<AdminManageAppPage />} />
+      <Route path="/admin" element={<AdminManageAppPage />} />
+      <Route path="/admin/reports" element={<AdminReportsPage />} />
       <Route path="/admin/manage-funds" element={<AdminManageFundsPage />} />
       <Route path="/admin/price-history" element={<AdminPriceHistoryPage />} />
       <Route path="/admin/notifications" element={<AdminNotificationsPage />} />

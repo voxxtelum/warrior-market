@@ -2,11 +2,11 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 
 const LINKS = [
-  { to: '/admin', label: 'Add Report', end: true },
-  { to: '/admin/manage-app', label: 'Manage App' },
-  { to: '/admin/manage-funds', label: 'Manage Funds' },
-  { to: '/admin/price-history', label: 'Price History' },
+  { to: '/admin', label: 'App', end: true },
+  { to: '/admin/manage-funds', label: 'Funds' },
   { to: '/admin/notifications', label: 'Notifications' },
+  { to: '/admin/reports', label: 'Reports' },
+  { to: '/admin/price-history', label: 'Price History' },
   { to: '/admin/audit-log', label: 'Audit Log' },
   { to: '/admin/summary', label: 'Summary' },
   { to: '/admin/backup', label: 'Backup' },

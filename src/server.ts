@@ -16,6 +16,7 @@ import { adminMarketRouter } from "./routes/adminMarket";
 import { adminFundsRouter } from "./routes/adminFunds";
 import { adminNotificationsRouter } from "./routes/adminNotifications";
 import { adminSummaryRouter } from "./routes/adminSummary";
+import { adminBackupRouter } from "./routes/adminBackup";
 import { fundsRouter } from "./routes/funds";
 import { faqRouter } from "./routes/faq";
 import { stocksDocRouter } from "./routes/stocksDoc";
@@ -24,6 +25,7 @@ import { attachUser, requireAdmin } from "./middleware/auth";
 import { backfillPriceSnapshotsIfNeeded } from "./stock";
 import { startDriftScheduler } from "./drift";
 import { startFundValuationScheduler } from "./fundValuation";
+import { startBackupScheduler } from "./backup";
 
 // One-time (idempotent) migration for installs with pre-existing raid
 // history, so trading has a price series to read from immediately.
@@ -32,6 +34,7 @@ startDriftScheduler();
 // After startDriftScheduler() - setLastFundValuationAt's fresh-insert branch
 // assumes scheduler_state's row (and a real last_drift_at) already exists.
 startFundValuationScheduler();
+startBackupScheduler();
 
 const app = express();
 app.use(express.json());
@@ -51,6 +54,7 @@ app.use("/api/admin/market", requireAdmin, adminMarketRouter);
 app.use("/api/admin/funds", requireAdmin, adminFundsRouter);
 app.use("/api/admin/notifications", requireAdmin, adminNotificationsRouter);
 app.use("/api/admin/summary", requireAdmin, adminSummaryRouter);
+app.use("/api/admin/backup", requireAdmin, adminBackupRouter);
 app.use("/api/funds", fundsRouter);
 app.use("/api/faq", faqRouter);
 app.use("/api/stocks-doc", stocksDocRouter);

@@ -20,6 +20,7 @@ import {
   warriorHasRaidSnapshot,
   type ReportPriceImpactWrite,
 } from "./db";
+import { createBackup } from "./backup";
 
 export interface StockAbilityConfig {
   id: number;
@@ -608,6 +609,10 @@ export function commitReport(reportCode: string): ReportPriceImpactEntry[] {
     delta: e.isFirstPrice ? null : e.delta,
     source: e.isFirstPrice ? "raid" : "raid_anchor",
   }));
+  // Safety snapshot before this report's price impact goes live - must run
+  // before applyReportPriceImpact's own BEGIN (db.ts), since VACUUM INTO
+  // can't run inside an open transaction.
+  createBackup("pre_report", { reportCode });
   applyReportPriceImpact(reportCode, writes);
   return entries;
 }

@@ -355,6 +355,29 @@ db.exec(`
     updated_at INTEGER NOT NULL
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_weekly_summaries_week ON weekly_summaries (week_start, week_end);
+
+  -- One row per backup file written to data/backups/ - see backup.ts for the
+  -- actual VACUUM INTO / restore logic, this table is just the registry.
+  -- 'hourly'/'daily' rows are pruned automatically per backup_settings;
+  -- 'manual'/'pre_report'/'pre_restore' rows are kept until an admin deletes
+  -- them explicitly (see backup.ts's pruneBackups, only ever called with
+  -- 'hourly'/'daily').
+  CREATE TABLE IF NOT EXISTS backups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    filename TEXT NOT NULL UNIQUE,
+    kind TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+
+  -- Single-row table (id=1), same upsert style as stock_config/scheduler_state -
+  -- admin-editable retention counts for the hourly/daily backup schedulers,
+  -- surfaced on /admin/backup rather than the Manage App page.
+  CREATE TABLE IF NOT EXISTS backup_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    retain_hourly INTEGER NOT NULL DEFAULT 12,
+    retain_daily INTEGER NOT NULL DEFAULT 3
+  );
 `);
 
 // Idle drift reverts toward this, and demand-driven trade impact updates it -
@@ -419,6 +442,26 @@ const schedulerStateHasLastFundValuationAt = (
 ).some((c) => c.name === 'last_fund_valuation_at');
 if (!schedulerStateHasLastFundValuationAt) {
   db.exec(`ALTER TABLE scheduler_state ADD COLUMN last_fund_valuation_at INTEGER`);
+}
+
+// Independent last-tick timestamps for the hourly/daily backup schedulers
+// (backup.ts), same reasoning as last_fund_valuation_at above.
+const schedulerStateHasLastHourlyBackupAt = (
+  db.prepare(`PRAGMA table_info(scheduler_state)`).all() as unknown as {
+    name: string;
+  }[]
+).some((c) => c.name === 'last_hourly_backup_at');
+if (!schedulerStateHasLastHourlyBackupAt) {
+  db.exec(`ALTER TABLE scheduler_state ADD COLUMN last_hourly_backup_at INTEGER`);
+}
+
+const schedulerStateHasLastDailyBackupAt = (
+  db.prepare(`PRAGMA table_info(scheduler_state)`).all() as unknown as {
+    name: string;
+  }[]
+).some((c) => c.name === 'last_daily_backup_at');
+if (!schedulerStateHasLastDailyBackupAt) {
+  db.exec(`ALTER TABLE scheduler_state ADD COLUMN last_daily_backup_at INTEGER`);
 }
 
 // price_snapshots.source has a CHECK constraint, which SQLite can't widen
@@ -3893,4 +3936,103 @@ export function getWeeklySummaryById(id: number): WeeklySummaryRow | null {
   return (
     (db.prepare(`SELECT * FROM weekly_summaries WHERE id = ?`).get(id) as unknown as WeeklySummaryRow) ?? null
   );
+}
+
+// ---------------------------------------------------------------------------
+// Backups (Admin > Backup page) - see backup.ts for VACUUM INTO / scheduling
+// / restore logic. This module only owns raw access to the `backups` and
+// `backup_settings` tables and the scheduler_state backup columns, matching
+// the rest of this file's role as the sole owner of the `db` connection.
+
+export type BackupKind = 'hourly' | 'daily' | 'manual' | 'pre_report' | 'pre_restore';
+
+export interface BackupRow {
+  id: number;
+  filename: string;
+  kind: BackupKind;
+  size_bytes: number;
+  created_at: number;
+}
+
+// Runs SQLite's own consistent-snapshot export - safe to call even with
+// concurrent readers/writers on `db`, unlike a raw file copy of the live
+// database file (see backup.ts's restoreBackup for why a raw copy of the
+// *backup* file back onto warrior.db is fine, but this direction - db to
+// backup - always goes through SQLite itself).
+export function vacuumInto(destPath: string): void {
+  db.prepare(`VACUUM INTO ?`).run(destPath);
+}
+
+export function insertBackupRow(row: { filename: string; kind: BackupKind; sizeBytes: number; createdAt: number }): BackupRow {
+  db.prepare(
+    `INSERT INTO backups (filename, kind, size_bytes, created_at) VALUES (?, ?, ?, ?)`,
+  ).run(row.filename, row.kind, row.sizeBytes, row.createdAt);
+  return db
+    .prepare(`SELECT * FROM backups WHERE filename = ?`)
+    .get(row.filename) as unknown as BackupRow;
+}
+
+export function listBackupRows(): BackupRow[] {
+  return db.prepare(`SELECT * FROM backups ORDER BY created_at DESC`).all() as unknown as BackupRow[];
+}
+
+export function listBackupRowsByKind(kind: BackupKind): BackupRow[] {
+  return db
+    .prepare(`SELECT * FROM backups WHERE kind = ? ORDER BY created_at DESC`)
+    .all(kind) as unknown as BackupRow[];
+}
+
+export function getBackupRowById(id: number): BackupRow | null {
+  return (db.prepare(`SELECT * FROM backups WHERE id = ?`).get(id) as unknown as BackupRow) ?? null;
+}
+
+export function deleteBackupRow(id: number): void {
+  db.prepare(`DELETE FROM backups WHERE id = ?`).run(id);
+}
+
+export interface BackupSettings {
+  retainHourly: number;
+  retainDaily: number;
+}
+
+export function getBackupSettings(): BackupSettings {
+  const row = db
+    .prepare(`SELECT retain_hourly, retain_daily FROM backup_settings WHERE id = 1`)
+    .get() as unknown as { retain_hourly: number; retain_daily: number } | undefined;
+  return row ? { retainHourly: row.retain_hourly, retainDaily: row.retain_daily } : { retainHourly: 12, retainDaily: 3 };
+}
+
+export function setBackupSettings(retainHourly: number, retainDaily: number): void {
+  db.prepare(
+    `INSERT INTO backup_settings (id, retain_hourly, retain_daily) VALUES (1, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET retain_hourly = excluded.retain_hourly, retain_daily = excluded.retain_daily`,
+  ).run(retainHourly, retainDaily);
+}
+
+export function getLastHourlyBackupAt(): number | null {
+  const row = db
+    .prepare(`SELECT last_hourly_backup_at FROM scheduler_state WHERE id = 1`)
+    .get() as unknown as { last_hourly_backup_at: number | null } | undefined;
+  return row ? row.last_hourly_backup_at : null;
+}
+
+export function setLastHourlyBackupAt(ts: number): void {
+  db.prepare(
+    `INSERT INTO scheduler_state (id, last_drift_at, last_hourly_backup_at) VALUES (1, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET last_hourly_backup_at = excluded.last_hourly_backup_at`,
+  ).run(ts, ts);
+}
+
+export function getLastDailyBackupAt(): number | null {
+  const row = db
+    .prepare(`SELECT last_daily_backup_at FROM scheduler_state WHERE id = 1`)
+    .get() as unknown as { last_daily_backup_at: number | null } | undefined;
+  return row ? row.last_daily_backup_at : null;
+}
+
+export function setLastDailyBackupAt(ts: number): void {
+  db.prepare(
+    `INSERT INTO scheduler_state (id, last_drift_at, last_daily_backup_at) VALUES (1, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET last_daily_backup_at = excluded.last_daily_backup_at`,
+  ).run(ts, ts);
 }

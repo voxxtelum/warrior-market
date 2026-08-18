@@ -34,7 +34,7 @@
   --accent-green-light: #64eeb0;
 
   --success: #6bcf6b;
-  --danger: #d64933;
+  --danger: #e11d48;
 
   /* Fund risk score (1-5), see riskScale.ts - fixed stops, not derived from
      the other palette vars above (some happen to coincide, most don't). */
@@ -496,7 +496,7 @@ button:disabled {
 }
 
 .btn-icon-only {
-  padding: 0.45rem;
+  padding: 0.45rem 0.6rem;
   line-height: 0;
 }
 
@@ -527,8 +527,9 @@ button:disabled {
 }
 
 .btn-danger {
-  color: var(--color-white);
+  color: var(--fg);
   background: var(--danger);
+  font-weight: 500;
 }
 .btn-danger:hover:not(:disabled) {
   color: var(--color-white);

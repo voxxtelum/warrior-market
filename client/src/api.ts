@@ -1196,6 +1196,77 @@ export async function saveWeeklySummary(weekStart: number, weekEnd: number, cont
   return res.json();
 }
 
+// --- Admin Backup -----------------------------------------------------
+
+export type BackupKind = "hourly" | "daily" | "manual" | "pre_report" | "pre_restore";
+
+export interface BackupRecord {
+  id: number;
+  filename: string;
+  kind: BackupKind;
+  sizeBytes: number;
+  createdAt: number;
+}
+
+export interface BackupSettings {
+  retainHourly: number;
+  retainDaily: number;
+}
+
+export async function getBackups(): Promise<BackupRecord[]> {
+  const res = await fetch("/api/admin/backup");
+  if (!res.ok) throw new Error("Failed to load backups");
+  return res.json();
+}
+
+export async function getBackupSettings(): Promise<BackupSettings> {
+  const res = await fetch("/api/admin/backup/settings");
+  if (!res.ok) throw new Error("Failed to load backup settings");
+  return res.json();
+}
+
+export async function saveBackupSettings(settings: BackupSettings): Promise<BackupSettings> {
+  const res = await fetch("/api/admin/backup/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to save backup settings");
+  }
+  return res.json();
+}
+
+export async function createManualBackup(): Promise<BackupRecord> {
+  const res = await fetch("/api/admin/backup/manual", { method: "POST" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to create backup");
+  }
+  return res.json();
+}
+
+export async function deleteBackup(id: number): Promise<void> {
+  const res = await fetch(`/api/admin/backup/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to delete backup");
+  }
+}
+
+export async function restoreBackup(id: number, confirmationPhrase: string): Promise<void> {
+  const res = await fetch(`/api/admin/backup/${id}/restore`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirmationPhrase }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to restore backup");
+  }
+}
+
 export async function uploadNotificationImage(file: File): Promise<{ url: string }> {
   const formData = new FormData();
   formData.append("image", file);

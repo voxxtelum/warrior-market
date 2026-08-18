@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AdminLayout } from '../components/AdminLayout';
 import { ConfirmModal } from '../components/ConfirmModal';
+import { TrashIconSolid } from '../components/icons/TrashIconSolid';
 import {
   createManualBackup,
   deleteBackup,
@@ -234,10 +235,12 @@ export function AdminBackupPage() {
                       </button>
                       <button
                         type="button"
-                        className="btn-danger"
+                        className="btn-danger btn-icon-only"
+                        aria-label={`Delete "${b.filename}"`}
+                        title="Delete"
                         onClick={() => setDeleting(b)}
                       >
-                        Delete
+                        <TrashIconSolid className="icon-btn-icon" />
                       </button>
                     </div>
                   </td>

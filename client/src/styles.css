@@ -493,10 +493,11 @@ button:disabled {
   width: 1em;
   height: 1em;
   flex-shrink: 0;
+  vertical-align: middle;
 }
 
 .btn-icon-only {
-  padding: 0.45rem 0.6rem;
+  padding: 0.5rem 0.6rem;
   line-height: 0;
 }
 

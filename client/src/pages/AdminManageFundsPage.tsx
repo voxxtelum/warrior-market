@@ -3,6 +3,8 @@ import { AdminLayout } from "../components/AdminLayout";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { FundForm } from "../components/admin/FundForm";
 import { RiskBar } from "../components/RiskBar";
+import { PencilSquareIcon } from "../components/icons/PencilSquareIcon";
+import { TrashIconSolid } from "../components/icons/TrashIconSolid";
 import {
   createFund,
   deleteFund,
@@ -218,14 +220,28 @@ export function AdminManageFundsPage() {
                   <td>{f.sharesOutstanding.toFixed(2)}</td>
                   <td>{f.deletedAt ? "Deleted" : "Active"}</td>
                   <td>
-                    <button type="button" onClick={() => openEdit(f)}>
-                      Edit
-                    </button>
-                    {!f.deletedAt && (
-                      <button type="button" className="btn-danger" onClick={() => setDeleting(f)}>
-                        Delete
+                    <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                      <button
+                        type="button"
+                        className="btn-icon-only"
+                        aria-label={`Edit "${f.name}"`}
+                        title="Edit"
+                        onClick={() => openEdit(f)}
+                      >
+                        <PencilSquareIcon className="icon-btn-icon" />
                       </button>
-                    )}
+                      {!f.deletedAt && (
+                        <button
+                          type="button"
+                          className="btn-danger btn-icon-only"
+                          aria-label={`Delete "${f.name}"`}
+                          title="Delete"
+                          onClick={() => setDeleting(f)}
+                        >
+                          <TrashIconSolid className="icon-btn-icon" />
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

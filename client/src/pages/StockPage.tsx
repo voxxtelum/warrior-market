@@ -222,6 +222,8 @@ function refreshHistory(setPriceHistory: (h: PlayerPriceHistory[]) => void) {
   getStockHistory().then(setPriceHistory);
 }
 
+const SPARKLINE_WINDOW = 20;
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 type RangeKey = '1D' | '1W' | '1M' | '6M' | 'All';
 const RANGES: { key: RangeKey; label: string; ms: number | null }[] = [
@@ -439,6 +441,25 @@ export function StockPage() {
       });
     }, [priceHistory, leaderboard, selectedPlayer, selectedRange]);
 
+  // Every row's sparkline shows the same number of points (rather than one
+  // point per raid, which leaves veterans with a long line and newcomers
+  // with almost none) by reading the last SPARKLINE_WINDOW entries of the
+  // full price_snapshots ledger - raid, drift, swing, and trade ticks alike
+  // - instead of the raid-only series used elsewhere on this page. Falls
+  // back to the raid-only series when priceHistory hasn't loaded yet (or
+  // has no entry for a row) so the column never goes blank.
+  const sparklinePrices = useMemo(() => {
+    const map = new Map<string, number[]>();
+    if (!priceHistory) return map;
+    for (const h of priceHistory) {
+      map.set(
+        `${h.player_name}::${h.server}`,
+        h.series.slice(-SPARKLINE_WINDOW).map((s) => s.price),
+      );
+    }
+    return map;
+  }, [priceHistory]);
+
   return (
     <MarketLayout>
       <div className="stats-row">
@@ -604,7 +625,10 @@ export function StockPage() {
                     </td>
                     <td>
                       <Sparkline
-                        prices={row.series.map((s) => s.price)}
+                        prices={
+                          sparklinePrices.get(rowKey(row)) ??
+                          row.series.map((s) => s.price)
+                        }
                         width={isMobile ? 46 : 90}
                         height={isMobile ? 20 : 28}
                       />

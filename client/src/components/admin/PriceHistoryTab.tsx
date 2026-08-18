@@ -22,7 +22,7 @@ const SOURCE_OPTIONS: { key: PriceHistorySource; label: string }[] = [
 // Drift excluded by default - it's overwhelmingly the largest and least
 // interesting slice of this table (hourly ticks, forever, every warrior).
 // 'raid_anchor' rows are audit-only (a raid after a warrior's first no
-// longer moves the live price, only the anchor - see snapshotPricesForReport)
+// longer moves the live price, only the anchor - see commitReport)
 // but are included by default alongside 'raid' since together they're the
 // full raid history for a warrior.
 const DEFAULT_SOURCES: PriceHistorySource[] = ['raid', 'raid_anchor', 'swing', 'trade'];

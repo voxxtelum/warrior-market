@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { AdminLayout } from "../components/AdminLayout";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { Pagination } from "../components/Pagination";
+import { ReportPreviewCard } from "../components/admin/ReportPreviewCard";
 import { TrashIcon } from "../components/icons/TrashIcon";
 import { addReport, deleteReport, getReports, type ReportRow } from "../api";
+
+const REPORTS_PAGE_SIZE = 10;
 
 function fmtDate(ts: number): string {
   return new Date(ts).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
@@ -19,16 +23,33 @@ export function AdminReportsPage() {
   const [status, setStatus] = useState<{ text: string; kind: "success" | "error" } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ReportRow | null>(null);
   const [instanceFilter, setInstanceFilter] = useState("");
+  const [reportsPage, setReportsPage] = useState(0);
+
+  const pendingReport = useMemo(() => reports?.find((r) => r.status === "pending") ?? null, [reports]);
+  const committedReports = useMemo(() => (reports ?? []).filter((r) => r.status === "committed"), [reports]);
 
   const instances = useMemo(() => {
     const zones = new Set<string>();
-    for (const r of reports ?? []) zones.add(r.zone ?? "unknown zone");
+    for (const r of committedReports) zones.add(r.zone ?? "unknown zone");
     return [...zones].sort();
-  }, [reports]);
+  }, [committedReports]);
 
   const filteredReports = useMemo(
-    () => (reports ?? []).filter((r) => !instanceFilter || (r.zone ?? "unknown zone") === instanceFilter),
-    [reports, instanceFilter]
+    () =>
+      committedReports
+        .filter((r) => !instanceFilter || (r.zone ?? "unknown zone") === instanceFilter)
+        .slice()
+        .reverse(),
+    [committedReports, instanceFilter]
+  );
+
+  const reportsPageCount = Math.ceil(filteredReports.length / REPORTS_PAGE_SIZE);
+  // Clamped rather than reset via an effect - keeps page valid whenever the
+  // list shrinks (a filter change, a delete) without an extra render pass.
+  const clampedReportsPage = Math.min(reportsPage, Math.max(0, reportsPageCount - 1));
+  const pageReports = filteredReports.slice(
+    clampedReportsPage * REPORTS_PAGE_SIZE,
+    clampedReportsPage * REPORTS_PAGE_SIZE + REPORTS_PAGE_SIZE
   );
 
   function loadReports() {
@@ -55,7 +76,7 @@ export function AdminReportsPage() {
 
     try {
       const body = await addReport(trimmed);
-      setStatus({ text: `Added "${body.title}" (${body.zone ?? "unknown zone"})`, kind: "success" });
+      setStatus({ text: `"${body.title}" (${body.zone ?? "unknown zone"}) is pending review below`, kind: "success" });
       setUrl("");
       loadReports();
     } catch (err) {
@@ -76,19 +97,33 @@ export function AdminReportsPage() {
             required
             value={url}
             onChange={(e) => setUrl(e.target.value)}
+            disabled={!!pendingReport}
           />
-          <button type="submit" disabled={submitting}>
+          <button type="submit" disabled={submitting || !!pendingReport}>
             Add
           </button>
         </form>
+        {pendingReport && (
+          <div className="status">A report is pending review below — commit or discard it before adding another.</div>
+        )}
         {status && <div className={`status ${status.kind}`}>{status.text}</div>}
       </div>
 
+      {pendingReport && (
+        <ReportPreviewCard pendingReport={pendingReport} onDiscarded={loadReports} onCommitted={loadReports} />
+      )}
+
       <div className="card">
         <h2 style={{ marginTop: 0 }}>Reports in local data</h2>
-        {reports?.length !== 0 && (
+        {committedReports.length !== 0 && (
           <form onSubmit={(e) => e.preventDefault()}>
-            <select value={instanceFilter} onChange={(e) => setInstanceFilter(e.target.value)}>
+            <select
+              value={instanceFilter}
+              onChange={(e) => {
+                setInstanceFilter(e.target.value);
+                setReportsPage(0);
+              }}
+            >
               <option value="">All instances</option>
               {instances.map((zone) => (
                 <option key={zone} value={zone}>
@@ -100,7 +135,7 @@ export function AdminReportsPage() {
         )}
         <div className="table-scroll">
           <table id="report-table">
-            {reports?.length === 0 ? (
+            {committedReports.length === 0 ? (
               <tbody>
                 <tr>
                   <td>No reports added yet.</td>
@@ -123,36 +158,34 @@ export function AdminReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredReports
-                    .slice()
-                    .reverse()
-                    .map((r) => (
-                      <tr key={r.code}>
-                        <td>
-                          <a href={wclUrl(r.code)} target="_blank" rel="noopener">
-                            {r.title}
-                          </a>
-                        </td>
-                        <td>{r.zone ?? "unknown zone"}</td>
-                        <td>{fmtDate(r.start_time)}</td>
-                        <td>
-                          <button
-                            type="button"
-                            className="btn-danger btn-icon-only"
-                            aria-label={`Delete "${r.title}"`}
-                            title="Delete report"
-                            onClick={() => setDeleteTarget(r)}
-                          >
-                            <TrashIcon className="icon-btn-icon" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                  {pageReports.map((r) => (
+                    <tr key={r.code}>
+                      <td>
+                        <a href={wclUrl(r.code)} target="_blank" rel="noopener">
+                          {r.title}
+                        </a>
+                      </td>
+                      <td>{r.zone ?? "unknown zone"}</td>
+                      <td>{fmtDate(r.start_time)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn-danger btn-icon-only"
+                          aria-label={`Delete "${r.title}"`}
+                          title="Delete report"
+                          onClick={() => setDeleteTarget(r)}
+                        >
+                          <TrashIcon className="icon-btn-icon" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </>
             )}
           </table>
         </div>
+        <Pagination page={clampedReportsPage} pageCount={reportsPageCount} onPageChange={setReportsPage} />
       </div>
 
       {deleteTarget && (

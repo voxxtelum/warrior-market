@@ -1,6 +1,15 @@
 import { graphqlRequest } from "./wclClient";
-import { upsertReport, CastRow, DamageRow, DamageTakenRow, FightRow, ReportRow, getOrCreateWarriorId } from "./db";
-import { snapshotPricesForReport } from "./stock";
+import {
+  upsertReport,
+  CastRow,
+  DamageRow,
+  DamageTakenRow,
+  FightRow,
+  ReportRow,
+  getOrCreateWarriorId,
+  getPendingReport,
+  getReportStatus,
+} from "./db";
 import trackedConfig from "../config.json";
 
 const trackedAbilityNames = new Map<number, string>(trackedConfig.trackedAbilities.map((a) => [a.id, a.name]));
@@ -163,6 +172,22 @@ function aggregateActorTotals(
 export async function fetchAndIngestReport(codeOrUrl: string): Promise<{ code: string; title: string; zone: string | null }> {
   const code = parseReportCode(codeOrUrl);
 
+  // Both checks are local/fast and run before any WCL API call, so a
+  // blocked add never wastes API quota. Only one report may be held for
+  // review at a time (see idx_reports_single_pending in db.ts) - this is
+  // the friendly, fast-failing check; the partial unique index is the
+  // last-resort guard if this ever raced.
+  const pending = getPendingReport();
+  if (pending) {
+    throw new Error(
+      `A report is already pending review ("${pending.title}", ${pending.code}). Commit or discard it before adding another.`,
+    );
+  }
+  const existingStatus = getReportStatus(code);
+  if (existingStatus === "committed") {
+    throw new Error(`Report ${code} has already been added and is live. Delete it first if you want to re-ingest it.`);
+  }
+
   const reportResult = await graphqlRequest<ReportQueryResult>(REPORT_QUERY, { code });
   const report = reportResult.reportData.report;
   if (!report) {
@@ -199,6 +224,7 @@ export async function fetchAndIngestReport(codeOrUrl: string): Promise<{ code: s
     start_time: report.startTime,
     end_time: report.endTime,
     fetched_at: Date.now(),
+    status: "pending",
   };
 
   const fights: FightRow[] = report.fights.map((f) => ({
@@ -257,12 +283,13 @@ export async function fetchAndIngestReport(codeOrUrl: string): Promise<{ code: s
   upsertReport({ report: reportRow, fights, casts, damage, damageTaken });
 
   // Register every participant as a canonical warrior (new ones start
-  // hidden - see getOrCreateWarriorId), then freeze this report's prices
-  // into the immutable snapshot ledger trading reads from.
+  // hidden - see getOrCreateWarriorId). Price impact is NOT applied here -
+  // the report sits as 'pending' until an admin reviews its computed
+  // preview and explicitly commits it (see stock.ts's commitReport and
+  // routes/reports.ts's /commit route).
   for (const d of damage) {
     getOrCreateWarriorId(d.player_name, d.server);
   }
-  snapshotPricesForReport(code);
 
   return { code, title: report.title, zone: reportRow.zone };
 }

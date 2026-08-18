@@ -1,4 +1,5 @@
 import {
+  applyReportPriceImpact,
   getAllCasts,
   getAllDamage,
   getAllDamageTaken,
@@ -9,6 +10,7 @@ import {
   getOrCreateWarriorId,
   getPriceSnapshotCount,
   getRaidAnchorPrice,
+  getReportStatus,
   getStockConfigRaw,
   insertPriceSnapshot,
   listReports,
@@ -16,6 +18,7 @@ import {
   setAnchorPrice,
   setRaidAnchorPrice,
   warriorHasRaidSnapshot,
+  type ReportPriceImpactWrite,
 } from "./db";
 
 export interface StockAbilityConfig {
@@ -43,7 +46,7 @@ export interface StockConfig {
   pricePerScorePointDown: number;
   // Percentile-gated multiplier applied on top of pricePerScorePointUp/Down
   // (see percentileRank/gainMultiplier/lossMultiplier below and
-  // snapshotPricesForReport) - lets a raid's dollar impact taper off near
+  // computeReportPriceImpact) - lets a raid's dollar impact taper off near
   // the top of the field and amplify near the bottom, without ever
   // touching the sign of the move (no warrior is ever pulled toward a
   // market mean - see marketGravityStrength for that, deliberately kept
@@ -95,9 +98,9 @@ export interface StockConfig {
 export const MIN_PRICE = 1;
 
 // Fraction of `sortedPrices` at or below `price` - the market-wide standing
-// snapshotPricesForReport() feeds into gainMultiplier/lossMultiplier below.
+// computeReportPriceImpact() feeds into gainMultiplier/lossMultiplier below.
 // `sortedPrices` must already be ascending; a warrior's own current price
-// is expected to be a member of it (see snapshotPricesForReport, which
+// is expected to be a member of it (see computeReportPriceImpact, which
 // builds the array from the same getAllLatestWarriorPrices() snapshot it
 // looks the warrior's own previous price up in).
 export function percentileRank(price: number, sortedPrices: number[]): number {
@@ -284,12 +287,12 @@ function updateEwma(state: EwmaState | undefined, x: number, alpha: number): Ewm
   };
 }
 
-export function computeStock(): PlayerStock[] {
+export function computeStock(opts: { includePending?: boolean } = {}): PlayerStock[] {
   const stockConfig = loadStockConfig();
-  const reports = listReports();
-  const casts = getAllCasts();
-  const damage = getAllDamage();
-  const damageTaken = getAllDamageTaken();
+  const reports = listReports({ includePending: opts.includePending });
+  const casts = getAllCasts({ includePending: opts.includePending });
+  const damage = getAllDamage({ includePending: opts.includePending });
+  const damageTaken = getAllDamageTaken({ includePending: opts.includePending });
 
   const castsByReport = new Map<string, typeof casts>();
   for (const c of casts) {
@@ -461,7 +464,7 @@ export function computeStock(): PlayerStock[] {
         : stockConfig.damageWeight * damageScore + stockConfig.castWeight * castScore;
       // A participant's very first appearance in the walk has no field
       // standing yet to gate against - same as the live incremental path
-      // in snapshotPricesForReport, which never percentile-gates a
+      // in computeReportPriceImpact, which never percentile-gates a
       // warrior's first-ever raid either.
       const isFirstAppearance = !runningPrice.has(participant.key);
       const prevPrice = runningPrice.get(participant.key) ?? stockConfig.startingPrice;
@@ -505,15 +508,28 @@ export function computeStock(): PlayerStock[] {
   return Array.from(seriesByPlayer.values());
 }
 
-// Freezes an immutable price for every participant of one just-ingested
-// report, at ingest time (not the raid's own start_time - see
-// backfillPriceSnapshotsIfNeeded for why that distinction matters). Reruns
-// full computeStock() rather than an incremental recompute - ingest is
-// manual/low-volume, so the recompute cost is negligible, and it keeps this
-// in lockstep with whatever computeStock() actually does.
-export function snapshotPricesForReport(reportCode: string, createdAt: number = Date.now()) {
+export interface ReportPriceImpactEntry {
+  warriorId: number;
+  playerName: string;
+  server: string;
+  currentAnchor: number | null; // null = warrior has never had a price before (first raid)
+  reportScore: number;
+  afterAnchor: number;
+  delta: number | null; // afterAnchor - currentAnchor; null when currentAnchor is null
+  isFirstPrice: boolean;
+}
+
+// Pure compute-only preview of one report's price impact - same math the
+// old snapshotPricesForReport used to write directly, but returns what
+// WOULD happen instead of writing it, so it's safe to call repeatedly (e.g.
+// the admin's "Refresh" button after tweaking stock_config on a separate
+// tab - loadStockConfig() and computeStock() both read fresh from the DB on
+// every call, nothing here needs invalidating). Must see the report's own
+// data even though it's still 'pending' - hence computeStock({ includePending:
+// true }), unlike every other computeStock() caller in this file.
+export function computeReportPriceImpact(reportCode: string): ReportPriceImpactEntry[] {
   const stockConfig = loadStockConfig();
-  const allStock = computeStock();
+  const allStock = computeStock({ includePending: true });
   // Batched, once for this whole report - not per-warrior getLatestPrice()
   // calls in the loop below - both as an N-query-avoidance and so every
   // participant's percentile is ranked against the same cross-sectional
@@ -521,6 +537,8 @@ export function snapshotPricesForReport(reportCode: string, createdAt: number = 
   // as computeStock()'s own fieldPricesSnapshot above).
   const latestPrices = getAllLatestTradablePrices();
   const sortedPrices = Array.from(latestPrices.values()).sort((a, b) => a - b);
+
+  const entries: ReportPriceImpactEntry[] = [];
   for (const playerStock of allStock) {
     const point = playerStock.series.find((s) => s.report_code === reportCode);
     if (!point) continue;
@@ -528,39 +546,70 @@ export function snapshotPricesForReport(reportCode: string, createdAt: number = 
     const previousPrice = latestPrices.get(warriorId) ?? null;
 
     if (previousPrice === null) {
-      // This warrior's very first price ever - nothing else will seed a
-      // live price for them, so this one row has to do double duty: it's
-      // both the live price and the anchors' starting point. No percentile
-      // gating here either - there's no field standing yet to gate
-      // against, same as computeStock()'s own first-appearance case.
-      insertPriceSnapshot(warriorId, point.price, null, "raid", reportCode, createdAt);
-      setAnchorPrice(warriorId, point.price);
-      setRaidAnchorPrice(warriorId, point.price);
+      // This warrior's very first price ever - no field standing yet to
+      // gate against, same as computeStock()'s own first-appearance case.
+      entries.push({
+        warriorId,
+        playerName: playerStock.player_name,
+        server: playerStock.server,
+        currentAnchor: null,
+        reportScore: point.report_score,
+        afterAnchor: point.price,
+        delta: null,
+        isFirstPrice: true,
+      });
       continue;
     }
 
     // Every raid after the first applies its score to the anchor, not the
     // live price - a raid resolves the market's fundamental value forward,
     // but leaves whatever price trading/drift actually settled on alone.
-    // Idle drift's reversion component is what pulls the live price toward
-    // this new anchor afterward (see drift.ts). The resulting row is tagged
-    // "raid_anchor" (not "raid") specifically so getLatestPrice() can
-    // exclude it - it's an audit record of the anchor's movement, not a new
-    // live price. pricePerScorePointUp/Down is gated by this warrior's
-    // current price percentile (see gainMultiplier/lossMultiplier above) -
-    // raids near the top of the field move the anchor less on a good night
-    // and more on a bad one; raids near the bottom, the reverse.
+    // pricePerScorePointUp/Down is gated by this warrior's current price
+    // percentile (see gainMultiplier/lossMultiplier above) - raids near the
+    // top of the field move the anchor less on a good night and more on a
+    // bad one; raids near the bottom, the reverse.
     const percentile = percentileRank(previousPrice, sortedPrices);
     const perPoint =
       point.report_score >= 0
         ? stockConfig.pricePerScorePointUp * gainMultiplier(percentile, stockConfig)
         : stockConfig.pricePerScorePointDown * lossMultiplier(percentile, stockConfig);
     const currentAnchor = getAnchorPrice(warriorId) ?? previousPrice;
-    const newAnchor = Math.max(MIN_PRICE, currentAnchor + perPoint * point.report_score);
-    insertPriceSnapshot(warriorId, newAnchor, newAnchor - currentAnchor, "raid_anchor", reportCode, createdAt);
-    setAnchorPrice(warriorId, newAnchor);
-    setRaidAnchorPrice(warriorId, newAnchor);
+    const afterAnchor = Math.max(MIN_PRICE, currentAnchor + perPoint * point.report_score);
+    entries.push({
+      warriorId,
+      playerName: playerStock.player_name,
+      server: playerStock.server,
+      currentAnchor,
+      reportScore: point.report_score,
+      afterAnchor,
+      delta: afterAnchor - currentAnchor,
+      isFirstPrice: false,
+    });
   }
+  return entries;
+}
+
+// Validates the report is actually pending, computes its price impact fresh
+// (using whatever stock_config is active right now - so what goes live is
+// always current, never stale from an earlier preview render even if the
+// admin tweaked config after their last "Refresh"), then applies it
+// atomically and flips status to 'committed'. Throws if the report doesn't
+// exist, isn't pending, or was concurrently committed/discarded (see
+// applyReportPriceImpact's guarded UPDATE).
+export function commitReport(reportCode: string): ReportPriceImpactEntry[] {
+  const status = getReportStatus(reportCode);
+  if (status === null) throw new Error(`Report "${reportCode}" not found`);
+  if (status !== "pending") throw new Error(`Report "${reportCode}" is not pending review (status: ${status})`);
+
+  const entries = computeReportPriceImpact(reportCode);
+  const writes: ReportPriceImpactWrite[] = entries.map((e) => ({
+    warriorId: e.warriorId,
+    price: e.afterAnchor,
+    delta: e.isFirstPrice ? null : e.delta,
+    source: e.isFirstPrice ? "raid" : "raid_anchor",
+  }));
+  applyReportPriceImpact(reportCode, writes);
+  return entries;
 }
 
 // Recomputes computeStock() from scratch and replaces every raid-sourced
@@ -570,7 +619,7 @@ export function snapshotPricesForReport(reportCode: string, createdAt: number = 
 // historical backfill below and whenever raid history changes after the
 // fact (a report gets deleted, or the market is reset).
 //
-// Known, deliberate limitation: unlike snapshotPricesForReport (which
+// Known, deliberate limitation: unlike commitReport (which
 // compounds a raid's score onto the anchor), this always writes
 // computeStock()'s pure fundamentals value. That's exactly correct after a
 // market reset (resetMarketState wipes trading history alongside this
@@ -671,7 +720,7 @@ export function rebuildRaidPriceSnapshots(deleteScope?: { participantKeys: Set<s
 // Deliberately NOT rebuildRaidPriceSnapshots(): that wipes and recomputes
 // EVERY warrior's raid history from pure fundamentals, discarding the
 // "compounded onto the live, demand/drift-adjusted price" values
-// snapshotPricesForReport normally writes - fine for a full market reset
+// commitReport normally writes - fine for a full market reset
 // (nothing live to preserve) but a real regression for a single unhide,
 // visibly disturbing every other warrior's "since last raid" figure to
 // backfill just one. This only ever inserts rows for the target warrior_id,

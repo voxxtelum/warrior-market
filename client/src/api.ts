@@ -77,6 +77,7 @@ export interface ReportRow {
   start_time: number;
   end_time: number | null;
   fetched_at: number;
+  status: "pending" | "committed";
 }
 
 export async function getReports(): Promise<ReportRow[]> {
@@ -101,6 +102,38 @@ export async function deleteReport(code: string): Promise<void> {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || "Failed to delete report");
   }
+}
+
+export interface ReportPriceImpactEntry {
+  warriorId: number;
+  playerName: string;
+  server: string;
+  currentAnchor: number | null;
+  reportScore: number;
+  afterAnchor: number;
+  delta: number | null;
+  isFirstPrice: boolean;
+}
+
+export interface ReportPricePreview {
+  reportCode: string;
+  title: string;
+  zone: string | null;
+  participants: ReportPriceImpactEntry[];
+}
+
+export async function getReportPreview(code: string): Promise<ReportPricePreview> {
+  const res = await fetch(`/api/reports/${encodeURIComponent(code)}/preview`);
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || "Failed to load preview");
+  return body;
+}
+
+export async function commitReport(code: string): Promise<ReportPricePreview> {
+  const res = await fetch(`/api/reports/${encodeURIComponent(code)}/commit`, { method: "POST" });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || "Failed to commit report");
+  return body;
 }
 
 export interface TrackedAbility {

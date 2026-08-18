@@ -14,7 +14,8 @@ db.exec(`
     title TEXT NOT NULL,
     zone TEXT,
     start_time INTEGER NOT NULL,
-    fetched_at INTEGER NOT NULL
+    fetched_at INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'committed'
   );
 
   CREATE TABLE IF NOT EXISTS fights (
@@ -39,6 +40,31 @@ const reportsHasEndTime = (
 if (!reportsHasEndTime) {
   db.exec(`ALTER TABLE reports ADD COLUMN end_time INTEGER`);
 }
+
+// Report preview/hold feature: a report sits as 'pending' (raw data ingested,
+// no price impact applied yet) until an admin reviews its computed price
+// preview and explicitly commits it - see stock.ts's computeReportPriceImpact/
+// commitReport and routes/reports.ts's /preview and /commit routes. The
+// ALTER's DEFAULT 'committed' exists only to backfill pre-existing rows
+// (added under the old instant-commit path, so their price impact is already
+// live) - upsertReport always passes status explicitly, so a newly-ingested
+// report is never silently miscategorized by this column default.
+const reportsHasStatus = (
+  db.prepare(`PRAGMA table_info(reports)`).all() as unknown as {
+    name: string;
+  }[]
+).some((c) => c.name === 'status');
+if (!reportsHasStatus) {
+  db.exec(`ALTER TABLE reports ADD COLUMN status TEXT NOT NULL DEFAULT 'committed'`);
+}
+
+// At most one report may be pending review at a time (see fetchAndIngestReport's
+// getPendingReport() guard) - same "single active row" pattern as
+// idx_admin_notifications_single_active below.
+db.exec(`
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_single_pending
+    ON reports (status) WHERE status = 'pending';
+`);
 
 // Two different characters can share the same display name (seen in this
 // guild across different realms), so player identity is (player_name,
@@ -602,6 +628,11 @@ export interface ReportRow {
   start_time: number;
   end_time: number | null;
   fetched_at: number;
+  // Required (not optional) so every insert site must be explicit - if this
+  // were ever silently omitted, SQLite's column default would land a
+  // brand-new report as 'committed' while it has no price_snapshots row and
+  // no anchor set, looking done but never having actually moved anything.
+  status: 'pending' | 'committed';
 }
 
 export interface FightRow {
@@ -648,14 +679,15 @@ export function upsertReport(data: {
   damageTaken: DamageTakenRow[];
 }) {
   const insertReport = db.prepare(`
-    INSERT INTO reports (code, title, zone, start_time, end_time, fetched_at)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO reports (code, title, zone, start_time, end_time, fetched_at, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(code) DO UPDATE SET
       title = excluded.title,
       zone = excluded.zone,
       start_time = excluded.start_time,
       end_time = excluded.end_time,
-      fetched_at = excluded.fetched_at
+      fetched_at = excluded.fetched_at,
+      status = excluded.status
   `);
 
   const deleteFights = db.prepare(`DELETE FROM fights WHERE report_code = ?`);
@@ -694,6 +726,7 @@ export function upsertReport(data: {
       data.report.start_time,
       data.report.end_time,
       data.report.fetched_at,
+      data.report.status,
     );
 
     deleteFights.run(data.report.code);
@@ -748,10 +781,33 @@ export function upsertReport(data: {
   }
 }
 
-export function listReports(): ReportRow[] {
+// Defaults to excluding a pending report - the safe default for every public
+// consumer (computeStock() and friends), which keep calling this with no
+// args. Only the report-preview compute path and the admin reports list need
+// to see the pending row, and pass includePending: true explicitly.
+export function listReports(opts: { includePending?: boolean } = {}): ReportRow[] {
+  const where = opts.includePending ? '' : `WHERE status != 'pending'`;
   return db
-    .prepare(`SELECT * FROM reports ORDER BY start_time ASC`)
+    .prepare(`SELECT * FROM reports ${where} ORDER BY start_time ASC`)
     .all() as unknown as ReportRow[];
+}
+
+// At most one row can have status='pending' (enforced by
+// idx_reports_single_pending) - used to block adding a second report while
+// one is held for review.
+export function getPendingReport(): ReportRow | null {
+  return (
+    (db.prepare(`SELECT * FROM reports WHERE status = 'pending' LIMIT 1`).get() as
+      | ReportRow
+      | undefined) ?? null
+  );
+}
+
+export function getReportStatus(code: string): 'pending' | 'committed' | null {
+  const row = db.prepare(`SELECT status FROM reports WHERE code = ?`).get(code) as
+    | { status: 'pending' | 'committed' }
+    | undefined;
+  return row ? row.status : null;
 }
 
 // Manually cascades the same way upsertReport's re-ingest delete step does -
@@ -812,6 +868,11 @@ const NOT_HIDDEN_CLAUSE = `NOT EXISTS (
   WHERE hp.player_name = t.player_name AND hp.server = t.server
 )`;
 
+// Excludes a pending report's raw rows - these zone-scoped readers are only
+// ever consumed by the fully-public compare.ts/overview.ts routes, so this
+// is always on, no param, unlike the includePending-optional variants below.
+const NOT_PENDING_CLAUSE = `r.status != 'pending'`;
+
 export function getCastsForZone(
   zone: string,
 ): (CastRow & { start_time: number })[] {
@@ -820,7 +881,7 @@ export function getCastsForZone(
       `SELECT t.*, r.start_time
        FROM casts t
        JOIN reports r ON r.code = t.report_code
-       WHERE r.zone = ? AND ${NOT_HIDDEN_CLAUSE}
+       WHERE r.zone = ? AND ${NOT_HIDDEN_CLAUSE} AND ${NOT_PENDING_CLAUSE}
        ORDER BY r.start_time ASC`,
     )
     .all(zone) as unknown as (CastRow & { start_time: number })[];
@@ -834,7 +895,7 @@ export function getDamageForZone(
       `SELECT t.*, r.start_time
        FROM damage t
        JOIN reports r ON r.code = t.report_code
-       WHERE r.zone = ? AND ${NOT_HIDDEN_CLAUSE}
+       WHERE r.zone = ? AND ${NOT_HIDDEN_CLAUSE} AND ${NOT_PENDING_CLAUSE}
        ORDER BY r.start_time ASC`,
     )
     .all(zone) as unknown as (DamageRow & { start_time: number })[];
@@ -842,22 +903,26 @@ export function getDamageForZone(
 
 export function getReportsForZone(zone: string): ReportRow[] {
   return db
-    .prepare(`SELECT * FROM reports WHERE zone = ? ORDER BY start_time ASC`)
+    .prepare(`SELECT * FROM reports WHERE zone = ? AND status != 'pending' ORDER BY start_time ASC`)
     .all(zone) as unknown as ReportRow[];
 }
 
 // Unscoped-by-zone variants for the stock market calculation, which blends
-// signals across every instance a player has raided.
-export function getAllCasts(): (CastRow & {
+// signals across every instance a player has raided. Default excludes a
+// pending report's rows (the safe default for every public caller, which
+// keep calling with no args); computeStock({ includePending: true }) is the
+// only caller that needs to see a held report's own just-ingested data.
+export function getAllCasts(opts: { includePending?: boolean } = {}): (CastRow & {
   start_time: number;
   zone: string | null;
 })[] {
+  const clause = opts.includePending ? NOT_HIDDEN_CLAUSE : `${NOT_HIDDEN_CLAUSE} AND ${NOT_PENDING_CLAUSE}`;
   return db
     .prepare(
       `SELECT t.*, r.start_time, r.zone
        FROM casts t
        JOIN reports r ON r.code = t.report_code
-       WHERE ${NOT_HIDDEN_CLAUSE}
+       WHERE ${clause}
        ORDER BY r.start_time ASC`,
     )
     .all() as unknown as (CastRow & {
@@ -866,16 +931,17 @@ export function getAllCasts(): (CastRow & {
   })[];
 }
 
-export function getAllDamage(): (DamageRow & {
+export function getAllDamage(opts: { includePending?: boolean } = {}): (DamageRow & {
   start_time: number;
   zone: string | null;
 })[] {
+  const clause = opts.includePending ? NOT_HIDDEN_CLAUSE : `${NOT_HIDDEN_CLAUSE} AND ${NOT_PENDING_CLAUSE}`;
   return db
     .prepare(
       `SELECT t.*, r.start_time, r.zone
        FROM damage t
        JOIN reports r ON r.code = t.report_code
-       WHERE ${NOT_HIDDEN_CLAUSE}
+       WHERE ${clause}
        ORDER BY r.start_time ASC`,
     )
     .all() as unknown as (DamageRow & {
@@ -884,16 +950,17 @@ export function getAllDamage(): (DamageRow & {
   })[];
 }
 
-export function getAllDamageTaken(): (DamageTakenRow & {
+export function getAllDamageTaken(opts: { includePending?: boolean } = {}): (DamageTakenRow & {
   start_time: number;
   zone: string | null;
 })[] {
+  const clause = opts.includePending ? NOT_HIDDEN_CLAUSE : `${NOT_HIDDEN_CLAUSE} AND ${NOT_PENDING_CLAUSE}`;
   return db
     .prepare(
       `SELECT t.*, r.start_time, r.zone
        FROM damage_taken t
        JOIN reports r ON r.code = t.report_code
-       WHERE ${NOT_HIDDEN_CLAUSE}
+       WHERE ${clause}
        ORDER BY r.start_time ASC`,
     )
     .all() as unknown as (DamageTakenRow & {
@@ -1189,7 +1256,7 @@ export interface PriceSnapshotRow {
 // out of real-time order interleaved with existing drift/trade rows, so
 // "latest row right now" would not mean "the row immediately before this one"
 // there. Real-time callers (executeTrade, runDriftTick,
-// snapshotPricesForReport) each already have the correct "price before" on
+// commitReport/applyReportPriceImpact) each already have the correct "price before" on
 // hand and pass an accurate delta directly.
 export function insertPriceSnapshot(
   warriorId: number,
@@ -1264,6 +1331,47 @@ export function replaceRaidPriceSnapshots(
   }
 }
 
+export interface ReportPriceImpactWrite {
+  warriorId: number;
+  price: number; // the price to write to price_snapshots and to both anchors
+  delta: number | null; // null for a warrior's first-ever price, same convention as insertPriceSnapshot
+  source: 'raid' | 'raid_anchor';
+}
+
+// Writes every entry's price_snapshots row + anchor updates AND flips the
+// report's status to 'committed', all in one transaction - either the
+// report's entire price impact lands and it becomes committed, or none of
+// it does and it's still pending (see stock.ts's commitReport, the only
+// caller). The status flip is guarded by `AND status = 'pending'` so a
+// concurrent commit/discard (e.g. two admin tabs) can't double-apply: if 0
+// rows are affected, someone else already changed this report's status
+// since the caller read it, and we roll back and throw rather than
+// silently re-applying.
+export function applyReportPriceImpact(
+  reportCode: string,
+  entries: ReportPriceImpactWrite[],
+  createdAt: number = Date.now(),
+): void {
+  db.exec('BEGIN');
+  try {
+    const result = db
+      .prepare(`UPDATE reports SET status = 'committed' WHERE code = ? AND status = 'pending'`)
+      .run(reportCode);
+    if (result.changes === 0) {
+      throw new Error(`Report "${reportCode}" is no longer pending (already committed or discarded)`);
+    }
+    for (const e of entries) {
+      insertPriceSnapshot(e.warriorId, e.price, e.delta, e.source, reportCode, createdAt);
+      setAnchorPrice(e.warriorId, e.price);
+      setRaidAnchorPrice(e.warriorId, e.price);
+    }
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+}
+
 // The single source of truth for "the current price" everywhere trading
 // logic reads it - always the most recently inserted snapshot (raid or
 // drift), never a live computeStock() recompute (see stock.ts).
@@ -1271,7 +1379,7 @@ export function getLatestPrice(warriorId: number): number | null {
   const row = db
     .prepare(
       // Excludes 'raid_anchor' rows - those are audit-only records of an
-      // anchor move (see snapshotPricesForReport), never the live price.
+      // anchor move (see computeReportPriceImpact), never the live price.
       `SELECT price FROM price_snapshots WHERE warrior_id = ? AND source != 'raid_anchor' ORDER BY created_at DESC, id DESC LIMIT 1`,
     )
     .get(warriorId) as unknown as { price: number } | undefined;
@@ -1328,7 +1436,7 @@ export function setAnchorPrice(warriorId: number, price: number): void {
 }
 
 // The "fundamental" anchor - set only by raid results (see stock.ts's
-// snapshotPricesForReport/rebuildRaidPriceSnapshots), never by trades or
+// commitReport/rebuildRaidPriceSnapshots), never by trades or
 // drift. drift.ts decays anchor_price toward this every tick, so a
 // demand-driven move fades without sustained buying instead of sticking
 // forever.

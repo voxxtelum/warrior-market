@@ -162,7 +162,7 @@ export function AdminManageFundsPage() {
 
   return (
     <AdminLayout>
-      <div className="card">
+      <section className="admin-section">
         <div className="card-header-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2 style={{ margin: 0 }}>Manage Funds</h2>
           <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -255,7 +255,7 @@ export function AdminManageFundsPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
       {creating && (
         <FundForm

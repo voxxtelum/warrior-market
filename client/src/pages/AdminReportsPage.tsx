@@ -88,7 +88,7 @@ export function AdminReportsPage() {
 
   return (
     <AdminLayout>
-      <div className="card">
+      <section className="admin-section">
         <h2 style={{ marginTop: 0 }}>Add a report</h2>
         <form onSubmit={handleSubmit}>
           <input
@@ -107,13 +107,13 @@ export function AdminReportsPage() {
           <div className="status">A report is pending review below — commit or discard it before adding another.</div>
         )}
         {status && <div className={`status ${status.kind}`}>{status.text}</div>}
-      </div>
+      </section>
 
       {pendingReport && (
         <ReportPreviewCard pendingReport={pendingReport} onDiscarded={loadReports} onCommitted={loadReports} />
       )}
 
-      <div className="card">
+      <section className="admin-section">
         <h2 style={{ marginTop: 0 }}>Reports in local data</h2>
         {committedReports.length !== 0 && (
           <form onSubmit={(e) => e.preventDefault()}>
@@ -186,7 +186,7 @@ export function AdminReportsPage() {
           </table>
         </div>
         <Pagination page={clampedReportsPage} pageCount={reportsPageCount} onPageChange={setReportsPage} />
-      </div>
+      </section>
 
       {deleteTarget && (
         <ConfirmModal

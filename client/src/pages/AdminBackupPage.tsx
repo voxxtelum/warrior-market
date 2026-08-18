@@ -123,7 +123,7 @@ export function AdminBackupPage() {
 
   return (
     <AdminLayout>
-      <div className="card">
+      <section className="admin-section">
         <h2 style={{ marginTop: 0 }}>Backup Settings</h2>
         <div className="config-grid">
           <label>
@@ -172,9 +172,9 @@ export function AdminBackupPage() {
             Save changes
           </button>
         </div>
-      </div>
+      </section>
 
-      <div className="card">
+      <section className="admin-section">
         <div
           className="card-header-row"
           style={{
@@ -256,7 +256,7 @@ export function AdminBackupPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
       {deleting && (
         <ConfirmModal

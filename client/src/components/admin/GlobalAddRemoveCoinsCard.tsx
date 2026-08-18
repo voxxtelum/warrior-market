@@ -39,7 +39,7 @@ export function GlobalAddRemoveCoinsCard({ onAdjusted }: { onAdjusted?: () => vo
   }
 
   return (
-    <div className="card">
+    <section className="admin-section">
       <h2 style={{ marginTop: 0 }}>Global add/remove coins</h2>
       <p className="subtitle" style={{ marginBottom: "1rem" }}>
         Adds or removes coins from every user's wallet at once. A removal that would take a user below 0 clamps
@@ -95,6 +95,6 @@ export function GlobalAddRemoveCoinsCard({ onAdjusted }: { onAdjusted?: () => vo
       </div>
 
       <div className="trade-status-area">{status && <p className={`status ${status.kind}`}>{status.text}</p>}</div>
-    </div>
+    </section>
   );
 }

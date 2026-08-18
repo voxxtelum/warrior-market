@@ -21,7 +21,7 @@ export function PlayersTab() {
   }
 
   return (
-    <div className="card">
+    <section className="admin-section">
       <h2 style={{ marginTop: 0 }}>Players</h2>
       <p className="subtitle" style={{ marginBottom: "1rem" }}>
         Choose which players appear in Compare, Trends, and Stock Market
@@ -38,6 +38,6 @@ export function PlayersTab() {
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }

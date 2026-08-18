@@ -260,7 +260,7 @@ export function AdminSummaryPage() {
 
   return (
     <AdminLayout>
-      <div className="card">
+      <section className="admin-section">
         <div className="summary-week-nav">
           <button type="button" onClick={() => setWeek((w) => shiftWeek(w.start, w.end, -1))}>
             ← Prev week
@@ -310,9 +310,9 @@ export function AdminSummaryPage() {
           </button>
           {statusMessage && <span className="subtitle">{statusMessage}</span>}
         </div>
-      </div>
+      </section>
 
-      <div className="card" style={{ marginTop: "1rem" }}>
+      <section className="admin-section">
         <h2 style={{ marginTop: 0 }}>History</h2>
         <p className="subtitle" style={{ marginBottom: "1rem" }}>
           Previously saved weeks. Click one to load it back into the editor above.
@@ -353,7 +353,7 @@ export function AdminSummaryPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
     </AdminLayout>
   );
 }

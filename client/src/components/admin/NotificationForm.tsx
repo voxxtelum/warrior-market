@@ -53,7 +53,7 @@ export function NotificationForm({ notification, onSaved, onClose }: Notificatio
   const canSave = name.trim() !== "" && content.trim() !== "" && buttonText.trim() !== "" && buttonLink !== "";
 
   return (
-    <div className="card">
+    <section className="admin-section">
       <h2 style={{ marginTop: 0 }}>{isEdit ? `Edit ${notification!.name}` : "New Notification"}</h2>
 
       <label style={{ display: "block" }}>
@@ -99,6 +99,6 @@ export function NotificationForm({ notification, onSaved, onClose }: Notificatio
           {isEdit ? "Save changes" : "Create notification"}
         </button>
       </div>
-    </div>
+    </section>
   );
 }

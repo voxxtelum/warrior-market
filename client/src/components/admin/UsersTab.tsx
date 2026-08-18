@@ -5,7 +5,7 @@ import { HoldingsTable } from '../HoldingsTable';
 import { LinkCharacterModal } from './LinkCharacterModal';
 import { NetWorthDeltaBadge } from '../NetWorthDeltaBadge';
 import { Pagination } from '../Pagination';
-import { PortfolioBreakdownCard } from '../PortfolioBreakdownCard';
+import { PortfolioBreakdownCard } from './PortfolioBreakdownCard';
 import { RiskBar } from '../RiskBar';
 import { SidePill } from '../SidePill';
 import {
@@ -183,7 +183,7 @@ export function UsersTab() {
 
   if (!selectedUserId) {
     return (
-      <div className="card">
+      <section className="admin-section">
         <h2 style={{ marginTop: 0 }}>Wallets</h2>
         <div className="table-scroll">
           <table id="manage-wallets-table">
@@ -255,7 +255,7 @@ export function UsersTab() {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
     );
   }
 
@@ -270,7 +270,7 @@ export function UsersTab() {
         ← Back to users
       </button>
 
-      <div className="card">
+      <section className="admin-section">
         <div className="admin-user-heading">
           <div className="admin-user-heading-left">
             {userDetail?.avatar ? (
@@ -394,7 +394,7 @@ export function UsersTab() {
             <span className="label">Portfolio</span>
           </div>
         </div>
-      </div>
+      </section>
 
       {userDetail && (
         <AddRemoveCoinsCard
@@ -411,16 +411,16 @@ export function UsersTab() {
         recentTransactions={userDetail?.transactions ?? []}
       />
 
-      <div className="card">
+      <section className="admin-section">
         <h2 style={{ marginTop: 0 }}>Holdings</h2>
         <HoldingsTable
           holdings={userDetail?.holdings ?? []}
           holdingsValue={userConcentration.holdingsValue}
           emptyMessage="No holdings."
         />
-      </div>
+      </section>
 
-      <div className="card">
+      <section className="admin-section">
         <h2 style={{ marginTop: 0 }}>Funds</h2>
         <div className="table-scroll">
           <table>
@@ -465,9 +465,9 @@ export function UsersTab() {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
-      <div className="card">
+      <section className="admin-section">
         <h2 style={{ marginTop: 0 }}>Trade history</h2>
         <div className="table-scroll table-compact">
           <table>
@@ -510,7 +510,7 @@ export function UsersTab() {
           </table>
         </div>
         <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
-      </div>
+      </section>
 
       {showLinkModal && userDetail && (
         <LinkCharacterModal

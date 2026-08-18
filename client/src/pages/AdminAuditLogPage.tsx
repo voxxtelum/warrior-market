@@ -54,7 +54,7 @@ export function AdminAuditLogPage() {
 
   return (
     <AdminLayout>
-      <div className="card">
+      <section className="admin-section">
         <h2 style={{ marginTop: 0 }}>Audit log</h2>
         <p className="subtitle" style={{ marginBottom: "1rem" }}>
           Every manual coin adjustment made from Manage Market, newest first.
@@ -108,9 +108,9 @@ export function AdminAuditLogPage() {
           </table>
         </div>
         <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
-      </div>
+      </section>
 
-      <div className="card" style={{ marginTop: "1rem" }}>
+      <section className="admin-section">
         <h2 style={{ marginTop: 0 }}>Notification actions</h2>
         <p className="subtitle" style={{ marginBottom: "1rem" }}>
           Every create/edit/activate/deactivate/delete on the Notifications tab, newest first.
@@ -145,7 +145,7 @@ export function AdminAuditLogPage() {
           </table>
         </div>
         <Pagination page={notificationPage} pageCount={notificationPageCount} onPageChange={setNotificationPage} />
-      </div>
+      </section>
 
       {reasonEntry && (
         <Modal title="Reason" onClose={() => setReasonEntry(null)}>

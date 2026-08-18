@@ -79,7 +79,7 @@ export function PriceHistoryTab() {
   const pageCount = data ? Math.ceil(data.total / PAGE_SIZE) : 0;
 
   return (
-    <div className="card">
+    <section className="admin-section">
       <h2 style={{ marginTop: 0 }}>Price History</h2>
       <p className="subtitle" style={{ marginBottom: '1rem' }}>
         Every recorded price change, across every warrior, newest first.
@@ -153,6 +153,6 @@ export function PriceHistoryTab() {
         </table>
       </div>
       <Pagination page={page} pageCount={pageCount} onPageChange={setPage} />
-    </div>
+    </section>
   );
 }

@@ -200,7 +200,7 @@ export function FundForm({ fund, onSaved, onClose }: FundFormProps) {
   const totalWeight = constituents.reduce((sum, c) => sum + c.stockCount, 0);
 
   return (
-    <div className="card">
+    <section className="admin-section">
       <h2 style={{ marginTop: 0 }}>{isEdit ? `Edit ${fund!.name}` : "New Fund"}</h2>
 
       <div className="config-grid">
@@ -317,7 +317,7 @@ export function FundForm({ fund, onSaved, onClose }: FundFormProps) {
         </button>
       </div>
 
-      <div className="card" style={{ marginTop: "0.75rem" }}>
+      <div className="admin-subpanel" style={{ marginTop: "0.75rem" }}>
         <h3 style={{ marginTop: 0 }}>Estimated stats (admin-only)</h3>
         {statsLoading && <p className="subtitle">Calculating...</p>}
         {!statsLoading && stats === null && (
@@ -355,6 +355,6 @@ export function FundForm({ fund, onSaved, onClose }: FundFormProps) {
           {isEdit ? "Save changes" : "Create fund"}
         </button>
       </div>
-    </div>
+    </section>
   );
 }

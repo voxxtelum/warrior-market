@@ -22,8 +22,8 @@ export function DocsTab({ scrollToAnchor }: { scrollToAnchor: string | null }) {
   }, [html, scrollToAnchor]);
 
   return (
-    <div className="card">
+    <section className="admin-section">
       <div ref={containerRef} className="docs-content" dangerouslySetInnerHTML={{ __html: html ?? "" }} />
-    </div>
+    </section>
   );
 }

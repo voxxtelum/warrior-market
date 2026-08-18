@@ -237,7 +237,7 @@ export function AdminNotificationsPage() {
 
   return (
     <AdminLayout>
-      <div className="card">
+      <section className="admin-section">
         <div
           className="card-header-row"
           style={{
@@ -373,7 +373,7 @@ export function AdminNotificationsPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
       {creating && (
         <NotificationForm

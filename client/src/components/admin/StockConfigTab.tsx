@@ -325,7 +325,7 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
   // lands on the right section.
   function renderFieldGroup(title: string, intro: string, docsHeading: string, fields: ScalarField[]) {
     return (
-      <div className="card">
+      <section className="admin-section">
         <h2 style={{ marginTop: 0 }}>{title}</h2>
         <p className="subtitle" style={{ marginBottom: "1rem" }}>
           {intro} See{" "}
@@ -358,13 +358,13 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
             Save changes
           </button>
         </div>
-      </div>
+      </section>
     );
   }
 
   return (
     <>
-      <div className="card">
+      <section className="admin-section">
         <h2 style={{ marginTop: 0 }}>Export / import config</h2>
         <p className="subtitle" style={{ marginBottom: "1rem" }}>
           Export downloads the entire config below (including any unsaved edits) as a JSON file. Import loads a file
@@ -393,7 +393,7 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
             Export config
           </button>
         </div>
-      </div>
+      </section>
 
       {renderFieldGroup(
         "Raid scoring",
@@ -403,7 +403,7 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
       )}
 
       {sideACurvePreview && (
-        <div className="card">
+        <section className="admin-section">
           <h2 style={{ marginTop: 0 }}>Price curve preview</h2>
           <p className="subtitle" style={{ marginBottom: "1rem" }}>
             How the gain/loss multiplier above varies by current price percentile, computed live from the fields -
@@ -439,10 +439,10 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
             loaded - it won't move as you edit the curve fields, since it's what the curve is being compared against,
             not a result of it.
           </p>
-        </div>
+        </section>
       )}
 
-      <div className="card">
+      <section className="admin-section">
         <h2 style={{ marginTop: 0 }}>Tank identification by zone</h2>
         <p className="subtitle" style={{ marginBottom: "1rem" }}>
           Each raid report, the top N warriors by raw total damage taken are classified as tanks - no other filter.
@@ -495,7 +495,7 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
             </button>
           </div>
         </div>
-      </div>
+      </section>
 
       {renderFieldGroup(
         "Idle drift",
@@ -505,7 +505,7 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
       )}
 
       {convergence && reversionBreakpoints && (
-        <div className="card">
+        <section className="admin-section">
           <h2 style={{ marginTop: 0 }}>Convergence estimates</h2>
           <p className="subtitle" style={{ marginBottom: "1rem" }}>
             How long it takes a price gap to close under the idle-drift settings above, computed live from the
@@ -555,7 +555,7 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
             warrior has been in). None of these account for random noise or swing events, which add variance around
             the trend but don't change it.
           </p>
-        </div>
+        </section>
       )}
 
       {renderFieldGroup(
@@ -565,7 +565,7 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
         TRADE_FIELDS,
       )}
 
-      <div className="card">
+      <section className="admin-section">
         <h2 style={{ marginTop: 0 }}>Tracked abilities</h2>
         <p className="subtitle" style={{ marginBottom: "1rem" }}>
           Weight and bucket used when scoring cast counts. Bucket "all" compares against everyone; "dps" or "tank"
@@ -635,7 +635,7 @@ export function StockConfigTab({ onNavigateToDocs }: { onNavigateToDocs: (anchor
             </button>
           </div>
         </div>
-      </div>
+      </section>
     </>
   );
 }

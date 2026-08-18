@@ -357,6 +357,94 @@ nav.nav-dropdown a.active {
   margin-top: 1rem;
 }
 
+.admin-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow:
+    rgba(0, 0, 0, 0.07) 0px 1px 2px,
+    rgba(0, 0, 0, 0.07) 0px 2px 4px,
+    rgba(0, 0, 0, 0.07) 0px 4px 8px,
+    rgba(0, 0, 0, 0.07) 0px 8px 16px,
+    rgba(0, 0, 0, 0.07) 0px 16px 32px,
+    rgba(0, 0, 0, 0.07) 0px 32px 64px;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: stretch;
+}
+@media (max-width: 768px) {
+  .admin-card {
+    flex-direction: column;
+  }
+}
+
+.admin-sidebar {
+  flex: 0 0 180px;
+  padding: 1.25rem 1rem;
+  border-right: 1px solid var(--border);
+}
+@media (max-width: 768px) {
+  .admin-sidebar {
+    flex: 0 0 auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 1.25rem;
+  }
+}
+
+.admin-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.admin-sidebar-nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 0.9rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: 3px;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+.admin-sidebar-nav a:hover {
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.05);
+}
+.admin-sidebar-nav a.active {
+  color: var(--accent-fg);
+  background: var(--accent);
+}
+@media (max-width: 768px) {
+  .admin-sidebar-nav {
+    display: none;
+  }
+}
+
+.admin-content {
+  flex: 1;
+  min-width: 0;
+  padding: 1.25rem;
+}
+
+.admin-section + .admin-section {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.admin-section.danger-card {
+  border-left: 3px solid var(--danger);
+  padding-left: 0.85rem;
+}
+
+.admin-subpanel {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1rem;
+}
+
 .global-footer {
   display: flex;
   justify-content: space-between;

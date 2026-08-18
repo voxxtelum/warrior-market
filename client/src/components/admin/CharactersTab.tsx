@@ -129,7 +129,7 @@ export function CharactersTab() {
 
   return (
     <>
-      <div className="card">
+      <section className="admin-section">
         <h2 style={{ marginTop: 0 }}>Characters</h2>
         <div className="table-scroll table-compact">
           <table>
@@ -204,10 +204,10 @@ export function CharactersTab() {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
 
       {detail?.mode === 'shares' && (
-        <div className="card detail-card-enter">
+        <section className="admin-section detail-card-enter">
           <h2 style={{ marginTop: 0 }}>
             {holders ? `${holders.playerName}-${holders.server} holders` : activeRow ? `${activeRow.playerName}-${activeRow.server} holders` : 'Holders'}
           </h2>
@@ -282,11 +282,11 @@ export function CharactersTab() {
               </div>
             </>
           )}
-        </div>
+        </section>
       )}
 
       {detail?.mode === 'trades' && (
-        <div className="card detail-card-enter">
+        <section className="admin-section detail-card-enter">
           <h2 style={{ marginTop: 0 }}>
             {activeRow ? `${activeRow.playerName}-${activeRow.server} trades` : 'Trades'}
           </h2>
@@ -344,7 +344,7 @@ export function CharactersTab() {
             </table>
           </div>
           <Pagination page={tradesPage} pageCount={tradesPageCount} onPageChange={setTradesPage} />
-        </div>
+        </section>
       )}
     </>
   );

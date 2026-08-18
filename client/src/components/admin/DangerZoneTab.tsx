@@ -55,7 +55,7 @@ export function DangerZoneTab() {
     <>
       <GlobalAddRemoveCoinsCard />
 
-      <div className="card">
+      <section className="admin-section">
         <h2 style={{ marginTop: 0 }}>New user starting balance</h2>
         <p className="subtitle" style={{ marginBottom: '1rem' }}>
           Coins a brand-new wallet is seeded with, and what "Reset Market" below resets every wallet back to.
@@ -83,11 +83,11 @@ export function DangerZoneTab() {
             Save changes
           </button>
         </div>
-      </div>
+      </section>
 
       <PlayersTab />
 
-      <div className="card danger-card">
+      <section className="admin-section danger-card">
         <h2 style={{ marginTop: 0 }}>Global reset</h2>
         <p className="subtitle">
           Resets every wallet, holding, trade, notification, and price
@@ -103,7 +103,7 @@ export function DangerZoneTab() {
           </button>
         </div>
         {resetDone && <p className="status success">Market reset.</p>}
-      </div>
+      </section>
 
       {resetting && (
         <ConfirmModal

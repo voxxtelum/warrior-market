@@ -53,7 +53,7 @@ export function ReportPreviewCard({
   }
 
   return (
-    <div className="card">
+    <section className="admin-section">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
         <h2 style={{ marginTop: 0 }}>Pending report: {pendingReport.title}</h2>
         <button
@@ -130,6 +130,6 @@ export function ReportPreviewCard({
           onClose={() => setConfirmDiscard(false)}
         />
       )}
-    </div>
+    </section>
   );
 }

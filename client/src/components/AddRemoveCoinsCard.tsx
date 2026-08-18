@@ -57,7 +57,7 @@ export function AddRemoveCoinsCard({ userId, onAdjusted }: AddRemoveCoinsCardPro
   }
 
   return (
-    <div className="card">
+    <section className="admin-section">
       <div className="addcoins-row">
         <div className="addcoins-field addcoins-field-amount">
           <input
@@ -115,6 +115,6 @@ export function AddRemoveCoinsCard({ userId, onAdjusted }: AddRemoveCoinsCardPro
       <div className="trade-status-area">
         {status && <p className={`status ${status.kind}`}>{status.text}</p>}
       </div>
-    </div>
+    </section>
   );
 }

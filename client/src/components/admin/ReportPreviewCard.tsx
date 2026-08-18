@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { commitReport, deleteReport, getReportPreview, type ReportPricePreview, type ReportRow } from "../../api";
 import { fmtCoin, priceDelta } from "../../format";
 import { ConfirmModal } from "../ConfirmModal";
+import { RefreshIcon } from "../icons/RefreshIcon";
 
 // Shown below the "Add a report" card whenever a report is held for review
 // (status: "pending") - nothing here has touched the live market yet. The
@@ -53,7 +54,19 @@ export function ReportPreviewCard({
 
   return (
     <div className="card">
-      <h2 style={{ marginTop: 0 }}>Pending report: {pendingReport.title}</h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "0.5rem" }}>
+        <h2 style={{ marginTop: 0 }}>Pending report: {pendingReport.title}</h2>
+        <button
+          type="button"
+          className="btn-icon-plain"
+          onClick={load}
+          disabled={loading || committing}
+          aria-label="Refresh preview"
+          title="Refresh preview"
+        >
+          <RefreshIcon className="icon-btn-icon" />
+        </button>
+      </div>
       <p className="subtitle" style={{ marginBottom: "1rem" }}>
         {pendingReport.zone ?? "unknown zone"} — held for review. Nothing below has affected the live market yet.
       </p>
@@ -95,10 +108,7 @@ export function ReportPreviewCard({
           </table>
         </div>
       ) : null}
-      <div style={{ display: "flex", gap: "0.5rem", marginTop: "1rem" }}>
-        <button type="button" onClick={load} disabled={loading || committing}>
-          Refresh
-        </button>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1rem" }}>
         <button type="button" className="btn-danger" onClick={() => setConfirmDiscard(true)} disabled={committing}>
           Discard
         </button>

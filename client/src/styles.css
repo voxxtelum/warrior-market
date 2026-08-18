@@ -447,6 +447,7 @@ button:disabled {
 }
 .zone-picker-btn {
   flex: 1;
+  padding: 0.6rem 0;
   border: 1px solid var(--border);
   text-align: center;
   background: transparent;
@@ -455,11 +456,16 @@ button:disabled {
 .zone-picker-btn:hover:not(:disabled) {
   background: var(--bg);
   color: var(--accent);
+  box-shadow:
+    rgba(0, 0, 0, 0.08) 0px 3px 6px,
+    rgba(0, 0, 0, 0.12) 0px 3px 6px;
 }
 .zone-picker-btn.active {
   background: var(--bg);
   color: var(--accent);
-  border-color: var(--accent);
+  box-shadow:
+    rgba(0, 0, 0, 0.08) 0px 3px 6px,
+    rgba(0, 0, 0, 0.12) 0px 3px 6px;
 }
 .zone-picker-empty {
   color: var(--muted);
@@ -492,6 +498,17 @@ button:disabled {
 .btn-icon-only {
   padding: 0.45rem;
   line-height: 0;
+}
+
+.btn-icon-plain {
+  background: none;
+  padding: 0.25rem;
+  line-height: 0;
+  color: var(--muted);
+}
+.btn-icon-plain:hover:not(:disabled) {
+  background: none;
+  color: var(--accent);
 }
 
 .status {

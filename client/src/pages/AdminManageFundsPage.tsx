@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from "react";
-import { AdminLayout } from "../components/AdminLayout";
-import { ConfirmModal } from "../components/ConfirmModal";
-import { FundForm } from "../components/admin/FundForm";
-import { RiskBar } from "../components/RiskBar";
-import { PencilSquareIcon } from "../components/icons/PencilSquareIcon";
-import { TrashIconSolid } from "../components/icons/TrashIconSolid";
+import { useEffect, useRef, useState } from 'react';
+import { AdminLayout } from '../components/AdminLayout';
+import { ConfirmModal } from '../components/ConfirmModal';
+import { FundForm } from '../components/admin/FundForm';
+import { RiskBar } from '../components/RiskBar';
+import { PencilSquareIcon } from '../components/icons/PencilSquareIcon';
+import { TrashIconSolid } from '../components/icons/TrashIconSolid';
 import {
   createFund,
   deleteFund,
@@ -13,8 +13,8 @@ import {
   type CreateFundInput,
   type FundDetailView,
   type FundView,
-} from "../api";
-import { fmtCoin } from "../format";
+} from '../api';
+import { fmtCoin } from '../format';
 
 interface FundExportEntry {
   name: string;
@@ -29,7 +29,7 @@ interface FundExportEntry {
 
 // "YY-MM-DD-HHMMSS", local time - same convention as StockConfigTab's export.
 function fmtExportTimestamp(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, "0");
+  const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(date.getFullYear() % 100)}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
 
@@ -38,7 +38,10 @@ export function AdminManageFundsPage() {
   const [editing, setEditing] = useState<FundDetailView | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<FundView | null>(null);
-  const [ioStatus, setIoStatus] = useState<{ text: string; kind: "success" | "error" } | null>(null);
+  const [ioStatus, setIoStatus] = useState<{
+    text: string;
+    kind: 'success' | 'error';
+  } | null>(null);
   const [ioBusy, setIoBusy] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
 
@@ -74,17 +77,27 @@ export function AdminManageFundsPage() {
           stockCount: c.stockCount,
         })),
       }));
-      const json = JSON.stringify({ exportedAt: new Date().toISOString(), funds: entries }, null, 2);
-      const blob = new Blob([json], { type: "application/json" });
+      const json = JSON.stringify(
+        { exportedAt: new Date().toISOString(), funds: entries },
+        null,
+        2,
+      );
+      const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
+      const a = document.createElement('a');
       a.href = url;
       a.download = `funds-${fmtExportTimestamp(new Date())}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      setIoStatus({ text: `Exported ${entries.length} fund(s).`, kind: "success" });
+      setIoStatus({
+        text: `Exported ${entries.length} fund(s).`,
+        kind: 'success',
+      });
     } catch (err) {
-      setIoStatus({ text: err instanceof Error ? err.message : String(err), kind: "error" });
+      setIoStatus({
+        text: err instanceof Error ? err.message : String(err),
+        kind: 'error',
+      });
     } finally {
       setIoBusy(false);
     }
@@ -100,8 +113,11 @@ export function AdminManageFundsPage() {
     setIoBusy(true);
     setIoStatus(null);
     try {
-      const parsed = JSON.parse(await file.text()) as { funds?: FundExportEntry[] };
-      if (!parsed || !Array.isArray(parsed.funds)) throw new Error("File doesn't contain a funds export");
+      const parsed = JSON.parse(await file.text()) as {
+        funds?: FundExportEntry[];
+      };
+      if (!parsed || !Array.isArray(parsed.funds))
+        throw new Error("File doesn't contain a funds export");
 
       const created: string[] = [];
       const updated: string[] = [];
@@ -123,21 +139,32 @@ export function AdminManageFundsPage() {
           (result.created ? created : updated).push(result.name);
           if (result.skippedConstituents.length > 0) {
             skippedNotes.push(
-              `${result.name}: skipped ${result.skippedConstituents.map((c) => `${c.playerName} (${c.server})`).join(", ")}`,
+              `${result.name}: skipped ${result.skippedConstituents.map((c) => `${c.playerName} (${c.server})`).join(', ')}`,
             );
           }
         } catch (err) {
-          failed.push(`${entry.name}: ${err instanceof Error ? err.message : String(err)}`);
+          failed.push(
+            `${entry.name}: ${err instanceof Error ? err.message : String(err)}`,
+          );
         }
       }
 
-      const parts = [`Imported ${created.length + updated.length} of ${parsed.funds.length} fund(s) (${created.length} created, ${updated.length} updated).`];
-      if (skippedNotes.length > 0) parts.push(`Skipped constituents - ${skippedNotes.join("; ")}`);
-      if (failed.length > 0) parts.push(`Failed - ${failed.join("; ")}`);
-      setIoStatus({ text: parts.join(" "), kind: failed.length > 0 ? "error" : "success" });
+      const parts = [
+        `Imported ${created.length + updated.length} of ${parsed.funds.length} fund(s) (${created.length} created, ${updated.length} updated).`,
+      ];
+      if (skippedNotes.length > 0)
+        parts.push(`Skipped constituents - ${skippedNotes.join('; ')}`);
+      if (failed.length > 0) parts.push(`Failed - ${failed.join('; ')}`);
+      setIoStatus({
+        text: parts.join(' '),
+        kind: failed.length > 0 ? 'error' : 'success',
+      });
       load();
     } catch (err) {
-      setIoStatus({ text: `Import failed: ${err instanceof Error ? err.message : String(err)}`, kind: "error" });
+      setIoStatus({
+        text: `Import failed: ${err instanceof Error ? err.message : String(err)}`,
+        kind: 'error',
+      });
     } finally {
       setIoBusy(false);
     }
@@ -163,32 +190,53 @@ export function AdminManageFundsPage() {
   return (
     <AdminLayout>
       <section className="admin-section">
-        <div className="card-header-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2 style={{ margin: 0 }}>Manage Funds</h2>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
+        <div
+          className="card-header-row"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <h2 style={{ margin: 0 }}>Funds</h2>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
             <input
               ref={importInputRef}
               type="file"
               accept="application/json,.json"
-              style={{ display: "none" }}
+              style={{ display: 'none' }}
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) handleImportFile(file);
-                e.target.value = "";
+                e.target.value = '';
               }}
             />
-            <button type="button" onClick={() => importInputRef.current?.click()} disabled={ioBusy}>
+            <button
+              type="button"
+              onClick={() => importInputRef.current?.click()}
+              disabled={ioBusy}
+            >
               Import
             </button>
-            <button type="button" onClick={handleExport} disabled={ioBusy || !funds || funds.length === 0}>
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={ioBusy || !funds || funds.length === 0}
+            >
               Export
             </button>
-            <button type="button" className="btn-affirm" onClick={() => setCreating(true)}>
+            <button
+              type="button"
+              className="btn-affirm"
+              onClick={() => setCreating(true)}
+            >
               New Fund
             </button>
           </div>
         </div>
-        {ioStatus && <p className={`status ${ioStatus.kind}`}>{ioStatus.text}</p>}
+        {ioStatus && (
+          <p className={`status ${ioStatus.kind}`}>{ioStatus.text}</p>
+        )}
         <div className="table-scroll">
           <table>
             <thead>
@@ -218,9 +266,15 @@ export function AdminManageFundsPage() {
                   <td>{(f.taxPct * 100).toFixed(2)}%</td>
                   <td>{fmtCoin(f.nav)}</td>
                   <td>{f.sharesOutstanding.toFixed(2)}</td>
-                  <td>{f.deletedAt ? "Deleted" : "Active"}</td>
+                  <td>{f.deletedAt ? 'Deleted' : 'Active'}</td>
                   <td>
-                    <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        gap: '0.5rem',
+                        justifyContent: 'flex-end',
+                      }}
+                    >
                       <button
                         type="button"
                         className="btn-icon-only"
@@ -268,15 +322,22 @@ export function AdminManageFundsPage() {
         />
       )}
 
-      {editing && <FundForm fund={editing} onSaved={refreshEditing} onClose={() => setEditing(null)} />}
+      {editing && (
+        <FundForm
+          fund={editing}
+          onSaved={refreshEditing}
+          onClose={() => setEditing(null)}
+        />
+      )}
 
       {deleting && (
         <ConfirmModal
           title={`Delete ${deleting.name}?`}
           body={
             <p>
-              Every holder will be refunded their current position in {deleting.name} at its NAV, penalty-free, with
-              a notification. This cannot be undone.
+              Every holder will be refunded their current position in{' '}
+              {deleting.name} at its NAV, penalty-free, with a notification.
+              This cannot be undone.
             </p>
           }
           confirmLabel="Delete fund"

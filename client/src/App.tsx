@@ -6,6 +6,8 @@ import { TrendsPage } from "./pages/TrendsPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { AdminReportsPage } from "./pages/AdminReportsPage";
 import { AdminManageAppPage } from "./pages/AdminManageAppPage";
+import { AdminUsersPage } from "./pages/AdminUsersPage";
+import { AdminCharactersPage } from "./pages/AdminCharactersPage";
 import { AdminManageFundsPage } from "./pages/AdminManageFundsPage";
 import { AdminPriceHistoryPage } from "./pages/AdminPriceHistoryPage";
 import { AdminNotificationsPage } from "./pages/AdminNotificationsPage";
@@ -40,6 +42,8 @@ function App() {
       <Route path="/faq" element={<FaqPage />} />
       <Route path="/documentation" element={<DocumentationPage />} />
       <Route path="/admin" element={<AdminManageAppPage />} />
+      <Route path="/admin/users" element={<AdminUsersPage />} />
+      <Route path="/admin/characters" element={<AdminCharactersPage />} />
       <Route path="/admin/reports" element={<AdminReportsPage />} />
       <Route path="/admin/manage-funds" element={<AdminManageFundsPage />} />
       <Route path="/admin/price-history" element={<AdminPriceHistoryPage />} />

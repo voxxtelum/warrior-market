@@ -3,6 +3,8 @@ import { ChevronDownIcon } from './icons/ChevronDownIcon';
 
 const LINKS = [
   { to: '/admin', label: 'App', end: true },
+  { to: '/admin/users', label: 'Users' },
+  { to: '/admin/characters', label: 'Characters' },
   { to: '/admin/manage-funds', label: 'Funds' },
   { to: '/admin/notifications', label: 'Notifications' },
   { to: '/admin/reports', label: 'Reports' },

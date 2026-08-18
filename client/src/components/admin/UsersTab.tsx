@@ -166,7 +166,8 @@ export function UsersTab() {
       .filter((w) => w.linkedWarrior && w.userId !== userDetail?.userId)
       .map((w) => w.linkedWarrior!.id),
   );
-  const unlinkedWarriors = warriors?.filter((w) => !linkedWarriorIds.has(w.id)) ?? [];
+  const unlinkedWarriors =
+    warriors?.filter((w) => !linkedWarriorIds.has(w.id)) ?? [];
 
   const pageCount = userDetail
     ? Math.ceil(userDetail.transactions.length / PAGE_SIZE)
@@ -184,13 +185,17 @@ export function UsersTab() {
   if (!selectedUserId) {
     return (
       <section className="admin-section">
-        <h2 style={{ marginTop: 0 }}>Wallets</h2>
+        <h2 style={{ marginTop: 0 }}>Users</h2>
         <div className="table-scroll">
           <table id="manage-wallets-table">
             <thead>
               <tr>
                 {COLUMNS.map((col) => (
-                  <th key={col.key} className="sortable" onClick={() => handleSort(col.key)}>
+                  <th
+                    key={col.key}
+                    className="sortable"
+                    onClick={() => handleSort(col.key)}
+                  >
                     {col.label}
                     {arrowFor(col.key)}
                   </th>
@@ -291,7 +296,8 @@ export function UsersTab() {
                   className="warrior-name"
                   style={{ color: classColor(userDetail.linkedWarrior.class) }}
                 >
-                  {userDetail.linkedWarrior.playerName}-{userDetail.linkedWarrior.server}
+                  {userDetail.linkedWarrior.playerName}-
+                  {userDetail.linkedWarrior.server}
                 </span>
               ) : (
                 <span className="no-data">No character linked</span>
@@ -318,7 +324,11 @@ export function UsersTab() {
             type="button"
             className="text-link text-link-danger admin-user-heading-admin-toggle"
             aria-disabled={isSelf && userDetail?.isAdmin}
-            title={isSelf && userDetail?.isAdmin ? "You can't revoke your own admin access" : undefined}
+            title={
+              isSelf && userDetail?.isAdmin
+                ? "You can't revoke your own admin access"
+                : undefined
+            }
             onClick={() => {
               if (isSelf && userDetail?.isAdmin) return;
               toggleAdmin();
@@ -329,7 +339,9 @@ export function UsersTab() {
         </div>
         <div className="admin-user-meta">
           <div className="admin-user-meta-item">
-            <span className="admin-user-meta-value">{userDetail?.userId ?? '–'}</span>
+            <span className="admin-user-meta-value">
+              {userDetail?.userId ?? '–'}
+            </span>
             <span className="label">Discord ID</span>
           </div>
           <div className="admin-user-meta-item">
@@ -389,7 +401,9 @@ export function UsersTab() {
               <span className="value">
                 {userDetail ? fmtCoin(userDetail.netWorth) : '–'}
               </span>
-              {userDetail && <NetWorthDeltaBadge delta={userDetail.netWorthDelta} />}
+              {userDetail && (
+                <NetWorthDeltaBadge delta={userDetail.netWorthDelta} />
+              )}
             </span>
             <span className="label">Portfolio</span>
           </div>
@@ -454,7 +468,15 @@ export function UsersTab() {
                     <td>{fmtCoin(p.nav)}</td>
                     <td>{fmtCoin(p.marketValue)}</td>
                     <td>
-                      <span className={pnl > 0 ? 'delta-pos' : pnl < 0 ? 'delta-neg' : 'delta-neutral'}>
+                      <span
+                        className={
+                          pnl > 0
+                            ? 'delta-pos'
+                            : pnl < 0
+                              ? 'delta-neg'
+                              : 'delta-neutral'
+                        }
+                      >
                         {pnl >= 0 ? '+' : ''}
                         {fmtCoin(pnl)}
                       </span>
@@ -494,7 +516,9 @@ export function UsersTab() {
                 <tr key={`${tx.targetType}-${tx.id}`}>
                   <td className="mobile-hide">
                     {fmtDateTime(tx.createdAt)}
-                    <span className="time-ago">{fmtRelativeTime(tx.createdAt)}</span>
+                    <span className="time-ago">
+                      {fmtRelativeTime(tx.createdAt)}
+                    </span>
                   </td>
                   <td className="warrior-name">{tx.targetName}</td>
                   <td className="side-pill-cell">

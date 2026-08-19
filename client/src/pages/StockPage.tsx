@@ -622,7 +622,14 @@ export function StockPage() {
                             height={20}
                           />
                         )}
-                        <span className="warrior-name">
+                        <span
+                          className="warrior-name"
+                          style={
+                            chartColorPins[rowKey(row)]
+                              ? { color: chartColorPins[rowKey(row)] }
+                              : undefined
+                          }
+                        >
                           {row.player_name}
                         </span>
                       </span>

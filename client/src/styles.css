@@ -593,7 +593,7 @@ button:disabled {
 .icon-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-end;
   flex-shrink: 0;
 }
 .icon-btn-icon {
@@ -617,6 +617,48 @@ button:disabled {
   max-width: 0;
   margin-left: 0;
   opacity: 0;
+}
+
+.rocket-trail {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.rocket-trail-line {
+  position: absolute;
+  right: 100%;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  opacity: 0;
+  transform: translateY(-50%) scaleX(0);
+  transform-origin: right center;
+  transition:
+    transform 0.3s ease,
+    opacity 0.2s ease;
+}
+.rocket-trail-line:nth-child(1) {
+  top: 20%;
+  width: 13px;
+  margin-right: 2px;
+  transition-delay: 0s;
+}
+.rocket-trail-line:nth-child(2) {
+  top: 50%;
+  width: 20px;
+  margin-right: 4px;
+  transition-delay: 0s;
+}
+.rocket-trail-line:nth-child(3) {
+  top: 80%;
+  width: 16px;
+  margin-right: 2px;
+  transition-delay: 0s;
+}
+.icon-btn:hover .rocket-trail-line {
+  opacity: 0.8;
+  transform: translateY(-50%) scaleX(1);
 }
 
 .btn-icon-only {

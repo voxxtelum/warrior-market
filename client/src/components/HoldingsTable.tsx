@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowTrendingUpIcon } from './icons/ArrowTrendingUpIcon';
+import { RocketTrailIcon } from './icons/RocketTrailIcon';
 import { IconButton } from './IconButton';
 import { fmtCoin, priceDelta } from '../format';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -193,7 +193,7 @@ export function HoldingsTable({
                   <td className="mobile-hide">
                     <IconButton
                       className="btn-affirm"
-                      icon={<ArrowTrendingUpIcon className="icon-btn-icon" />}
+                      icon={<RocketTrailIcon className="icon-btn-icon" />}
                       label="Trade"
                       onClick={() => onTrade({ playerName: h.playerName, server: h.server })}
                     />

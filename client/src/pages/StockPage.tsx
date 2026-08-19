@@ -5,7 +5,7 @@ import { LineChart } from '../components/LineChart';
 import { NetWorthDeltaBadge } from '../components/NetWorthDeltaBadge';
 import { Sparkline } from '../components/Sparkline';
 import { TradeModal } from '../components/TradeModal';
-import { ArrowTrendingUpIcon } from '../components/icons/ArrowTrendingUpIcon';
+import { RocketTrailIcon } from '../components/icons/RocketTrailIcon';
 import { IconButton } from '../components/IconButton';
 import { useAuth } from '../authContext';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -678,7 +678,7 @@ export function StockPage() {
                     <td className="mobile-hide">
                       <IconButton
                         className="btn-affirm"
-                        icon={<ArrowTrendingUpIcon className="icon-btn-icon" />}
+                        icon={<RocketTrailIcon className="icon-btn-icon" />}
                         label="Trade"
                         onClick={(e) => {
                           e.stopPropagation();

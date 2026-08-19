@@ -2,7 +2,7 @@ import { Router } from "express";
 import { fetchAndIngestReport } from "../ingest";
 import { deleteReport, getReportDetail, liquidateOrphanedHoldings, listReports } from "../db";
 import { requireAdmin } from "../middleware/auth";
-import { commitReport, computeReportPriceImpact, rebuildRaidPriceSnapshots } from "../stock";
+import { commitReport, computeReportPriceImpact, undoReportPriceImpact } from "../stock";
 
 export const reportsRouter = Router();
 
@@ -76,7 +76,7 @@ reportsRouter.delete("/:code", requireAdmin, (req, res) => {
     // Discarding a held-but-never-applied report: nothing was ever written
     // to price_snapshots/anchor_price/raid_anchor_price for it, so there's
     // nothing to undo - just remove the raw rows. Deliberately skips
-    // rebuildRaidPriceSnapshots/liquidateOrphanedHoldings, both of which
+    // undoReportPriceImpact/liquidateOrphanedHoldings, both of which
     // exist only to undo an already-committed report's live effects. A
     // warrior discovered only in this discarded report stays in the
     // warriors table (auto-hidden, zero price_snapshots rows) - the same
@@ -88,12 +88,12 @@ reportsRouter.delete("/:code", requireAdmin, (req, res) => {
   }
 
   // Captured before deleteReport() removes this report's damage rows -
-  // scopes the anchor rebuild to just these warriors (see
-  // rebuildRaidPriceSnapshots's own comment) rather than resetting every
-  // warrior in the game over one unrelated report going away.
+  // scopes the undo to just these warriors (see undoReportPriceImpact's own
+  // comment) so no other report's history, for this warrior or any other,
+  // is touched.
   const participantKeys = new Set(detail.damage.map((d) => `${d.player_name}::${d.server}`));
   deleteReport(req.params.code);
-  rebuildRaidPriceSnapshots({ participantKeys, deletedReportCode: req.params.code });
+  undoReportPriceImpact(req.params.code, participantKeys);
   liquidateOrphanedHoldings();
   res.status(204).end();
 });

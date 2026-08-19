@@ -193,8 +193,8 @@ export function AdminReportsPage() {
           title="Delete this report?"
           body={
             <p>
-              This permanently removes "{deleteTarget.title}"'s raw data and rebuilds every player's price history
-              from the remaining reports — prices for other players may shift. Anyone left holding shares in a
+              This permanently removes "{deleteTarget.title}"'s raw data and undoes exactly its own effect on each
+              participant's price — no other player's price history is touched. Anyone left holding shares in a
               warrior with no raid history after this will be automatically cashed out. This cannot be undone.
             </p>
           }

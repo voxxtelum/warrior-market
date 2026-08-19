@@ -4,6 +4,7 @@ import type { StockConfig } from "../stock";
 import {
   getAllLatestTradablePrices,
   getAllPriceSnapshots,
+  getAllRaidLedgerSnapshots,
   getLinkedAvatarsByIdentity,
   getRaidAnchorPrice,
   setStockConfigRaw,
@@ -39,9 +40,15 @@ stockRouter.get("/history", (_req, res) => {
       // still tracked continuously (see getLastRaidPrice's own comment).
       lastRaidPrice: number | null;
       series: { created_at: number; price: number; delta: number | null; source: string; report_code: string | null }[];
+      // Every raid this warrior ever had ('raid' + 'raid_anchor' sources
+      // together), unlike `series` above which excludes 'raid_anchor' for
+      // charting reasons - powers the Stock page's Gain/raid, Change (last
+      // raid), and Raids columns off the immutable ledger's own recorded
+      // deltas instead of a config-reactive recompute (see getStock()).
+      raidSeries: { created_at: number; price: number; delta: number | null; report_code: string | null }[];
     }
   >();
-  for (const row of rows) {
+  function playerEntry(row: { player_name: string; server: string; warrior_id: number }) {
     const key = `${row.player_name}::${row.server}`;
     if (!byPlayer.has(key)) {
       byPlayer.set(key, {
@@ -49,13 +56,25 @@ stockRouter.get("/history", (_req, res) => {
         server: row.server,
         lastRaidPrice: getRaidAnchorPrice(row.warrior_id),
         series: [],
+        raidSeries: [],
       });
     }
-    byPlayer.get(key)!.series.push({
+    return byPlayer.get(key)!;
+  }
+  for (const row of rows) {
+    playerEntry(row).series.push({
       created_at: row.created_at,
       price: row.price,
       delta: row.delta,
       source: row.source,
+      report_code: row.report_code,
+    });
+  }
+  for (const row of getAllRaidLedgerSnapshots()) {
+    playerEntry(row).raidSeries.push({
+      created_at: row.created_at,
+      price: row.price,
+      delta: row.delta,
       report_code: row.report_code,
     });
   }

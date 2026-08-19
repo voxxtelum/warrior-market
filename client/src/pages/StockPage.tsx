@@ -18,6 +18,7 @@ import {
   type MarketSummary,
   type PlayerPriceHistory,
   type PlayerStock,
+  type RaidLedgerPoint,
   type WalletData,
 } from '../api';
 
@@ -80,21 +81,21 @@ interface LeaderboardRow {
   price: number;
   raidCount: number;
   prevPrice: number | null;
-  series: PlayerStock['series'];
+  series: RaidLedgerPoint[];
   avatar: string | null;
 }
 
 function buildLeaderboard(
-  playersStock: PlayerStock[],
+  priceHistory: PlayerPriceHistory[],
   currentPriceByPlayer: Map<string, number>,
   sinceRaidBasePriceByPlayer: Map<string, number>,
   lastTickDeltaByPlayer: Map<string, number | null>,
+  avatarByPlayer: Map<string, string | null>,
 ): LeaderboardRow[] {
-  return playersStock
-    .filter((p) => p.series.length > 0)
+  return priceHistory
+    .filter((p) => p.raidSeries.length > 0)
     .map((p) => {
-      const last = p.series[p.series.length - 1];
-      const prev = p.series.length > 1 ? p.series[p.series.length - 2] : null;
+      const last = p.raidSeries[p.raidSeries.length - 1];
       const key = `${p.player_name}::${p.server}`;
       return {
         player_name: p.player_name,
@@ -103,10 +104,15 @@ function buildLeaderboard(
         sinceRaidBasePrice: sinceRaidBasePriceByPlayer.get(key) ?? null,
         lastTickDelta: lastTickDeltaByPlayer.get(key) ?? null,
         price: last.price,
-        raidCount: p.series.length,
-        prevPrice: prev ? prev.price : null,
-        series: p.series,
-        avatar: p.avatar,
+        raidCount: p.raidSeries.length,
+        // Synthesized from the last raid's own recorded delta rather than
+        // the prior raid row's price - avoids conflating raid quality with
+        // any trade-driven anchor_price nudges that happened in between (see
+        // avgGainPerRaid below for why the ledger's delta, not a price diff,
+        // is the source of truth). null only for a warrior's first-ever raid.
+        prevPrice: last.delta !== null ? last.price - last.delta : null,
+        series: p.raidSeries,
+        avatar: avatarByPlayer.get(key) ?? null,
       };
     });
 }
@@ -115,18 +121,17 @@ function changeValue(row: LeaderboardRow): number | null {
   return row.prevPrice !== null ? row.price - row.prevPrice : null;
 }
 
-// Flat dollar-average per-raid price change, derived purely from the
-// player's own consecutive price points - a tenure-independent view of
-// "quality per raid" (a veteran and a rookie with the same per-raid dollar
-// gain are judged equally, rather than the veteran's larger base price
-// shrinking their %-return). Needs at least 2 raids to have one delta.
-function avgGainPerRaid(series: PlayerStock['series']): number | null {
-  if (series.length < 2) return null;
-  let sumDelta = 0;
-  for (let i = 1; i < series.length; i++) {
-    sumDelta += series[i].price - series[i - 1].price;
-  }
-  return sumDelta / (series.length - 1);
+// Flat dollar-average per-raid price change, read straight off the
+// immutable ledger's own recorded deltas - the exact amount each raid moved
+// the anchor when it was live-applied, forever immune to a later
+// stock_config edit (unlike diffing consecutive recomputed prices, which
+// silently changes any time scoring config is tuned). Excludes each
+// warrior's first-ever raid, which has no recorded delta (nothing to diff
+// against). Needs at least one.
+function avgGainPerRaid(series: RaidLedgerPoint[]): number | null {
+  const deltas = series.map((p) => p.delta).filter((d): d is number => d !== null);
+  if (deltas.length === 0) return null;
+  return deltas.reduce((sum, d) => sum + d, 0) / deltas.length;
 }
 
 function rowKey(row: LeaderboardRow): string {
@@ -309,12 +314,23 @@ export function StockPage() {
     return map;
   }, [priceHistory]);
 
+  // Discord avatar per player - still sourced from computeStock()'s output
+  // (the only place it's attached server-side), unlike everything else the
+  // leaderboard needs, which now comes straight from the immutable ledger.
+  const avatarByPlayer = useMemo(() => {
+    const map = new Map<string, string | null>();
+    if (playersStock) {
+      for (const p of playersStock) map.set(`${p.player_name}::${p.server}`, p.avatar);
+    }
+    return map;
+  }, [playersStock]);
+
   const leaderboard = useMemo(
     () =>
-      playersStock
-        ? buildLeaderboard(playersStock, currentPriceByPlayer, sinceRaidBasePriceByPlayer, lastTickDeltaByPlayer)
+      priceHistory
+        ? buildLeaderboard(priceHistory, currentPriceByPlayer, sinceRaidBasePriceByPlayer, lastTickDeltaByPlayer, avatarByPlayer)
         : [],
-    [playersStock, currentPriceByPlayer, sinceRaidBasePriceByPlayer, lastTickDeltaByPlayer],
+    [priceHistory, currentPriceByPlayer, sinceRaidBasePriceByPlayer, lastTickDeltaByPlayer, avatarByPlayer],
   );
 
   const rankDeltas = useMemo(() => buildRankDeltas(leaderboard), [leaderboard]);

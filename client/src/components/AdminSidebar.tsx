@@ -12,6 +12,8 @@ const LINKS = [
   { to: '/admin/audit-log', label: 'Audit Log' },
   { to: '/admin/summary', label: 'Summary' },
   { to: '/admin/backup', label: 'Backup' },
+  // Temporary - see AdminRaidRepairPage's own comment for removal.
+  { to: '/admin/raid-repair', label: 'Raid Repair' },
 ];
 
 export function AdminSidebar() {

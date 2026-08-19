@@ -855,9 +855,9 @@ export function getReportStatus(code: string): 'pending' | 'committed' | null {
 
 // Manually cascades the same way upsertReport's re-ingest delete step does -
 // removes a report's raw raid data entirely. Deliberately does not touch
-// price_snapshots; the caller is responsible for calling
-// stock.ts's rebuildRaidPriceSnapshots() afterward so the raid-anchored
-// price series regenerates without this report ever having existed.
+// price_snapshots; the caller is responsible for calling stock.ts's
+// undoReportPriceImpact() afterward to undo this report's price effect
+// without this report ever having existed.
 export function deleteReport(code: string): void {
   db.exec('BEGIN');
   try {
@@ -1334,10 +1334,11 @@ export function warriorHasRaidSnapshot(warriorId: number): boolean {
 }
 
 // Wipes every raid-sourced snapshot and replaces it with a freshly computed
-// set (see stock.ts's rebuildRaidPriceSnapshots) - used after a report is
-// deleted or the market is reset, when the raid-anchored price series needs
-// to be regenerated from scratch. Drift-sourced snapshots are never touched
-// here.
+// set (see stock.ts's rebuildRaidPriceSnapshots) - used for the one-time
+// historical backfill and a full market reset, the only two cases with no
+// live-compounded history to preserve. A report delete does NOT go through
+// here (see stock.ts's undoReportPriceImpact, which removes just that
+// report's own rows). Drift-sourced snapshots are never touched here.
 export function replaceRaidPriceSnapshots(
   entries: {
     warriorId: number;
@@ -1439,24 +1440,47 @@ export function getLastRaidPrice(warriorId: number): number | null {
   return getRaidAnchorPrice(warriorId);
 }
 
-// The warrior's current most recent raid/raid_anchor ledger row, if any -
-// used by rebuildRaidPriceSnapshots() to detect "the report being deleted
-// was this warrior's most recent raid" and, when so, undo exactly that
-// report's own recorded delta rather than recomputing the warrior's entire
-// history under whatever stock_config happens to be active right now (which
-// can differ from what was active when their earlier raids actually
-// happened, producing a wrong anchor for reasons unrelated to the deleted
-// report at all). Must be read before replaceRaidPriceSnapshots() wipes and
-// rewrites these rows.
-export function getLatestRaidLedgerEntry(
+// Looks up one specific report's raid-ledger row for one warrior - used by
+// stock.ts's undoReportPriceImpact to find exactly how much a report being
+// deleted moved this warrior's anchors, regardless of whether it was their
+// most recent raid or an older one (anchors are a pure running sum of
+// deltas, so subtracting any one of them is an exact undo either way).
+export function getRaidSnapshotForReport(
   warriorId: number,
-): { reportCode: string | null; delta: number | null } | null {
+  reportCode: string,
+): { delta: number | null } | null {
   const row = db
     .prepare(
-      `SELECT report_code, delta FROM price_snapshots WHERE warrior_id = ? AND source IN ('raid', 'raid_anchor') ORDER BY created_at DESC, id DESC LIMIT 1`,
+      `SELECT delta FROM price_snapshots WHERE warrior_id = ? AND report_code = ? AND source IN ('raid', 'raid_anchor') LIMIT 1`,
     )
-    .get(warriorId) as unknown as { report_code: string | null; delta: number | null } | undefined;
-  return row ? { reportCode: row.report_code, delta: row.delta } : null;
+    .get(warriorId, reportCode) as unknown as { delta: number | null } | undefined;
+  return row ? { delta: row.delta } : null;
+}
+
+// Whether a warrior has any raid history left besides the given report -
+// used by undoReportPriceImpact to tell whether a warrior whose first-ever
+// raid is the one being deleted still has later raids (anchors stay as-is,
+// since later deltas are already correct absolute figures) or none at all
+// (anchors reset to "never raided").
+export function warriorHasOtherRaidSnapshot(
+  warriorId: number,
+  excludeReportCode: string,
+): boolean {
+  return (
+    db
+      .prepare(
+        `SELECT 1 FROM price_snapshots WHERE warrior_id = ? AND report_code != ? AND source IN ('raid', 'raid_anchor') LIMIT 1`,
+      )
+      .get(warriorId, excludeReportCode) !== undefined
+  );
+}
+
+// Removes exactly one report's own price_snapshots rows - the surgical
+// counterpart to replaceRaidPriceSnapshots' full-table wipe, used when a
+// report is deleted so no other report's history (for this warrior or any
+// other) is touched.
+export function deletePriceSnapshotsForReport(reportCode: string): void {
+  db.prepare(`DELETE FROM price_snapshots WHERE report_code = ?`).run(reportCode);
 }
 
 // The price idle drift reverts toward, and that demand-driven trades update -
@@ -1498,7 +1522,7 @@ export function setRaidAnchorPrice(warriorId: number, price: number): void {
 }
 
 // Reverts both anchors to "never raided" (NULL) - used by
-// rebuildRaidPriceSnapshots() when a report delete leaves a warrior with no
+// undoReportPriceImpact() when a report delete leaves a warrior with no
 // raid history left at all, so their anchors stop pointing at a raid that no
 // longer exists instead of just going stale.
 export function clearAnchorPrices(warriorId: number): void {
@@ -1589,6 +1613,73 @@ export function getAllPriceSnapshots(): (PriceSnapshotRow & {
     player_name: string;
     server: string;
   })[];
+}
+
+// The full raid-only ledger (both 'raid' and 'raid_anchor' sources) across
+// every warrior - unlike getAllPriceSnapshots above, which excludes
+// 'raid_anchor' because it feeds the live-price chart, this is for
+// Gain/raid-style stats that need every raid a warrior ever had, not just
+// the ones that moved their tradable price directly. Same hidden_players
+// exclusion as getAllPriceSnapshots for a consistent roster.
+export function getAllRaidLedgerSnapshots(): (PriceSnapshotRow & {
+  player_name: string;
+  server: string;
+})[] {
+  return db
+    .prepare(
+      `SELECT ps.*, w.player_name, w.server
+       FROM price_snapshots ps
+       JOIN warriors w ON w.id = ps.warrior_id
+       WHERE ps.source IN ('raid', 'raid_anchor')
+         AND NOT EXISTS (
+           SELECT 1 FROM hidden_players hp WHERE hp.player_name = w.player_name AND hp.server = w.server
+         )
+       ORDER BY ps.warrior_id ASC, ps.created_at ASC, ps.id ASC`,
+    )
+    .all() as unknown as (PriceSnapshotRow & {
+    player_name: string;
+    server: string;
+  })[];
+}
+
+// Every warrior's complete price_snapshots timeline, every source included
+// and unfiltered by hidden_players (unlike the queries above) - used only
+// by the one-time raid ledger repair tool (src/raidLedgerRepair.ts), which
+// needs to see each warrior's full chronological history, hidden or not, to
+// find the stale rebuild-artifact rows described there.
+export function getAllPriceSnapshotsForRepair(): (PriceSnapshotRow & {
+  player_name: string;
+  server: string;
+})[] {
+  return db
+    .prepare(
+      `SELECT ps.*, w.player_name, w.server
+       FROM price_snapshots ps
+       JOIN warriors w ON w.id = ps.warrior_id
+       ORDER BY ps.warrior_id ASC, ps.created_at ASC, ps.id ASC`,
+    )
+    .all() as unknown as (PriceSnapshotRow & {
+    player_name: string;
+    server: string;
+  })[];
+}
+
+// Batch-updates price/delta on specific price_snapshots rows by id - the
+// write half of the one-time raid ledger repair tool. Deliberately narrow
+// (only price/delta, only by explicit row id) so it can't be reused to
+// touch anything the repair tool didn't explicitly compute.
+export function updatePriceSnapshotPriceDelta(
+  updates: { id: number; price: number; delta: number }[],
+): void {
+  db.exec('BEGIN');
+  try {
+    const stmt = db.prepare(`UPDATE price_snapshots SET price = ?, delta = ? WHERE id = ?`);
+    for (const u of updates) stmt.run(u.price, u.delta, u.id);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
 }
 
 export interface PriceHistoryFilters {

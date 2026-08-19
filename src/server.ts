@@ -17,6 +17,7 @@ import { adminFundsRouter } from "./routes/adminFunds";
 import { adminNotificationsRouter } from "./routes/adminNotifications";
 import { adminSummaryRouter } from "./routes/adminSummary";
 import { adminBackupRouter } from "./routes/adminBackup";
+import { adminRaidRepairRouter } from "./routes/adminRaidRepair";
 import { fundsRouter } from "./routes/funds";
 import { faqRouter } from "./routes/faq";
 import { stocksDocRouter } from "./routes/stocksDoc";
@@ -55,6 +56,8 @@ app.use("/api/admin/funds", requireAdmin, adminFundsRouter);
 app.use("/api/admin/notifications", requireAdmin, adminNotificationsRouter);
 app.use("/api/admin/summary", requireAdmin, adminSummaryRouter);
 app.use("/api/admin/backup", requireAdmin, adminBackupRouter);
+// Temporary - see routes/adminRaidRepair.ts's own comment for removal.
+app.use("/api/admin/raid-repair", requireAdmin, adminRaidRepairRouter);
 app.use("/api/funds", fundsRouter);
 app.use("/api/faq", faqRouter);
 app.use("/api/stocks-doc", stocksDocRouter);

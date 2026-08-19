@@ -5,11 +5,12 @@ import {
   getAllDamageTaken,
   getAllLatestTradablePrices,
   clearAnchorPrices,
+  deletePriceSnapshotsForReport,
   getAnchorPrice,
-  getLatestRaidLedgerEntry,
   getOrCreateWarriorId,
   getPriceSnapshotCount,
   getRaidAnchorPrice,
+  getRaidSnapshotForReport,
   getReportStatus,
   getStockConfigRaw,
   insertPriceSnapshot,
@@ -17,6 +18,7 @@ import {
   replaceRaidPriceSnapshots,
   setAnchorPrice,
   setRaidAnchorPrice,
+  warriorHasOtherRaidSnapshot,
   warriorHasRaidSnapshot,
   type ReportPriceImpactWrite,
 } from "./db";
@@ -620,56 +622,17 @@ export function commitReport(reportCode: string): ReportPriceImpactEntry[] {
 // Recomputes computeStock() from scratch and replaces every raid-sourced
 // price_snapshots row with the result, using each report's own start_time
 // (rather than "now", which every rebuilt row would otherwise share) so the
-// chart's chronological order is preserved. Used both for the one-time
-// historical backfill below and whenever raid history changes after the
-// fact (a report gets deleted, or the market is reset).
-//
-// Known, deliberate limitation: unlike commitReport (which
-// compounds a raid's score onto the anchor), this always writes
-// computeStock()'s pure fundamentals value. That's exactly correct after a
-// market reset (resetMarketState wipes trading history alongside this
-// rebuild, so there's no live state to preserve) and for the one-time
-// historical backfill (nothing exists yet to preserve either) - both call
-// this with no `participantKeys`, so every warrior's anchors land flatly on
-// the freshly computed value, same as always.
-//
-// A report delete is different: trading history survives, so `deleteScope`
-// (that report's actual participants and its own code, from
-// src/routes/reports.ts) scopes the anchor reset to just those warriors -
-// everyone else's anchors are left completely alone, rather than every
-// warrior in the game getting reset by an unrelated report going away.
-//
-// For a warrior in scope, undoing the deleted report correctly depends on
-// whether it was their most recent raid:
-//  - If it was (the common case - deleting a report right after uploading
-//    it, or just cleaning up the latest one), we know EXACTLY how much it
-//    moved things: that report's own recorded delta, still sitting on its
-//    now-stale ledger row. Subtracting it from both anchor_price and
-//    raid_anchor_price is an exact inverse, independent of computeStock()'s
-//    from-scratch recompute entirely - which matters because that recompute
-//    always uses whatever stock_config is active right now, not whatever was
-//    active when the warrior's *earlier* raids actually happened, and can
-//    land on a wildly different number for reasons that have nothing to do
-//    with the report being deleted.
-//  - If it wasn't (an older report got deleted), a simple delta-subtraction
-//    isn't correct - later reports' EWMA-based trend scores may have shifted
-//    too. Falls back to the recomputed value, at least preserving whatever
-//    anchor/raid-anchor gap already existed rather than collapsing it.
-//
-// One more case `deleteScope` handles: a warrior whose only-ever raid was
-// the one just deleted drops out of computeStock()'s output entirely
-// (nothing left to compute a series from), so the main loop below never
-// reaches them. Rather than leaving their anchors stale - pointing at raid
-// history that no longer exists - anyone in scope who isn't among the
-// warriors computeStock() still produced gets their anchors cleared back to
-// "never raided".
-export function rebuildRaidPriceSnapshots(deleteScope?: { participantKeys: Set<string>; deletedReportCode: string }): void {
+// chart's chronological order is preserved. Used only for the one-time
+// historical backfill below and a full market reset - both cases where
+// there's no live-compounded history to preserve, so every warrior's
+// anchors landing flatly on the freshly computed value is exactly correct.
+// A report delete does NOT go through here - see undoReportPriceImpact,
+// which surgically undoes just that report's effect instead of replaying
+// everyone's entire history from scratch.
+export function rebuildRaidPriceSnapshots(): void {
   const allStock = computeStock();
   const entries: { warriorId: number; price: number; reportCode: string; createdAt: number }[] = [];
-  const remainingKeys = new Set<string>();
   for (const playerStock of allStock) {
-    const key = playerKey(playerStock.player_name, playerStock.server);
-    remainingKeys.add(key);
     const warriorId = getOrCreateWarriorId(playerStock.player_name, playerStock.server);
     for (const point of playerStock.series) {
       entries.push({ warriorId, price: point.price, reportCode: point.report_code, createdAt: point.start_time });
@@ -678,44 +641,50 @@ export function rebuildRaidPriceSnapshots(deleteScope?: { participantKeys: Set<s
     // series is chronological, so the last point is the latest.
     const lastPoint = playerStock.series[playerStock.series.length - 1];
     if (!lastPoint) continue;
-    if (deleteScope && !deleteScope.participantKeys.has(key)) continue;
-
-    if (!deleteScope) {
-      setAnchorPrice(warriorId, lastPoint.price);
-      setRaidAnchorPrice(warriorId, lastPoint.price);
-      continue;
-    }
-
-    const oldRaidAnchor = getRaidAnchorPrice(warriorId);
-    const oldAnchor = getAnchorPrice(warriorId);
-    // Read before replaceRaidPriceSnapshots() below wipes and rewrites it.
-    const latestLedgerEntry = getLatestRaidLedgerEntry(warriorId);
-
-    if (
-      oldRaidAnchor !== null &&
-      oldAnchor !== null &&
-      latestLedgerEntry?.reportCode === deleteScope.deletedReportCode &&
-      latestLedgerEntry.delta !== null
-    ) {
-      setAnchorPrice(warriorId, Math.max(MIN_PRICE, oldAnchor - latestLedgerEntry.delta));
-      setRaidAnchorPrice(warriorId, Math.max(MIN_PRICE, oldRaidAnchor - latestLedgerEntry.delta));
-    } else {
-      const newRaidAnchor = lastPoint.price;
-      const gap = oldRaidAnchor !== null && oldAnchor !== null ? oldAnchor - oldRaidAnchor : 0;
-      setAnchorPrice(warriorId, Math.max(MIN_PRICE, newRaidAnchor + gap));
-      setRaidAnchorPrice(warriorId, newRaidAnchor);
-    }
+    setAnchorPrice(warriorId, lastPoint.price);
+    setRaidAnchorPrice(warriorId, lastPoint.price);
   }
-
-  if (deleteScope) {
-    for (const key of deleteScope.participantKeys) {
-      if (remainingKeys.has(key)) continue;
-      const [playerName, server] = key.split("::");
-      clearAnchorPrices(getOrCreateWarriorId(playerName, server));
-    }
-  }
-
   replaceRaidPriceSnapshots(entries);
+}
+
+// Surgically undoes exactly one deleted report's price impact - the only
+// thing that's ever allowed to touch already-committed raid history (see
+// src/routes/reports.ts's DELETE handler). Deliberately does NOT call
+// computeStock() or touch any row/warrior outside `participantKeys`: old
+// raid results are immutable forever once committed, except for the report
+// being deleted right now.
+//
+// For each participant, anchor_price/raid_anchor_price are a pure running
+// sum of every committed raid's delta (see commitReport/
+// computeReportPriceImpact: afterAnchor = currentAnchor + perPoint *
+// reportScore). Subtracting the deleted report's own recorded delta from
+// both anchors is therefore an exact inverse regardless of whether it was
+// the participant's most recent raid or an older one - no recompute needed,
+// and no dependency on whatever stock_config is active right now.
+//
+// A participant whose delta is null was recorded as their first-ever raid
+// (nothing to subtract from - their price was set directly, not compounded
+// from a prior anchor). If they have no other raid history left after this
+// one is deleted, their anchors reset to "never raided"; if they do, those
+// later raids' own deltas are already correct absolute figures independent
+// of this row's continued existence, so their anchors are left untouched.
+export function undoReportPriceImpact(reportCode: string, participantKeys: Set<string>): void {
+  for (const key of participantKeys) {
+    const [playerName, server] = key.split("::");
+    const warriorId = getOrCreateWarriorId(playerName, server);
+    const snapshot = getRaidSnapshotForReport(warriorId, reportCode);
+    if (!snapshot) continue;
+
+    if (snapshot.delta !== null) {
+      const oldAnchor = getAnchorPrice(warriorId);
+      const oldRaidAnchor = getRaidAnchorPrice(warriorId);
+      if (oldAnchor !== null) setAnchorPrice(warriorId, Math.max(MIN_PRICE, oldAnchor - snapshot.delta));
+      if (oldRaidAnchor !== null) setRaidAnchorPrice(warriorId, Math.max(MIN_PRICE, oldRaidAnchor - snapshot.delta));
+    } else if (!warriorHasOtherRaidSnapshot(warriorId, reportCode)) {
+      clearAnchorPrices(warriorId);
+    }
+  }
+  deletePriceSnapshotsForReport(reportCode);
 }
 
 // Backfills raid-derived price history for exactly one warrior - used when

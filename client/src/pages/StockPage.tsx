@@ -5,7 +5,8 @@ import { LineChart } from '../components/LineChart';
 import { NetWorthDeltaBadge } from '../components/NetWorthDeltaBadge';
 import { Sparkline } from '../components/Sparkline';
 import { TradeModal } from '../components/TradeModal';
-import { ArrowsRightLeftIcon } from '../components/icons/ArrowsRightLeftIcon';
+import { ArrowTrendingUpIcon } from '../components/icons/ArrowTrendingUpIcon';
+import { IconButton } from '../components/IconButton';
 import { useAuth } from '../authContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { NEGATIVE_COLOR, POSITIVE_COLOR, lerpColor, paletteColor } from '../chartColors';
@@ -201,7 +202,7 @@ const COLUMNS: { key: SortKey | null; label: string; mobileHide?: boolean }[] = 
   { key: null, label: 'Δ', mobileHide: true },
   { key: 'player', label: 'Player' },
   { key: 'price', label: 'Price' },
-  { key: null, label: 'Trend' },
+  { key: null, label: 'Trend (24 hours)' },
   { key: 'change', label: 'Change (last raid)', mobileHide: true },
   { key: 'avgGain', label: 'Gain/raid', mobileHide: true },
   { key: 'raids', label: 'Raids', mobileHide: true },
@@ -630,8 +631,8 @@ export function StockPage() {
                           sparklinePrices.get(rowKey(row)) ??
                           row.series.map((s) => s.price)
                         }
-                        width={isMobile ? 46 : 90}
-                        height={isMobile ? 20 : 28}
+                        width={isMobile ? 46 : 140}
+                        height={isMobile ? 20 : 34}
                       />
                     </td>
                     <td className="mobile-hide">
@@ -665,9 +666,10 @@ export function StockPage() {
                     </td>
                     <td className="mobile-hide">{row.raidCount}</td>
                     <td className="mobile-hide">
-                      <button
-                        type="button"
-                        className="icon-btn"
+                      <IconButton
+                        className="btn-affirm"
+                        icon={<ArrowTrendingUpIcon className="icon-btn-icon" />}
+                        label="Trade"
                         onClick={(e) => {
                           e.stopPropagation();
                           setTradeModalTarget({
@@ -675,10 +677,7 @@ export function StockPage() {
                             server: row.server,
                           });
                         }}
-                      >
-                        <ArrowsRightLeftIcon className="icon-btn-icon" />
-                        Trade
-                      </button>
+                      />
                     </td>
                   </tr>
                 );

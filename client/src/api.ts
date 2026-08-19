@@ -371,6 +371,7 @@ export interface HoldingView {
   costBasisTotal: number;
   latestPrice: number | null;
   lastRaidPrice: number | null;
+  lastTickDelta: number | null;
   marketValue: number | null;
 }
 

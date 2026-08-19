@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ArrowsRightLeftIcon } from './icons/ArrowsRightLeftIcon';
+import { ArrowTrendingUpIcon } from './icons/ArrowTrendingUpIcon';
+import { IconButton } from './IconButton';
 import { fmtCoin, priceDelta } from '../format';
 import { useIsMobile } from '../hooks/useIsMobile';
 
@@ -10,6 +11,7 @@ export interface HoldingsTableRow {
   costBasisTotal: number;
   latestPrice: number | null;
   lastRaidPrice: number | null;
+  lastTickDelta?: number | null;
   marketValue: number | null;
 }
 
@@ -137,9 +139,12 @@ export function HoldingsTable({
           {sortedHoldings.map((h) => {
             const pnl = pnlOf(h);
             const percent = percentOf(h, holdingsValue);
+            // Matches the Stock page's price-cell delta: how much just the
+            // most recent price_snapshots event moved the price, not
+            // distance from the raid anchor.
             const change =
-              showPriceDelta && h.latestPrice !== null && h.lastRaidPrice !== null
-                ? priceDelta(h.lastRaidPrice, h.latestPrice)
+              showPriceDelta && h.latestPrice !== null && h.lastTickDelta != null
+                ? priceDelta(h.latestPrice - h.lastTickDelta, h.latestPrice)
                 : null;
             return (
               <tr
@@ -186,14 +191,12 @@ export function HoldingsTable({
                 </td>
                 {onTrade && (
                   <td className="mobile-hide">
-                    <button
-                      type="button"
-                      className="icon-btn"
+                    <IconButton
+                      className="btn-affirm"
+                      icon={<ArrowTrendingUpIcon className="icon-btn-icon" />}
+                      label="Trade"
                       onClick={() => onTrade({ playerName: h.playerName, server: h.server })}
-                    >
-                      <ArrowsRightLeftIcon className="icon-btn-icon" />
-                      Trade
-                    </button>
+                    />
                   </td>
                 )}
               </tr>

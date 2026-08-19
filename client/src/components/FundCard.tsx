@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Sparkline } from './Sparkline';
 import { RiskBar } from './RiskBar';
 import { ArrowTrendingUpIcon } from './icons/ArrowTrendingUpIcon';
+import { IconButton } from './IconButton';
 import { ChevronDownOutlineIcon } from './icons/ChevronDownOutlineIcon';
 import { ChevronUpOutlineIcon } from './icons/ChevronUpOutlineIcon';
 import {
@@ -98,16 +99,14 @@ export function FundCard({ fund, onBuy }: FundCardProps) {
 
             <div className="fund-card-bottom">
                 <p className="fund-card-description">{fund.description}</p>
-                <button
-                    type="button"
-                    className="btn-affirm fund-card-buy"
+                <IconButton
+                    className="btn-affirm"
+                    icon={<ArrowTrendingUpIcon className="icon-btn-icon" />}
+                    label="Buy Now"
                     onClick={() => onBuy?.(fund)}
                     disabled={!onBuy}
                     title={onBuy ? undefined : 'Fund trading is coming soon'}
-                >
-                    <ArrowTrendingUpIcon className="fund-card-buy-icon" /> Buy
-                    Now
-                </button>
+                />
             </div>
 
             <button

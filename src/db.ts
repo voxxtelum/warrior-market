@@ -1440,6 +1440,19 @@ export function getLastRaidPrice(warriorId: number): number | null {
   return getRaidAnchorPrice(warriorId);
 }
 
+// Pairs with getLatestPrice() to build the same "last tick" figure the
+// Stock page's price cell shows next to the live price - how much just the
+// most recent price_snapshots event (drift, swing, trade, or raid) moved
+// the price, independent of the raid anchor.
+export function getLastTickDelta(warriorId: number): number | null {
+  const row = db
+    .prepare(
+      `SELECT delta FROM price_snapshots WHERE warrior_id = ? AND source != 'raid_anchor' ORDER BY created_at DESC, id DESC LIMIT 1`,
+    )
+    .get(warriorId) as unknown as { delta: number | null } | undefined;
+  return row ? row.delta : null;
+}
+
 // Looks up one specific report's raid-ledger row for one warrior - used by
 // stock.ts's undoReportPriceImpact to find exactly how much a report being
 // deleted moved this warrior's anchors, regardless of whether it was their
@@ -1802,6 +1815,7 @@ export function listHoldingsWithContext(userId: string): (HoldingRow & {
   server: string;
   latest_price: number | null;
   last_raid_price: number | null;
+  last_tick_delta: number | null;
 })[] {
   const rows = db
     .prepare(
@@ -1818,6 +1832,7 @@ export function listHoldingsWithContext(userId: string): (HoldingRow & {
     ...r,
     latest_price: getLatestPrice(r.warrior_id),
     last_raid_price: getLastRaidPrice(r.warrior_id),
+    last_tick_delta: getLastTickDelta(r.warrior_id),
   }));
 }
 

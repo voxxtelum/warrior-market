@@ -54,6 +54,7 @@ tradingRouter.get("/wallet", requireAuth, (req, res) => {
     costBasisTotal: h.cost_basis_total,
     latestPrice: h.latest_price,
     lastRaidPrice: h.last_raid_price,
+    lastTickDelta: h.last_tick_delta,
     marketValue: h.latest_price !== null ? h.shares * h.latest_price : null,
   }));
   const holdingsValue = holdings.reduce((sum, h) => sum + (h.marketValue ?? 0), 0);

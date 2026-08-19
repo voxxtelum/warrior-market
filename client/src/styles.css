@@ -346,6 +346,7 @@ nav.nav-dropdown a.active {
 .player-name-cell {
   display: inline-flex;
   align-items: center;
+  font-weight: 500;
 }
 
 .player-name-avatar {

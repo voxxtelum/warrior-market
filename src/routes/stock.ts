@@ -5,8 +5,10 @@ import {
   getAllLatestTradablePrices,
   getAllPriceSnapshots,
   getAllRaidLedgerSnapshots,
+  getChartColorPinsRaw,
   getLinkedAvatarsByIdentity,
   getRaidAnchorPrice,
+  setChartColorPinsRaw,
   setStockConfigRaw,
 } from "../db";
 import { requireAdmin } from "../middleware/auth";
@@ -183,5 +185,31 @@ stockRouter.put("/config", requireAdmin, (req, res) => {
     return;
   }
   setStockConfigRaw(JSON.stringify(req.body));
+  res.status(204).end();
+});
+
+const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+
+// Pinned chart line colors, keyed by "player_name::server" - public since
+// the Stock page's chart (unauthenticated-visible) needs them to color its
+// lines, same as /history above.
+stockRouter.get("/chart-colors", (_req, res) => {
+  const raw = getChartColorPinsRaw();
+  res.json(raw ? JSON.parse(raw) : {});
+});
+
+stockRouter.put("/chart-colors", requireAdmin, (req, res) => {
+  const body = req.body;
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    res.status(400).json({ error: "Expected an object mapping \"player::server\" to a hex color" });
+    return;
+  }
+  for (const [key, value] of Object.entries(body)) {
+    if (typeof value !== "string" || !HEX_COLOR_RE.test(value)) {
+      res.status(400).json({ error: `Invalid color for "${key}" - expected a 6-digit hex code like #4e79a7` });
+      return;
+    }
+  }
+  setChartColorPinsRaw(JSON.stringify(body));
   res.status(204).end();
 });

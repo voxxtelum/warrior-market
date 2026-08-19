@@ -313,6 +313,27 @@ export async function getPriceDistribution(): Promise<number[]> {
   return body.prices;
 }
 
+// Pinned chart line colors, keyed by "player_name::server" - see
+// chartColors.ts's paletteColor() for the default (unpinned) behavior this
+// overrides.
+export async function getChartColorPins(): Promise<Record<string, string>> {
+  const res = await fetch("/api/stock/chart-colors");
+  if (!res.ok) throw new Error("Failed to load chart color pins");
+  return res.json();
+}
+
+export async function saveChartColorPins(pins: Record<string, string>): Promise<void> {
+  const res = await fetch("/api/stock/chart-colors", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(pins),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to save chart color pins");
+  }
+}
+
 export interface PlayerRow {
   player_name: string;
   server: string;

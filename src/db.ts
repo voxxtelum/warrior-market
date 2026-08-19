@@ -122,6 +122,18 @@ db.exec(`
     data TEXT NOT NULL
   );
 
+  -- Single-row table (id=1), same upsert style as stock_config - a JSON map
+  -- of "player_name::server" -> hex color, letting an admin pin a specific
+  -- character to always draw with the same line color on the Stock page
+  -- chart instead of whatever paletteColor() assigns by leaderboard rank.
+  -- Absence of a row (or an unset key) just means "no pin", so unlike
+  -- stock_config this is never seeded - getChartColorPinsRaw() returning
+  -- null is a normal, valid state.
+  CREATE TABLE IF NOT EXISTS chart_color_pins (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    data TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS users (
     discord_id TEXT PRIMARY KEY,
     username TEXT NOT NULL,
@@ -2958,6 +2970,22 @@ export function setStockConfigRaw(json: string) {
   db.prepare(
     `
     INSERT INTO stock_config (id, data) VALUES (1, ?)
+    ON CONFLICT(id) DO UPDATE SET data = excluded.data
+  `,
+  ).run(json);
+}
+
+export function getChartColorPinsRaw(): string | null {
+  const row = db
+    .prepare(`SELECT data FROM chart_color_pins WHERE id = 1`)
+    .get() as unknown as { data: string } | undefined;
+  return row ? row.data : null;
+}
+
+export function setChartColorPinsRaw(json: string) {
+  db.prepare(
+    `
+    INSERT INTO chart_color_pins (id, data) VALUES (1, ?)
     ON CONFLICT(id) DO UPDATE SET data = excluded.data
   `,
   ).run(json);

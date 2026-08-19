@@ -1383,6 +1383,28 @@ tbody tr:hover {
   font-size: 0.95rem;
 }
 
+.chart-colors-scroll {
+  max-height: 480px;
+  overflow-y: auto;
+}
+.chart-color-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.chart-color-swatch {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.chart-color-input {
+  flex: none;
+  width: 110px;
+  font-variant-numeric: tabular-nums;
+}
+
 #ability-config-table td {
   text-align: left;
 }

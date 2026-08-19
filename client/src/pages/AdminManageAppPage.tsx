@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { AdminLayout } from '../components/AdminLayout';
 import { StockConfigTab } from '../components/admin/StockConfigTab';
+import { ChartColorsTab } from '../components/admin/ChartColorsTab';
 import { DocsTab } from '../components/admin/DocsTab';
 import { DangerZoneTab } from '../components/admin/DangerZoneTab';
 
-type View = 'stock-config' | 'docs' | 'danger';
+type View = 'stock-config' | 'chart-colors' | 'docs' | 'danger';
 
 const TABS: { key: View; label: string }[] = [
   { key: 'stock-config', label: 'Stock Config' },
+  { key: 'chart-colors', label: 'Chart Colors' },
   { key: 'docs', label: 'Docs' },
   { key: 'danger', label: 'Danger Zone' },
 ];
@@ -39,6 +41,7 @@ export function AdminManageAppPage() {
       </div>
 
       {view === 'stock-config' && <StockConfigTab onNavigateToDocs={navigateToDocs} />}
+      {view === 'chart-colors' && <ChartColorsTab />}
       {view === 'docs' && <DocsTab scrollToAnchor={docsAnchor} />}
       {view === 'danger' && <DangerZoneTab />}
     </AdminLayout>

@@ -12,6 +12,7 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import { NEGATIVE_COLOR, POSITIVE_COLOR, lerpColor, paletteColor } from '../chartColors';
 import { fmtCoin, fmtDate, fmtDateTime, priceDelta } from '../format';
 import {
+  getChartColorPins,
   getMarketSummary,
   getStock,
   getStockHistory,
@@ -252,6 +253,14 @@ export function StockPage() {
     });
   }, []);
 
+  // Admin-pinned "always this color" overrides, keyed by "player::server" -
+  // see chartDatasets below, which checks this before falling back to
+  // paletteColor()'s rank-based assignment.
+  const [chartColorPins, setChartColorPins] = useState<Record<string, string>>({});
+  useEffect(() => {
+    getChartColorPins().then(setChartColorPins).catch(() => {});
+  }, []);
+
   // Public, market-wide - fetched regardless of login state (unlike the
   // wallet-summary card below it, which needs a logged-in user).
   useEffect(() => {
@@ -419,11 +428,12 @@ export function StockPage() {
         if (series.length === 0) return [];
         // Colored by the player's position in the full (unfiltered) board so
         // a given player keeps the same line color whether or not they're
-        // the only one selected.
+        // the only one selected - unless an admin has pinned this player to
+        // a fixed color (chart-colors admin tab), which always wins.
         const colorIndex = leaderboard.findIndex(
           (r) => rowKey(r) === rowKey(row),
         );
-        const color = paletteColor(colorIndex);
+        const color = chartColorPins[rowKey(row)] ?? paletteColor(colorIndex);
         return [
           {
             label: row.player_name,
@@ -441,7 +451,7 @@ export function StockPage() {
           },
         ];
       });
-    }, [priceHistory, leaderboard, selectedPlayer, selectedRange]);
+    }, [priceHistory, leaderboard, selectedPlayer, selectedRange, chartColorPins]);
 
   // Every row's sparkline shows the same number of points (rather than one
   // point per raid, which leaves veterans with a long line and newcomers

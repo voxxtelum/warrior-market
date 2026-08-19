@@ -158,6 +158,19 @@ h2 {
   color: var(--accent);
 }
 
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+.nav-link-icon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
 .sub-nav {
   display: flex;
   gap: 1.5rem;
@@ -267,7 +280,12 @@ nav.nav-dropdown a {
   padding: 0.5rem 0.7rem;
   border-radius: 3px;
   white-space: nowrap;
+  justify-content: flex-end;
   transition: background-color 0.15s ease;
+}
+nav.nav-dropdown .nav-identity {
+  justify-content: flex-end;
+  padding: 0.5rem 0.7rem;
 }
 nav.nav-dropdown a:hover {
   background: rgba(255, 255, 255, 0.06);
@@ -2085,14 +2103,17 @@ button.modal-close:hover {
 .fund-card {
   padding: 0.6rem 1.25rem;
 }
-.fund-card-top {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  flex-wrap: wrap;
+.fund-card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  grid-template-areas:
+    'identity sparkline values'
+    'description sparkline buy'
+    'details details details';
+  gap: 0.85rem 1.5rem;
 }
 .fund-card-identity {
-  flex-shrink: 0;
+  grid-area: identity;
 }
 .fund-card-name {
   margin: 0;
@@ -2118,20 +2139,24 @@ button.modal-close:hover {
   white-space: nowrap;
 }
 .fund-card-sparkline {
-  flex: 1 1 auto;
+  grid-area: sparkline;
+  position: relative;
   min-width: 100px;
-  display: flex;
-  justify-content: center;
+  min-height: 60px;
+}
+.fund-card-sparkline .sparkline-grow {
+  position: absolute;
+  inset: 0;
 }
 .fund-card-sparkline svg {
   width: 100%;
-  max-width: 220px;
-  height: auto;
+  height: 100%;
 }
 .fund-card-values {
+  grid-area: values;
   display: flex;
   gap: 1.5rem;
-  flex-shrink: 0;
+  justify-content: flex-end;
 }
 .fund-card-value-block {
   display: flex;
@@ -2143,7 +2168,7 @@ button.modal-close:hover {
   font-variant-numeric: tabular-nums;
 }
 .fund-card-delta-value {
-  font-size: 1.1rem;
+  font-size: 1.3rem;
   font-variant-numeric: tabular-nums;
 }
 .fund-card-value-label {
@@ -2152,25 +2177,24 @@ button.modal-close:hover {
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
-.fund-card-bottom {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-  margin-top: 1rem;
-}
 .fund-card-description {
+  grid-area: description;
   margin: 0;
   color: var(--muted);
-  flex: 1 1 auto;
+  align-self: center;
+}
+.fund-card-buy {
+  grid-area: buy;
+  justify-self: end;
+  align-self: center;
 }
 .fund-card-details-toggle {
+  grid-area: details;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.25rem;
   width: 100%;
-  margin-top: 0.75rem;
   background: none;
   border: none;
   color: var(--muted);
@@ -2187,6 +2211,7 @@ button.modal-close:hover {
 .fund-card-details {
   display: grid;
   grid-template-rows: 0fr;
+  margin-top: 0.5rem;
   transition: grid-template-rows 0.25s ease;
 }
 .fund-card-details.expanded {
@@ -2194,6 +2219,32 @@ button.modal-close:hover {
 }
 .fund-card-details > div {
   overflow: hidden;
+}
+@media (max-width: 1024px) {
+  .fund-card-grid {
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      'identity sparkline'
+      'description values'
+      'buy buy'
+      'details details';
+  }
+  .fund-card-values {
+    flex-wrap: wrap;
+    gap: 1rem 1.5rem;
+  }
+  .fund-card-nav-value {
+    font-size: 1.05rem;
+  }
+  .fund-card-delta-value {
+    font-size: 0.9rem;
+  }
+  .fund-card-value-alltime {
+    display: none;
+  }
+  .fund-card-buy {
+    justify-self: end;
+  }
 }
 .fund-constituents-table {
   width: 100%;

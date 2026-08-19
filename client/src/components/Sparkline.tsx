@@ -9,6 +9,7 @@ interface SparklineProps {
   width?: number;
   height?: number;
   animate?: boolean;
+  strokeWidth?: number;
 }
 
 // A tiny inline-SVG area chart of a player's full price history. The
@@ -24,7 +25,7 @@ interface SparklineProps {
 // was considered instead, but that draws *along the path* (left-to-right
 // here), which doesn't match "grow from the right" the way a reveal wipe
 // does.
-export function Sparkline({ prices, width = 90, height = 28, animate = false }: SparklineProps) {
+export function Sparkline({ prices, width = 90, height = 28, animate = false, strokeWidth = 1.5 }: SparklineProps) {
   const rawId = useId();
   const id = rawId.replace(/:/g, "");
 
@@ -71,7 +72,7 @@ export function Sparkline({ prices, width = 90, height = 28, animate = false }: 
         d={linePath}
         fill="none"
         stroke={SPARK_POS}
-        strokeWidth={1.5}
+        strokeWidth={strokeWidth}
         strokeLinejoin="round"
         strokeLinecap="round"
         clipPath={`url(#${clipAboveId})`}
@@ -80,7 +81,7 @@ export function Sparkline({ prices, width = 90, height = 28, animate = false }: 
         d={linePath}
         fill="none"
         stroke={SPARK_NEG}
-        strokeWidth={1.5}
+        strokeWidth={strokeWidth}
         strokeLinejoin="round"
         strokeLinecap="round"
         clipPath={`url(#${clipBelowId})`}

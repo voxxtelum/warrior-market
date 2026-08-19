@@ -46,7 +46,7 @@ export function FundCard({ fund, onBuy }: FundCardProps) {
 
     return (
         <div className="card fund-card">
-            <div className="fund-card-top">
+            <div className="fund-card-grid">
                 <div className="fund-card-identity">
                     <h3 className="fund-card-name">{fund.name}</h3>
                     <div className="fund-card-meta">
@@ -66,6 +66,7 @@ export function FundCard({ fund, onBuy }: FundCardProps) {
                         width={140}
                         height={40}
                         animate
+                        strokeWidth={0.5}
                     />
                 </div>
 
@@ -75,7 +76,7 @@ export function FundCard({ fund, onBuy }: FundCardProps) {
                             {fmtCoin(fund.nav)}
                         </span>
                         <span className="fund-card-value-label">
-                            Market Value
+                            Value
                         </span>
                     </div>
                     <div className="fund-card-value-block">
@@ -83,10 +84,10 @@ export function FundCard({ fund, onBuy }: FundCardProps) {
                             {last7.text.split(' ')[0]}
                         </span>
                         <span className="fund-card-value-label">
-                            Last 7 Days
+                            7 Days
                         </span>
                     </div>
-                    <div className="fund-card-value-block">
+                    <div className="fund-card-value-block fund-card-value-alltime">
                         <span
                             className={`fund-card-delta-value ${allTime.cls}`}
                         >
@@ -95,32 +96,31 @@ export function FundCard({ fund, onBuy }: FundCardProps) {
                         <span className="fund-card-value-label">All Time</span>
                     </div>
                 </div>
-            </div>
 
-            <div className="fund-card-bottom">
                 <p className="fund-card-description">{fund.description}</p>
+
                 <IconButton
-                    className="btn-affirm"
+                    className="btn-affirm fund-card-buy"
                     icon={<ArrowTrendingUpIcon className="icon-btn-icon" />}
                     label="Buy Now"
                     onClick={() => onBuy?.(fund)}
                     disabled={!onBuy}
                     title={onBuy ? undefined : 'Fund trading is coming soon'}
                 />
-            </div>
 
-            <button
-                type="button"
-                className="fund-card-details-toggle"
-                onClick={toggleExpanded}
-            >
-                Details
-                {expanded ? (
-                    <ChevronUpOutlineIcon className="fund-card-chevron" />
-                ) : (
-                    <ChevronDownOutlineIcon className="fund-card-chevron" />
-                )}
-            </button>
+                <button
+                    type="button"
+                    className="fund-card-details-toggle"
+                    onClick={toggleExpanded}
+                >
+                    Details
+                    {expanded ? (
+                        <ChevronUpOutlineIcon className="fund-card-chevron" />
+                    ) : (
+                        <ChevronDownOutlineIcon className="fund-card-chevron" />
+                    )}
+                </button>
+            </div>
 
             <div
                 className={

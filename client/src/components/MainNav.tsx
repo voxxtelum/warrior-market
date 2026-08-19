@@ -10,7 +10,7 @@ import { logout } from '../api';
 import { ConfirmModal } from './ConfirmModal';
 
 function navLinkClass({ isActive }: { isActive: boolean }): string {
-  return `icon-btn${isActive ? ' active' : ''}`;
+  return `nav-link${isActive ? ' active' : ''}`;
 }
 
 function NavItems({ onNavigate }: { onNavigate: () => void }) {
@@ -29,20 +29,20 @@ function NavItems({ onNavigate }: { onNavigate: () => void }) {
   return (
     <>
       <NavLink to="/market" className={navLinkClass} onClick={onNavigate}>
-        <ChartBarIcon className="icon-btn-icon" />
+        <ChartBarIcon className="nav-link-icon" />
         Market
       </NavLink>
       <NavLink to="/warriors" className={navLinkClass} onClick={onNavigate}>
-        <FireIcon className="icon-btn-icon icon-fire" />
+        <FireIcon className="nav-link-icon icon-fire" />
         Warriors
       </NavLink>
       <NavLink to="/faq" className={navLinkClass} onClick={onNavigate}>
-        <HelpCircleIcon className="icon-btn-icon" />
+        <HelpCircleIcon className="nav-link-icon" />
         FAQ
       </NavLink>
       {user?.isAdmin && (
         <NavLink to="/admin" className={navLinkClass} onClick={onNavigate}>
-          <Cog6ToothIcon className="icon-btn-icon" />
+          <Cog6ToothIcon className="nav-link-icon" />
           Admin
         </NavLink>
       )}
@@ -61,7 +61,7 @@ function NavItems({ onNavigate }: { onNavigate: () => void }) {
             <span>{displayName}</span>
           </button>
         ) : (
-          <a href="/api/auth/discord" className="icon-btn" onClick={onNavigate}>
+          <a href="/api/auth/discord" className="nav-link" onClick={onNavigate}>
             Log in with Discord
           </a>
         ))}

@@ -763,42 +763,6 @@ export async function getAdminPriceHistory(params: {
   return res.json();
 }
 
-// Temporary - see src/routes/adminRaidRepair.ts's own comment for removal.
-export interface RaidLedgerCorrectionRow {
-  id: number;
-  reportCode: string | null;
-  oldPrice: number;
-  oldDelta: number | null;
-  newPrice: number;
-  newDelta: number;
-}
-
-export interface RaidLedgerCorrection {
-  warriorId: number;
-  playerName: string;
-  server: string;
-  beforePrice: number;
-  raidRows: RaidLedgerCorrectionRow[];
-  afterRow: { id: number; price: number; oldDelta: number | null; newDelta: number };
-}
-
-export async function getRaidRepairPreview(): Promise<RaidLedgerCorrection[]> {
-  const res = await fetch("/api/admin/raid-repair/preview");
-  if (!res.ok) throw new Error("Failed to load raid repair preview");
-  const body = await res.json();
-  return body.corrections;
-}
-
-export async function applyRaidRepair(): Promise<number> {
-  const res = await fetch("/api/admin/raid-repair/apply", { method: "POST" });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || "Failed to apply raid repair");
-  }
-  const body = await res.json();
-  return body.applied;
-}
-
 export async function resetMarket(confirmationPhrase: string): Promise<void> {
   const res = await fetch("/api/admin/market/reset", {
     method: "POST",

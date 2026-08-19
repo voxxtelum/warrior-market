@@ -1642,46 +1642,6 @@ export function getAllRaidLedgerSnapshots(): (PriceSnapshotRow & {
   })[];
 }
 
-// Every warrior's complete price_snapshots timeline, every source included
-// and unfiltered by hidden_players (unlike the queries above) - used only
-// by the one-time raid ledger repair tool (src/raidLedgerRepair.ts), which
-// needs to see each warrior's full chronological history, hidden or not, to
-// find the stale rebuild-artifact rows described there.
-export function getAllPriceSnapshotsForRepair(): (PriceSnapshotRow & {
-  player_name: string;
-  server: string;
-})[] {
-  return db
-    .prepare(
-      `SELECT ps.*, w.player_name, w.server
-       FROM price_snapshots ps
-       JOIN warriors w ON w.id = ps.warrior_id
-       ORDER BY ps.warrior_id ASC, ps.created_at ASC, ps.id ASC`,
-    )
-    .all() as unknown as (PriceSnapshotRow & {
-    player_name: string;
-    server: string;
-  })[];
-}
-
-// Batch-updates price/delta on specific price_snapshots rows by id - the
-// write half of the one-time raid ledger repair tool. Deliberately narrow
-// (only price/delta, only by explicit row id) so it can't be reused to
-// touch anything the repair tool didn't explicitly compute.
-export function updatePriceSnapshotPriceDelta(
-  updates: { id: number; price: number; delta: number }[],
-): void {
-  db.exec('BEGIN');
-  try {
-    const stmt = db.prepare(`UPDATE price_snapshots SET price = ?, delta = ? WHERE id = ?`);
-    for (const u of updates) stmt.run(u.price, u.delta, u.id);
-    db.exec('COMMIT');
-  } catch (err) {
-    db.exec('ROLLBACK');
-    throw err;
-  }
-}
-
 export interface PriceHistoryFilters {
   sources: ('raid' | 'raid_anchor' | 'drift' | 'swing' | 'trade')[];
   warriorId?: number;

@@ -14,7 +14,6 @@ import { AdminNotificationsPage } from "./pages/AdminNotificationsPage";
 import { AdminAuditLogPage } from "./pages/AdminAuditLogPage";
 import { AdminSummaryPage } from "./pages/AdminSummaryPage";
 import { AdminBackupPage } from "./pages/AdminBackupPage";
-import { AdminRaidRepairPage } from "./pages/AdminRaidRepairPage";
 import { WalletPage } from "./pages/WalletPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
 import { TradeFeedPage } from "./pages/TradeFeedPage";
@@ -52,7 +51,6 @@ function App() {
       <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
       <Route path="/admin/summary" element={<AdminSummaryPage />} />
       <Route path="/admin/backup" element={<AdminBackupPage />} />
-      <Route path="/admin/raid-repair" element={<AdminRaidRepairPage />} />
     </Routes>
   );
 }

@@ -2033,12 +2033,16 @@ button.modal-close:hover {
   gap: 0.35rem;
   padding: 0.4rem;
   border-bottom: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
 }
 .rich-text-toolbar button,
 .rich-text-toolbar select {
   padding: 0.25rem 0.5rem;
   font-size: 0.85rem;
+  background-color: transparent;
+  color: var(--fg);
+}
+.rich-text-toolbar select {
+  flex: min-content;
 }
 .rich-text-toolbar button.is-active {
   background: rgba(var(--accent-rgb), 0.3);

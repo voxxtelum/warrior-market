@@ -10,9 +10,9 @@ import { FontWeight } from "./fontWeightExtension";
 import { uploadNotificationImage } from "../../api";
 
 const FONT_SIZES = [
-  { label: "Small", value: "0.85rem" },
-  { label: "Large", value: "1.25rem" },
-  { label: "X-Large", value: "1.75rem" },
+  { label: "0.85rem", value: "0.85rem" },
+  { label: "1.25rem", value: "1.25rem" },
+  { label: "1.75rem", value: "1.75rem" },
 ];
 
 const FONT_WEIGHTS = [
@@ -60,7 +60,13 @@ export function RichTextEditor({ content, onChange }: RichTextEditorProps) {
       FontFamily,
       Color,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
-      Image,
+      // Inline (rather than the default block) so an image sits inside its
+      // paragraph and inherits that paragraph's text-align - reuses the
+      // existing align left/center/right buttons instead of needing
+      // dedicated per-image controls, and keeps the server's sanitize-html
+      // allowlist (which only permits `text-align` style, not `margin`
+      // /`display`) unchanged.
+      Image.configure({ inline: true }),
     ],
     content,
     onUpdate: ({ editor }) => onChange(editor.getHTML()),

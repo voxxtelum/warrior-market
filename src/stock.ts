@@ -599,12 +599,26 @@ export function computeReportPriceImpact(reportCode: string): ReportPriceImpactE
 // atomically and flips status to 'committed'. Throws if the report doesn't
 // exist, isn't pending, or was concurrently committed/discarded (see
 // applyReportPriceImpact's guarded UPDATE).
-export function commitReport(reportCode: string): ReportPriceImpactEntry[] {
+export function commitReport(
+  reportCode: string,
+  adjustments?: Map<number, number>,
+): ReportPriceImpactEntry[] {
   const status = getReportStatus(reportCode);
   if (status === null) throw new Error(`Report "${reportCode}" not found`);
   if (status !== "pending") throw new Error(`Report "${reportCode}" is not pending review (status: ${status})`);
 
-  const entries = computeReportPriceImpact(reportCode);
+  const computed = computeReportPriceImpact(reportCode);
+  // Admin-supplied per-warrior nudges from the preview card's +/-1 buttons,
+  // applied on top of the computed anchor right before it goes live - the
+  // scoring math above is untouched, this is purely a final manual tweak.
+  const entries = !adjustments || adjustments.size === 0
+    ? computed
+    : computed.map((e) => {
+        const adjustment = adjustments.get(e.warriorId);
+        if (!adjustment) return e;
+        const afterAnchor = Math.max(MIN_PRICE, e.afterAnchor + adjustment);
+        return { ...e, afterAnchor, delta: e.isFirstPrice ? null : afterAnchor - e.currentAnchor! };
+      });
   const writes: ReportPriceImpactWrite[] = entries.map((e) => ({
     warriorId: e.warriorId,
     price: e.afterAnchor,

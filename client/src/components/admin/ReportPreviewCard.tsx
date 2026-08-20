@@ -4,6 +4,12 @@ import { fmtCoin, priceDelta } from "../../format";
 import { ConfirmModal } from "../ConfirmModal";
 import { RefreshIcon } from "../icons/RefreshIcon";
 
+// Mirrors src/stock.ts's MIN_PRICE - the floor the server clamps a
+// manually-adjusted price to on commit. Kept in sync here purely so the
+// -1 button disables at the same floor instead of committing a nudge the
+// server would silently clamp away.
+const MIN_PRICE = 1;
+
 // Shown below the "Add a report" card whenever a report is held for review
 // (status: "pending") - nothing here has touched the live market yet. The
 // preview is fetched fresh on mount and whenever "Refresh" is clicked, so
@@ -23,6 +29,11 @@ export function ReportPreviewCard({
   const [error, setError] = useState<string | null>(null);
   const [committing, setCommitting] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  // warriorId -> manual nudge from the +/-1 buttons below, applied on top of
+  // the computed "after anchor" at commit time. Survives Refresh (which only
+  // recomputes the base preview off current stock_config) but resets below
+  // whenever a new report becomes pending.
+  const [adjustments, setAdjustments] = useState<Map<number, number>>(new Map());
 
   function load() {
     setLoading(true);
@@ -33,7 +44,22 @@ export function ReportPreviewCard({
       .finally(() => setLoading(false));
   }
 
-  useEffect(load, [pendingReport.code]);
+  useEffect(() => {
+    setAdjustments(new Map());
+    load();
+  }, [pendingReport.code]);
+
+  function bump(warriorId: number, rawAfterAnchor: number, step: number) {
+    setAdjustments((prev) => {
+      const current = prev.get(warriorId) ?? 0;
+      const next = current + step;
+      if (rawAfterAnchor + next < MIN_PRICE) return prev;
+      const copy = new Map(prev);
+      if (next === 0) copy.delete(warriorId);
+      else copy.set(warriorId, next);
+      return copy;
+    });
+  }
 
   async function handleDiscard() {
     await deleteReport(pendingReport.code);
@@ -44,7 +70,8 @@ export function ReportPreviewCard({
     setCommitting(true);
     setError(null);
     try {
-      await commitReport(pendingReport.code);
+      const adjustmentList = Array.from(adjustments, ([warriorId, adjustment]) => ({ warriorId, adjustment }));
+      await commitReport(pendingReport.code, adjustmentList);
       onCommitted();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -81,7 +108,7 @@ export function ReportPreviewCard({
             <thead>
               <tr>
                 <th>Character</th>
-                <th>Current anchor</th>
+                <th style={{ textAlign: "right" }}>Current anchor</th>
                 <th>Report score</th>
                 <th>After anchor</th>
                 <th>Δ</th>
@@ -90,16 +117,45 @@ export function ReportPreviewCard({
             <tbody>
               {preview.participants.map((p) => {
                 const scoreCls = p.reportScore > 0 ? "delta-pos" : p.reportScore < 0 ? "delta-neg" : "delta-neutral";
-                const delta = p.currentAnchor !== null ? priceDelta(p.currentAnchor, p.afterAnchor) : null;
+                const adjustment = adjustments.get(p.warriorId) ?? 0;
+                const adjustedAfterAnchor = p.afterAnchor + adjustment;
+                const delta = p.currentAnchor !== null ? priceDelta(p.currentAnchor, adjustedAfterAnchor) : null;
                 return (
                   <tr key={`${p.playerName}::${p.server}`}>
                     <td>{p.playerName}</td>
-                    <td>{p.currentAnchor === null ? "New" : fmtCoin(p.currentAnchor)}</td>
+                    <td style={{ textAlign: "right" }}>{p.currentAnchor === null ? "New" : fmtCoin(p.currentAnchor)}</td>
                     <td className={scoreCls}>
                       {p.reportScore >= 0 ? "+" : ""}
                       {p.reportScore.toFixed(2)}
                     </td>
-                    <td>{fmtCoin(p.afterAnchor)}</td>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.35rem" }}>
+                        <button
+                          type="button"
+                          className="btn-icon-plain"
+                          onClick={() => bump(p.warriorId, p.afterAnchor, -1)}
+                          disabled={committing || adjustedAfterAnchor - 1 < MIN_PRICE}
+                          aria-label={`Decrease ${p.playerName}'s final price by 1`}
+                          title="-1"
+                        >
+                          −
+                        </button>
+                        <span title={adjustment !== 0 ? `Adjusted by ${adjustment > 0 ? "+" : ""}${adjustment}` : undefined}>
+                          {fmtCoin(adjustedAfterAnchor)}
+                          {adjustment !== 0 && " *"}
+                        </span>
+                        <button
+                          type="button"
+                          className="btn-icon-plain"
+                          onClick={() => bump(p.warriorId, p.afterAnchor, 1)}
+                          disabled={committing}
+                          aria-label={`Increase ${p.playerName}'s final price by 1`}
+                          title="+1"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </td>
                     <td className={delta ? delta.cls : "delta-neutral"}>{delta ? delta.text : "—"}</td>
                   </tr>
                 );

@@ -129,8 +129,15 @@ export async function getReportPreview(code: string): Promise<ReportPricePreview
   return body;
 }
 
-export async function commitReport(code: string): Promise<ReportPricePreview> {
-  const res = await fetch(`/api/reports/${encodeURIComponent(code)}/commit`, { method: "POST" });
+export async function commitReport(
+  code: string,
+  adjustments?: { warriorId: number; adjustment: number }[],
+): Promise<ReportPricePreview> {
+  const res = await fetch(`/api/reports/${encodeURIComponent(code)}/commit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ adjustments }),
+  });
   const body = await res.json();
   if (!res.ok) throw new Error(body.error || "Failed to commit report");
   return body;

@@ -56,8 +56,21 @@ reportsRouter.get("/:code/preview", requireAdmin, (req, res) => {
 // The actual live push - same response shape as /preview so the client can
 // reuse one render path for "about to happen" and "just happened."
 reportsRouter.post("/:code/commit", requireAdmin, (req, res) => {
+  const rawAdjustments = req.body?.adjustments;
+  let adjustments: Map<number, number> | undefined;
+  if (Array.isArray(rawAdjustments)) {
+    adjustments = new Map();
+    for (const entry of rawAdjustments) {
+      const warriorId = Number(entry?.warriorId);
+      const adjustment = Number(entry?.adjustment);
+      if (Number.isFinite(warriorId) && Number.isFinite(adjustment) && adjustment !== 0) {
+        adjustments.set(warriorId, adjustment);
+      }
+    }
+  }
+
   try {
-    const participants = commitReport(req.params.code);
+    const participants = commitReport(req.params.code, adjustments);
     const detail = getReportDetail(req.params.code);
     res.json({ reportCode: req.params.code, title: detail.report!.title, zone: detail.report!.zone, participants });
   } catch (err) {

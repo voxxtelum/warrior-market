@@ -38,10 +38,18 @@ export function LeaderboardPage() {
                   <td className="mobile-hide">{i + 1}</td>
                   <td>
                     <span className="player-name-cell">
-                      {e.avatar && (
+                      {e.avatar ? (
                         <img
                           className="user-avatar player-name-avatar"
                           src={e.avatar}
+                          alt=""
+                          width={20}
+                          height={20}
+                        />
+                      ) : (
+                        <img
+                          className="user-avatar user-avatar-placeholder player-name-avatar"
+                          src="/fury.png"
                           alt=""
                           width={20}
                           height={20}

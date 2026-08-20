@@ -56,7 +56,7 @@ function NavItems({ onNavigate }: { onNavigate: () => void }) {
             {user.avatar ? (
               <img className="user-avatar" src={user.avatar} alt="" width={24} height={24} />
             ) : (
-              <span className="user-avatar user-avatar-placeholder" />
+              <img className="user-avatar user-avatar-placeholder" src="/fury.png" alt="" width={24} height={24} />
             )}
             <span>{displayName}</span>
           </button>

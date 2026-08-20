@@ -329,11 +329,6 @@ nav.nav-dropdown a.active {
   border-radius: 50%;
   display: block;
 }
-.user-avatar-placeholder {
-  width: 28px;
-  height: 28px;
-  background: var(--border);
-}
 
 .warrior-name {
   color: var(--warrior);

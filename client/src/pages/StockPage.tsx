@@ -613,10 +613,18 @@ export function StockPage() {
                     </td>
                     <td>
                       <span className="player-name-cell">
-                        {row.avatar && (
+                        {row.avatar ? (
                           <img
                             className="user-avatar player-name-avatar"
                             src={row.avatar}
+                            alt=""
+                            width={20}
+                            height={20}
+                          />
+                        ) : (
+                          <img
+                            className="user-avatar user-avatar-placeholder player-name-avatar"
+                            src="/fury.png"
                             alt=""
                             width={20}
                             height={20}

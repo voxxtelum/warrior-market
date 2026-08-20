@@ -224,7 +224,13 @@ export function UsersTab() {
                           height={20}
                         />
                       ) : (
-                        <span className="user-avatar user-avatar-placeholder player-name-avatar" />
+                        <img
+                          className="user-avatar user-avatar-placeholder player-name-avatar"
+                          src="/fury.png"
+                          alt=""
+                          width={20}
+                          height={20}
+                        />
                       )}
                       {w.username}
                     </span>
@@ -287,7 +293,7 @@ export function UsersTab() {
                 height={28}
               />
             ) : (
-              <span className="user-avatar user-avatar-placeholder" />
+              <img className="user-avatar user-avatar-placeholder" src="/fury.png" alt="" width={28} height={28} />
             )}
             <div className="admin-user-heading-name-row">
               <h2>{userDetail?.username ?? '…'}</h2>

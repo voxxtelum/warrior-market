@@ -261,7 +261,13 @@ export function CharactersTab() {
                                 height={20}
                               />
                             ) : (
-                              <span className="user-avatar user-avatar-placeholder player-name-avatar" />
+                              <img
+                                className="user-avatar user-avatar-placeholder player-name-avatar"
+                                src="/fury.png"
+                                alt=""
+                                width={20}
+                                height={20}
+                              />
                             )}
                             {h.username}
                           </span>
@@ -327,7 +333,13 @@ export function CharactersTab() {
                             height={20}
                           />
                         ) : (
-                          <span className="user-avatar user-avatar-placeholder player-name-avatar" />
+                          <img
+                            className="user-avatar user-avatar-placeholder player-name-avatar"
+                            src="/fury.png"
+                            alt=""
+                            width={20}
+                            height={20}
+                          />
                         )}
                         {tx.username}
                       </span>

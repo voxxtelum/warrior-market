@@ -113,10 +113,6 @@ export function AdminWarriorBoardPage() {
     <AdminLayout>
       <section className="admin-section">
         <h2 style={{ marginTop: 0 }}>Warrior Board</h2>
-        <p className="subtitle" style={{ marginBottom: "1rem" }}>
-          Adjust each warrior's score with +/-1, then copy the formatted board into Discord. This roster is its own
-          list, separate from the site's tracked warriors.
-        </p>
 
         {error && <div className="status error">{error}</div>}
         {loading && <p className="no-data">Loading…</p>}

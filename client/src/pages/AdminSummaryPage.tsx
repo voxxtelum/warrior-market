@@ -270,27 +270,17 @@ export function AdminSummaryPage() {
             Next week →
           </button>
         </div>
-        <p className="subtitle" style={{ marginBottom: "1rem" }}>
-          {savedId ? "Loaded from a saved draft for this week." : "Freshly generated — not yet saved."}
-        </p>
-
         {loading && <p className="no-data">Loading…</p>}
 
         {!loading && (
           <div className="summary-editor-grid">
             <div>
               <div className="summary-editor-toolbar">
-                <span className="subtitle">Editable draft</span>
-                <button type="button" onClick={handleRegenerate}>
-                  Regenerate
-                </button>
+                <span className="subtitle">
+                  {savedId ? "Loaded from a saved draft for this week." : "Freshly generated — not yet saved."}
+                </span>
               </div>
-              <textarea
-                className="summary-textarea"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                rows={18}
-              />
+              <textarea className="summary-textarea" value={text} onChange={(e) => setText(e.target.value)} />
             </div>
             <div>
               <div className="summary-editor-toolbar">
@@ -302,13 +292,18 @@ export function AdminSummaryPage() {
         )}
 
         <div className="summary-actions">
+          <div className="summary-actions-group">
+            <button type="button" onClick={handleRegenerate} disabled={loading}>
+              Regenerate
+            </button>
+            <button type="button" onClick={handleCopy} disabled={loading}>
+              Copy
+            </button>
+            {statusMessage && <span className="subtitle">{statusMessage}</span>}
+          </div>
           <button type="button" className="btn-affirm" onClick={handleSave} disabled={saving || loading}>
             {saving ? "Saving…" : "Save"}
           </button>
-          <button type="button" onClick={handleCopy} disabled={loading}>
-            Copy
-          </button>
-          {statusMessage && <span className="subtitle">{statusMessage}</span>}
         </div>
       </section>
 

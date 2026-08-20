@@ -1236,6 +1236,60 @@ export async function saveWeeklySummary(weekStart: number, weekEnd: number, cont
   return res.json();
 }
 
+export interface WarriorBoardEntry {
+  id: number;
+  name: string;
+  score: number;
+  baselineScore: number;
+}
+
+export async function getWarriorBoard(): Promise<WarriorBoardEntry[]> {
+  const res = await fetch("/api/admin/warrior-board");
+  if (!res.ok) throw new Error("Failed to load warrior board");
+  return res.json();
+}
+
+export async function addWarriorBoardEntry(name: string): Promise<WarriorBoardEntry[]> {
+  const res = await fetch("/api/admin/warrior-board", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to add warrior");
+  }
+  return res.json();
+}
+
+export async function removeWarriorBoardEntry(id: number): Promise<WarriorBoardEntry[]> {
+  const res = await fetch(`/api/admin/warrior-board/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to remove warrior");
+  }
+  return res.json();
+}
+
+export async function adjustWarriorBoardScore(id: number, delta: 1 | -1): Promise<WarriorBoardEntry[]> {
+  const res = await fetch(`/api/admin/warrior-board/${id}/adjust`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ delta }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || "Failed to adjust score");
+  }
+  return res.json();
+}
+
+export async function markWarriorBoardPosted(): Promise<WarriorBoardEntry[]> {
+  const res = await fetch("/api/admin/warrior-board/mark-posted", { method: "POST" });
+  if (!res.ok) throw new Error("Failed to mark warrior board as posted");
+  return res.json();
+}
+
 // --- Admin Backup -----------------------------------------------------
 
 export type BackupKind = "hourly" | "daily" | "manual" | "pre_report" | "pre_restore";

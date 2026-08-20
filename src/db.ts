@@ -158,6 +158,19 @@ db.exec(`
     UNIQUE (player_name, server)
   );
 
+  -- Superseded by warrior_board_entries below - the board turned out to need
+  -- its own freeform roster (warriors who haven't appeared in a raid log
+  -- yet, or nicknames), decoupled from the warriors table entirely.
+  DROP TABLE IF EXISTS warrior_board;
+
+  CREATE TABLE IF NOT EXISTS warrior_board_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    score INTEGER NOT NULL DEFAULT 0,
+    baseline_score INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS user_warrior_links (
     user_id TEXT PRIMARY KEY REFERENCES users(discord_id),
     warrior_id INTEGER NOT NULL UNIQUE REFERENCES warriors(id),
@@ -2038,6 +2051,55 @@ export function getWarriorVolumeOverview(): WarriorVolumeEntry[] {
       class: r.class,
     };
   });
+}
+
+export class WarriorBoardError extends Error {}
+
+export interface WarriorBoardEntryRow {
+  id: number;
+  name: string;
+  score: number;
+  baselineScore: number;
+}
+
+// The board's own freeform roster - deliberately not tied to the warriors
+// table (no warrior_id), so a name can be added here whether or not that
+// character has ever shown up in a raid log.
+export function listWarriorBoardEntries(): WarriorBoardEntryRow[] {
+  const rows = db
+    .prepare(`SELECT id, name, score, baseline_score FROM warrior_board_entries ORDER BY score DESC`)
+    .all() as unknown as { id: number; name: string; score: number; baseline_score: number }[];
+  return rows.map((r) => ({ id: r.id, name: r.name, score: r.score, baselineScore: r.baseline_score }));
+}
+
+export function addWarriorBoardEntry(name: string): void {
+  const existing = db.prepare(`SELECT 1 FROM warrior_board_entries WHERE name = ?`).get(name);
+  if (existing) throw new WarriorBoardError(`"${name}" is already on the board`);
+  db.prepare(`INSERT INTO warrior_board_entries (name, score, baseline_score, updated_at) VALUES (?, 0, 0, ?)`).run(
+    name,
+    Date.now(),
+  );
+}
+
+export function removeWarriorBoardEntry(id: number): void {
+  db.prepare(`DELETE FROM warrior_board_entries WHERE id = ?`).run(id);
+}
+
+// +1/-1 from the Warrior Board page's buttons. baseline_score is left alone
+// here (only resetWarriorBoardBaseline moves it) - it's what lets the board
+// preview show which warriors changed since the last "Mark as posted".
+export function adjustWarriorBoardScore(id: number, delta: number): void {
+  db.prepare(`UPDATE warrior_board_entries SET score = score + ?, updated_at = ? WHERE id = ?`).run(
+    delta,
+    Date.now(),
+    id,
+  );
+}
+
+// "Mark as posted": snapshots every current score as the new baseline, so
+// the next round of edits starts everyone back at the no-change (■) arrow.
+export function resetWarriorBoardBaseline(): void {
+  db.prepare(`UPDATE warrior_board_entries SET baseline_score = score, updated_at = ?`).run(Date.now());
 }
 
 export interface WarriorTradeEntry {

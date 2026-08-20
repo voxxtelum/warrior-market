@@ -11,6 +11,7 @@ const LINKS = [
   { to: '/admin/price-history', label: 'Price History' },
   { to: '/admin/audit-log', label: 'Audit Log' },
   { to: '/admin/summary', label: 'Summary' },
+  { to: '/admin/warrior-board', label: 'Warrior Board' },
   { to: '/admin/backup', label: 'Backup' },
 ];
 

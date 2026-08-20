@@ -1350,13 +1350,14 @@ tbody tr:hover {
   align-items: center;
   justify-content: center;
   gap: 1rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 2rem;
 }
 
 .summary-editor-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
+  align-items: start;
 }
 
 @media (max-width: 800px) {
@@ -1374,6 +1375,8 @@ tbody tr:hover {
 
 .summary-textarea {
   width: 100%;
+  height: 26rem;
+  box-sizing: border-box;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.85rem;
   line-height: 1.5;
@@ -1382,7 +1385,8 @@ tbody tr:hover {
 
 .summary-preview {
   width: 100%;
-  min-height: 100%;
+  height: 26rem;
+  overflow-y: auto;
   box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: 4px;
@@ -1393,11 +1397,57 @@ tbody tr:hover {
   line-height: 1.5;
 }
 
-.summary-actions {
+.warrior-board-list {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.table-min-width {
+  width: 0.5rem;
+}
+.warrior-board-list table {
+  margin: 0;
+}
+
+.warrior-board-preview {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg);
+  white-space: pre-wrap;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.warrior-board-actions {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.btn-icon-plain.warrior-board-icon-btn {
+  padding: 0.6rem;
+  line-height: 0.4rem;
+  border: 1px solid var(--border);
+}
+.btn-icon-plain.warrior-board-icon-btn:hover {
+  background-color: var(--accent-fg);
+}
+
+.summary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
   margin-top: 1rem;
+}
+
+.summary-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .config-grid {

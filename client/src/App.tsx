@@ -13,6 +13,7 @@ import { AdminPriceHistoryPage } from "./pages/AdminPriceHistoryPage";
 import { AdminNotificationsPage } from "./pages/AdminNotificationsPage";
 import { AdminAuditLogPage } from "./pages/AdminAuditLogPage";
 import { AdminSummaryPage } from "./pages/AdminSummaryPage";
+import { AdminWarriorBoardPage } from "./pages/AdminWarriorBoardPage";
 import { AdminBackupPage } from "./pages/AdminBackupPage";
 import { WalletPage } from "./pages/WalletPage";
 import { LeaderboardPage } from "./pages/LeaderboardPage";
@@ -50,6 +51,7 @@ function App() {
       <Route path="/admin/notifications" element={<AdminNotificationsPage />} />
       <Route path="/admin/audit-log" element={<AdminAuditLogPage />} />
       <Route path="/admin/summary" element={<AdminSummaryPage />} />
+      <Route path="/admin/warrior-board" element={<AdminWarriorBoardPage />} />
       <Route path="/admin/backup" element={<AdminBackupPage />} />
     </Routes>
   );
